@@ -14,7 +14,7 @@
 <p>Para abrir os orçamentos anexados, o Power-Up precisa da sua autorização no Trello. É pedida uma única vez.</p>
 <button id="ok">Autorizar</button>
 <script>
-var CHAVE='COLE_AQUI_A_API_KEY';   /* mesma chave do FT_TRELLO_KEY do servidor */
+var CHAVE='5a21d827fc21ad2d68ec766dd4ba2011';   /* mesma chave do FT_TRELLO_KEY do servidor */
 var t=TrelloPowerUp.iframe({ appKey:CHAVE, appName:'Fourtime Orçamentos' });
 document.getElementById('ok').onclick=function(){
   return t.authorize({ type:'popup', name:'Fourtime Orçamentos', scope:{read:true}, expiration:'never' })
