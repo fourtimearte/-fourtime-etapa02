@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Orçamento Fourtime</title>
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<style>
+  html,body{margin:0;height:100%;background:#5C5C5C;}
+  #barra{position:fixed;inset:0 0 auto 0;height:44px;display:flex;align-items:center;gap:12px;
+    padding:0 14px;background:#1E2328;color:#fff;font:13px/1 Roboto,-apple-system,'Segoe UI',sans-serif;z-index:5;}
+  #barra .tit{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
+  #barra button{border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:7px;
+    padding:6px 11px;font:inherit;font-size:12px;cursor:pointer;}
+  #barra button:hover{border-color:#C6161B;background:#C6161B;}
+  #quadro{position:absolute;inset:44px 0 0 0;width:100%;border:0;background:#5C5C5C;}
+  #painel{position:absolute;inset:44px 0 0 0;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .caixa{max-width:440px;text-align:center;color:#E4E7EA;font:14px/1.6 Roboto,-apple-system,'Segoe UI',sans-serif;}
+  .caixa h2{margin:0 0 10px;font-size:17px;color:#fff;}
+  .caixa p{margin:0 0 18px;color:#C4C8CC;}
+  .caixa button{border:0;background:#C6161B;color:#fff;border-radius:8px;padding:11px 22px;
+    font:inherit;font-size:14px;font-weight:600;cursor:pointer;}
+  .caixa button:hover{filter:brightness(1.1);}
+  .caixa .erro{color:#FF9A9D;font-size:12.5px;margin-top:14px;word-break:break-word;}
+  .caixa code{background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;}
+</style>
+</head>
+<body>
+<div id="barra">
+  <span class="tit" id="tit">Orçamento</span>
+  <button id="bImprimir" hidden>Imprimir / PDF</button>
+  <button id="bBaixar" hidden>Baixar HTML</button>
+  <button id="bFechar">Fechar</button>
+</div>
+
+<div id="painel"><div class="caixa" id="caixa">Carregando…</div></div>
+<iframe id="quadro" hidden
+  sandbox="allow-same-origin allow-scripts allow-modals allow-popups allow-downloads"></iframe>
+
+<script>
+/* ============================================================
+   A MESMA API KEY que está em FT_TRELLO_KEY no Render.
+   Sem ela o botão Autorizar não funciona.
+   ============================================================ */
+var CHAVE    = 'COLE_AQUI_A_API_KEY';
+var SERVIDOR = 'https://fourtime-etapa02.onrender.com';
+
+var t = TrelloPowerUp.iframe({ appKey: CHAVE, appName: 'Fourtime Orçamentos' });
+var args   = { q: t.arg('q'), titulo: t.arg('titulo') };
+var quadro = document.getElementById('quadro');
+var painel = document.getElementById('painel');
+var caixa  = document.getElementById('caixa');
+document.getElementById('tit').textContent = args.titulo || 'Orçamento';
+document.getElementById('bFechar').onclick = function(){ t.closeModal(); };
+
+function msg(html){ caixa.innerHTML = html; painel.style.display = 'flex'; quadro.hidden = true; }
+
+function pedeAutorizacao(erro){
+  msg('<h2>Conectar ao Trello</h2>'
+    + '<p>Para abrir o orçamento, o Power-Up precisa de permissão para ler os anexos deste cartão. '
+    + 'É pedido uma única vez.</p>'
+    + '<button id="bAut">Autorizar</button>'
+    + (erro ? '<div class="erro">' + erro + '</div>' : ''));
+  document.getElementById('bAut').onclick = function(){
+    if(CHAVE === 'COLE_AQUI_A_API_KEY'){
+      msg('<h2>Falta a API key</h2><p>O arquivo <code>powerup/visualizador.html</code> ainda está com o texto '
+        + '<code>COLE_AQUI_A_API_KEY</code>. Troque pela chave do Power-Up e suba de novo.</p>');
+      return;
+    }
+    caixa.innerHTML = '<p>Abrindo a janela do Trello…</p>';
+    t.authorize({
+      type: 'popup',
+      name: 'Fourtime Orçamentos',
+      scope: { read: true },
+      expiration: 'never'
+    }).then(function(token){
+      if(!token) throw new Error('O Trello não devolveu o token.');
+      return t.set('member', 'private', 'token', token);
+    }).then(function(){
+      abre();                                   /* autorizado: carrega na hora */
+    }).catch(function(e){
+      pedeAutorizacao('Não foi possível autorizar: ' + (e && e.message || e));
+    });
+  };
+}
+
+function abre(){
+  caixa.textContent = 'Carregando o orçamento…';
+  painel.style.display = 'flex';
+  t.get('member', 'private', 'token').then(function(tk){
+    if(!tk){ pedeAutorizacao(); return; }
+    var url = SERVIDOR + '/api/trello/anexo?' + args.q + '&token=' + encodeURIComponent(tk);
+    var bB = document.getElementById('bBaixar');
+    bB.hidden = false;
+    bB.onclick = function(){ window.open(url, '_blank'); };
+    return fetch(url, { credentials: 'omit' }).then(function(r){
+      if(r.status === 401){                     /* token revogado ou inválido: pede de novo */
+        return t.remove('member', 'private', 'token').then(function(){
+          pedeAutorizacao('A autorização anterior não vale mais.');
+        });
+      }
+      if(!r.ok){
+        return r.text().then(function(txt){ throw new Error('HTTP ' + r.status + ' — ' + txt.slice(0, 180)); });
+      }
+      return r.text().then(function(html){
+        quadro.srcdoc = html;
+        quadro.hidden = false;
+        painel.style.display = 'none';
+        var bI = document.getElementById('bImprimir');
+        bI.hidden = false;
+        bI.onclick = function(){
+          try{ quadro.contentWindow.focus(); quadro.contentWindow.print(); }catch(e){}
+        };
+      });
+    });
+  }).catch(function(e){
+    msg('<h2>Não consegui abrir</h2><p>' + (e && e.message || e) + '</p>'
+      + '<button id="bAut">Autorizar de novo</button>');
+    var b = document.getElementById('bAut');
+    if(b) b.onclick = function(){ pedeAutorizacao(); };
+  });
+}
+
+abre();
+</script>
+</body>
+</html>
