@@ -179,12 +179,20 @@ def _credencial():
                     info, scopes=["https://www.googleapis.com/auth/drive.readonly"])
     return _cred
 
+def _precisa_renovar(c):
+    if not c.token:
+        return True
+    if not c.expiry:
+        return not c.valid
+    falta = (c.expiry - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds()
+    return falta < 120          # renova 2 min antes de vencer
+
 def _token_drive():
     """Token de acesso válido. O refresh é protegido por lock; a leitura é barata."""
     c = _credencial()
-    if not c.valid or (c.expiry and (c.expiry - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() < 120):
+    if _precisa_renovar(c):
         with _cred_lock:
-            if not c.valid:
+            if _precisa_renovar(c):        # outra thread pode ter renovado enquanto esperávamos
                 from google.auth.transport.requests import Request as GRequest
                 c.refresh(GRequest())
     return c.token
@@ -207,13 +215,18 @@ def _drive_get(caminho, params=None, binario=False, tentativas=3):
             return (dados, tipo) if binario else json.loads(dados)
         except urllib.error.HTTPError as e:
             corpo = e.read().decode("utf-8", "ignore")[:300]
-            if e.code in (403, 404):
+            if e.code in (401, 403, 404):
                 raise HTTPException(status_code=e.code, detail="Drive: " + corpo)
             ultimo = e
+        except (ImportError, ValueError) as e:
+            # dependência faltando ou JSON da credencial inválido: retentar não adianta
+            raise HTTPException(status_code=500,
+                detail="Credencial do Drive inválida ou dependência ausente: %r" % (e,))
         except Exception as e:                      # timeout, conexão caída, etc.
             ultimo = e
         time.sleep(0.4 * (n + 1))
-    raise HTTPException(status_code=502, detail="Falha ao falar com o Google Drive: %s" % ultimo)
+    raise HTTPException(status_code=502,
+        detail="Falha ao falar com o Google Drive: %r" % (ultimo,))
 
 def exige_drive():
     if not FT_DRIVE_CREDENCIAIS or not FT_DRIVE_PASTA:
@@ -253,6 +266,53 @@ def _dentro_da_raiz(fid, profundidade=12):
 def drive_status(request: Request):
     exige_token(request)
     return {"ativo": bool(FT_DRIVE_CREDENCIAIS and FT_DRIVE_PASTA), "raiz": FT_DRIVE_PASTA}
+
+@app.get("/api/drive/diagnostico")
+def drive_diagnostico(request: Request):
+    """Testa a corrente inteira e diz exatamente onde quebrou."""
+    exige_token(request)
+    passos = []
+    def passo(nome, fn):
+        try:
+            passos.append({"passo": nome, "ok": True, "info": fn()})
+            return True
+        except Exception as e:
+            passos.append({"passo": nome, "ok": False, "erro": repr(e)[:300]})
+            return False
+
+    if not passo("variaveis de ambiente", lambda: {
+            "FT_DRIVE_CREDENCIAIS": "definida" if FT_DRIVE_CREDENCIAIS else "FALTANDO",
+            "FT_DRIVE_PASTA": FT_DRIVE_PASTA or "FALTANDO"}):
+        return {"passos": passos}
+    if not FT_DRIVE_CREDENCIAIS or not FT_DRIVE_PASTA:
+        return {"passos": passos, "conclusao": "Falta variável de ambiente no Render."}
+
+    if not passo("bibliotecas (google-auth + requests)", lambda: (
+            __import__("google.oauth2.service_account", fromlist=["x"]),
+            __import__("google.auth.transport.requests", fromlist=["x"]),
+            "instaladas")[-1]):
+        return {"passos": passos, "conclusao": "Dependência ausente — confira o requirements.txt."}
+
+    if not passo("ler credencial (JSON)", lambda: {
+            "conta": json.loads(FT_DRIVE_CREDENCIAIS).get("client_email", "?")}):
+        return {"passos": passos, "conclusao": "O JSON da service account está incompleto ou malformado."}
+
+    if not passo("obter token do Google", lambda: "token obtido" if _token_drive() else "vazio"):
+        return {"passos": passos, "conclusao": "Não consegui autenticar no Google."}
+
+    if not passo("abrir a pasta raiz", lambda: _drive_get(
+            "/files/" + FT_DRIVE_PASTA,
+            {"fields": "id,name,mimeType", "supportsAllDrives": "true"})):
+        return {"passos": passos, "conclusao":
+                "A pasta não foi encontrada OU não foi compartilhada com o e-mail da service account."}
+
+    passo("listar conteudo", lambda: {
+        "itens": len(_drive_get("/files", {
+            "q": "'%s' in parents and trashed = false" % FT_DRIVE_PASTA,
+            "pageSize": "10", "fields": "files(id,name)",
+            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true",
+        }).get("files", []))})
+    return {"passos": passos, "conclusao": "Tudo certo."}
 
 @app.get("/api/drive/listar")
 def drive_listar(request: Request, pasta: str = "", busca: str = ""):
