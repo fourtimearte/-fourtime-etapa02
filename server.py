@@ -146,50 +146,108 @@ def apagar_orc(oid: int, request: Request):
 
 # ============================================================
 #  BANCO DE IMAGENS — GOOGLE DRIVE (service account, somente leitura)
+#
+#  Chamadas REST diretas via urllib — SEM google-api-python-client/httplib2,
+#  que não são thread-safe e corrompiam o SSL quando o painel pedia várias
+#  miniaturas ao mesmo tempo (bad record mac / segfault).
+#  Cada requisição abre a própria conexão; o token é assinado pelo google-auth.
+#
 #  Variáveis de ambiente:
 #    FT_DRIVE_CREDENCIAIS = conteúdo do JSON da service account
 #    FT_DRIVE_PASTA       = ID da pasta raiz de layouts no Drive
 # ============================================================
+import urllib.request, urllib.parse, urllib.error, time
+
 FT_DRIVE_CREDENCIAIS = os.environ.get("FT_DRIVE_CREDENCIAIS", "")
 FT_DRIVE_PASTA = os.environ.get("FT_DRIVE_PASTA", "")
 
-_drive = None
-_drive_lock = threading.Lock()
+DRIVE_API = "https://www.googleapis.com/drive/v3"
+_cred = None
+_cred_lock = threading.Lock()
+_pais_cache = {}          # id do arquivo -> id do pai (a árvore do Drive muda pouco)
+_raiz_cache = {}          # id -> True/False (está dentro da raiz?)
+_cache_lock = threading.Lock()
 
-def drive():
-    """Cliente do Drive, criado uma única vez."""
-    global _drive
-    if _drive is None:
-        with _drive_lock:
-            if _drive is None:
+def _credencial():
+    global _cred
+    if _cred is None:
+        with _cred_lock:
+            if _cred is None:
                 from google.oauth2 import service_account
-                from googleapiclient.discovery import build
                 info = json.loads(FT_DRIVE_CREDENCIAIS)
-                cred = service_account.Credentials.from_service_account_info(
+                _cred = service_account.Credentials.from_service_account_info(
                     info, scopes=["https://www.googleapis.com/auth/drive.readonly"])
-                _drive = build("drive", "v3", credentials=cred, cache_discovery=False)
-    return _drive
+    return _cred
+
+def _token_drive():
+    """Token de acesso válido. O refresh é protegido por lock; a leitura é barata."""
+    c = _credencial()
+    if not c.valid or (c.expiry and (c.expiry - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() < 120):
+        with _cred_lock:
+            if not c.valid:
+                from google.auth.transport.requests import Request as GRequest
+                c.refresh(GRequest())
+    return c.token
+
+def _drive_get(caminho, params=None, binario=False, tentativas=3):
+    """GET na API do Drive. Conexão nova a cada chamada = seguro entre threads."""
+    url = DRIVE_API + caminho
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    ultimo = None
+    for n in range(tentativas):
+        try:
+            req = urllib.request.Request(url, headers={
+                "Authorization": "Bearer " + _token_drive(),
+                "Accept-Encoding": "identity",
+            })
+            with urllib.request.urlopen(req, timeout=30) as r:
+                dados = r.read()
+                tipo = r.headers.get("Content-Type", "")
+            return (dados, tipo) if binario else json.loads(dados)
+        except urllib.error.HTTPError as e:
+            corpo = e.read().decode("utf-8", "ignore")[:300]
+            if e.code in (403, 404):
+                raise HTTPException(status_code=e.code, detail="Drive: " + corpo)
+            ultimo = e
+        except Exception as e:                      # timeout, conexão caída, etc.
+            ultimo = e
+        time.sleep(0.4 * (n + 1))
+    raise HTTPException(status_code=502, detail="Falha ao falar com o Google Drive: %s" % ultimo)
 
 def exige_drive():
     if not FT_DRIVE_CREDENCIAIS or not FT_DRIVE_PASTA:
         raise HTTPException(status_code=503,
             detail="Banco de Imagens não configurado no servidor (FT_DRIVE_CREDENCIAIS / FT_DRIVE_PASTA).")
 
-# --- segurança: só devolve arquivos que estejam dentro da pasta raiz ---
-def _dentro_da_raiz(fid: str, profundidade: int = 12) -> bool:
-    """Sobe pela cadeia de pais até achar a pasta raiz. Impede acessar fora dela."""
-    svc = drive()
-    atual = fid
+def _pai(fid):
+    with _cache_lock:
+        if fid in _pais_cache:
+            return _pais_cache[fid]
+    meta = _drive_get("/files/" + fid, {"fields": "parents", "supportsAllDrives": "true"})
+    pais = meta.get("parents") or []
+    p = pais[0] if pais else None
+    with _cache_lock:
+        _pais_cache[fid] = p
+    return p
+
+def _dentro_da_raiz(fid, profundidade=12):
+    """Sobe pela cadeia de pais até achar a pasta raiz. Impede acessar fora dela.
+       Com cache: cada arquivo é verificado no Google uma única vez."""
+    with _cache_lock:
+        if fid in _raiz_cache:
+            return _raiz_cache[fid]
+    atual, ok = fid, False
     for _ in range(profundidade):
         if atual == FT_DRIVE_PASTA:
-            return True
-        meta = svc.files().get(fileId=atual, fields="parents",
-                               supportsAllDrives=True).execute()
-        pais = meta.get("parents") or []
-        if not pais:
-            return False
-        atual = pais[0]
-    return False
+            ok = True
+            break
+        atual = _pai(atual)
+        if not atual:
+            break
+    with _cache_lock:
+        _raiz_cache[fid] = ok
+    return ok
 
 @app.get("/api/drive/status")
 def drive_status(request: Request):
@@ -198,54 +256,63 @@ def drive_status(request: Request):
 
 @app.get("/api/drive/listar")
 def drive_listar(request: Request, pasta: str = "", busca: str = ""):
-    """Lista subpastas e imagens. 'pasta' vazia = pasta raiz. 'busca' procura em toda a árvore."""
+    """Lista subpastas e imagens. 'pasta' vazia = raiz. 'busca' procura em toda a árvore."""
     exige_token(request)
     exige_drive()
-    svc = drive()
     alvo = pasta or FT_DRIVE_PASTA
     if pasta and not _dentro_da_raiz(pasta):
         raise HTTPException(status_code=403, detail="Pasta fora da raiz permitida.")
 
     termo = (busca or "").strip()
     if termo:
-        # busca por nome em toda a árvore compartilhada (só imagens)
-        seguro = termo.replace("'", "\\'")
-        q = ("mimeType contains 'image/' and trashed = false "
-             f"and name contains '{seguro}'")
+        seguro = termo.replace("\\", "").replace("'", "")
+        q = "mimeType contains 'image/' and trashed = false and name contains '%s'" % seguro
     else:
-        q = f"'{alvo}' in parents and trashed = false"
+        q = "'%s' in parents and trashed = false" % alvo
 
     itens, page = [], None
     while True:
-        r = svc.files().list(
-            q=q, pageSize=200, pageToken=page,
-            orderBy="folder,name",
-            fields="nextPageToken, files(id,name,mimeType,thumbnailLink,modifiedTime,size)",
-            includeItemsFromAllDrives=True, supportsAllDrives=True).execute()
+        params = {
+            "q": q, "pageSize": "200", "orderBy": "folder,name",
+            "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,size)",
+            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true",
+        }
+        if page:
+            params["pageToken"] = page
+        r = _drive_get("/files", params)
         itens.extend(r.get("files", []))
         page = r.get("nextPageToken")
         if not page or len(itens) >= 600:
             break
+
+    # calculado UMA vez, fora do lock (chamar _dentro_da_raiz dentro do lock trava)
+    alvo_valido = (alvo == FT_DRIVE_PASTA) or _dentro_da_raiz(alvo)
 
     pastas, imagens = [], []
     for f in itens:
         if f["mimeType"] == "application/vnd.google-apps.folder":
             if not termo:
                 pastas.append({"id": f["id"], "nome": f["name"]})
+                with _cache_lock:              # já sabemos que é filha de alvo
+                    _pais_cache[f["id"]] = alvo
+                    _raiz_cache[f["id"]] = alvo_valido
         elif f["mimeType"].startswith("image/"):
             imagens.append({
                 "id": f["id"], "nome": f["name"], "tipo": f["mimeType"],
-                "miniatura": f"/api/drive/miniatura/{f['id']}",
+                "miniatura": "/api/drive/miniatura/" + f["id"],
                 "atualizado": f.get("modifiedTime", ""),
                 "tamanho": int(f.get("size") or 0),
             })
+            if not termo:
+                with _cache_lock:              # evita 1 chamada extra por miniatura
+                    _pais_cache[f["id"]] = alvo
+                    _raiz_cache[f["id"]] = alvo_valido
 
     caminho = []
     if not termo and alvo != FT_DRIVE_PASTA:
         atual = alvo
         for _ in range(12):
-            meta = svc.files().get(fileId=atual, fields="id,name,parents",
-                                   supportsAllDrives=True).execute()
+            meta = _drive_get("/files/" + atual, {"fields": "id,name,parents", "supportsAllDrives": "true"})
             caminho.insert(0, {"id": meta["id"], "nome": meta["name"]})
             pais = meta.get("parents") or []
             if not pais or pais[0] == FT_DRIVE_PASTA:
@@ -255,39 +322,29 @@ def drive_listar(request: Request, pasta: str = "", busca: str = ""):
     return {"pasta": alvo, "raiz": FT_DRIVE_PASTA, "caminho": caminho,
             "pastas": pastas, "imagens": imagens, "busca": termo}
 
-def _baixar(fid: str):
-    import io
-    from googleapiclient.http import MediaIoBaseDownload
-    svc = drive()
-    meta = svc.files().get(fileId=fid, fields="name,mimeType",
-                           supportsAllDrives=True).execute()
-    buf = io.BytesIO()
-    dl = MediaIoBaseDownload(buf, svc.files().get_media(fileId=fid, supportsAllDrives=True))
-    pronto = False
-    while not pronto:
-        _, pronto = dl.next_chunk()
-    return buf.getvalue(), meta.get("mimeType", "image/jpeg"), meta.get("name", "imagem")
-
 @app.get("/api/drive/miniatura/{fid}")
 def drive_miniatura(fid: str, request: Request):
-    """Miniatura da imagem (rápida, só para a grade do painel)."""
+    """Miniatura leve, só para a grade do painel."""
     exige_token(request)
     exige_drive()
     if not _dentro_da_raiz(fid):
         raise HTTPException(status_code=403, detail="Arquivo fora da raiz permitida.")
-    svc = drive()
-    meta = svc.files().get(fileId=fid, fields="thumbnailLink",
-                           supportsAllDrives=True).execute()
+    meta = _drive_get("/files/" + fid, {"fields": "thumbnailLink", "supportsAllDrives": "true"})
     link = meta.get("thumbnailLink")
     if link:
-        import urllib.request
         link = link.replace("=s220", "=s400")
-        with urllib.request.urlopen(link, timeout=15) as r:
-            dados = r.read()
-        return Response(content=dados, media_type="image/jpeg",
-                        headers={"Cache-Control": "public, max-age=86400"})
-    dados, tipo, _ = _baixar(fid)
-    return Response(content=dados, media_type=tipo,
+        for n in range(3):
+            try:
+                req = urllib.request.Request(link, headers={
+                    "Authorization": "Bearer " + _token_drive()})
+                with urllib.request.urlopen(req, timeout=25) as r:
+                    dados = r.read()
+                return Response(content=dados, media_type="image/jpeg",
+                                headers={"Cache-Control": "public, max-age=86400"})
+            except Exception:
+                time.sleep(0.4 * (n + 1))
+    dados, tipo = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"}, binario=True)
+    return Response(content=dados, media_type=tipo or "image/jpeg",
                     headers={"Cache-Control": "public, max-age=86400"})
 
 @app.get("/api/drive/imagem/{fid}")
@@ -297,11 +354,9 @@ def drive_imagem(fid: str, request: Request):
     exige_drive()
     if not _dentro_da_raiz(fid):
         raise HTTPException(status_code=403, detail="Arquivo fora da raiz permitida.")
-    dados, tipo, nome = _baixar(fid)
-    return Response(content=dados, media_type=tipo, headers={
-        "Cache-Control": "public, max-age=3600",
-        "X-FT-Nome": nome,
-    })
+    dados, tipo = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"}, binario=True)
+    return Response(content=dados, media_type=tipo or "image/jpeg",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 # ------------- Editor online (opcional) -------------
 def _editor_path():

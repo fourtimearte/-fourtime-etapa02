@@ -2295,6 +2295,22 @@ async function gdBlobURL(caminho){
   if(!r.ok)throw new Error('HTTP '+r.status);
   return URL.createObjectURL(await r.blob());
 }
+/* fila: no máximo 6 miniaturas por vez (pastas grandes não afogam o servidor) */
+const GD_FILA={ativas:0,limite:6,espera:[]};
+function gdMiniatura(caminho){
+  return new Promise((ok,erro)=>{
+    const tarefa=()=>{
+      GD_FILA.ativas++;
+      gdBlobURL(caminho).then(ok).catch(erro).finally(()=>{
+        GD_FILA.ativas--;
+        const p=GD_FILA.espera.shift();
+        if(p)p();
+      });
+    };
+    if(GD_FILA.ativas<GD_FILA.limite)tarefa();
+    else GD_FILA.espera.push(tarefa);
+  });
+}
 
 function gdAbrir(layImg){
   if(!gdConfigurado()){
@@ -2307,6 +2323,7 @@ function gdAbrir(layImg){
   setTimeout(()=>gdBuscaEl.focus(),60);
 }
 function gdFechar(){
+  GD_FILA.espera.length=0;
   gdFundo.classList.remove('on');
   gdCorpo.querySelectorAll('img[src^="blob:"]').forEach(i=>URL.revokeObjectURL(i.src));
   GD.alvo=null;
@@ -2323,6 +2340,8 @@ gdBuscaEl.addEventListener('input',()=>{
 const IC_PASTA='<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 
 async function gdListar(){
+  GD_FILA.espera.length=0;                 /* descarta miniaturas da listagem anterior */
+  gdCorpo.querySelectorAll('img[src^="blob:"]').forEach(i=>URL.revokeObjectURL(i.src));
   gdCorpo.innerHTML='<div class="gd-msg">Carregando…</div>';
   gdTrilha.innerHTML='';
   const q=new URLSearchParams();
@@ -2372,7 +2391,8 @@ async function gdListar(){
     d.innerHTML=`<div class="gd-thumb"></div><div class="gd-nome">${gdEsc(im.nome)}</div>`;
     d.onclick=()=>gdEscolher(d,im);
     grade.appendChild(d);
-    gdBlobURL(im.miniatura).then(u=>{
+    gdMiniatura(im.miniatura).then(u=>{
+      if(!d.isConnected){URL.revokeObjectURL(u);return;}
       const img=document.createElement('img'); img.src=u; img.alt='';
       d.querySelector('.gd-thumb').appendChild(img);
     }).catch(()=>{});
