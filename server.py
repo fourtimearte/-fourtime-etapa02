@@ -418,6 +418,64 @@ def drive_imagem(fid: str, request: Request):
     return Response(content=dados, media_type=tipo or "image/jpeg",
                     headers={"Cache-Control": "public, max-age=3600"})
 
+# ============================================================
+#  POWER-UP DO TRELLO — proxy dos anexos
+#
+#  Desde dez/2023 os anexos do Trello exigem autorização: a URL do
+#  S3 não abre sem sessão, e o navegador não pode buscá-la por CORS.
+#  Por isso o Power-Up não lê o anexo direto — pede a ESTE servidor,
+#  que busca com as credenciais e devolve o HTML.
+#
+#  Variáveis de ambiente:
+#    FT_TRELLO_KEY  = API key do Power-Up (trello.com/power-ups/admin)
+#  O token é do próprio usuário, obtido pelo Power-Up e enviado na chamada.
+# ============================================================
+FT_TRELLO_KEY = os.environ.get("FT_TRELLO_KEY", "")
+
+@app.get("/api/trello/anexo")
+def trello_anexo(request: Request, card: str, anexo: str, nome: str = "orcamento.html",
+                 token: str = ""):
+    """Baixa um anexo do cartão e devolve o HTML. Sem token do Trello não passa."""
+    if not FT_TRELLO_KEY:
+        raise HTTPException(status_code=503, detail="FT_TRELLO_KEY não configurada no servidor.")
+    if not token:
+        raise HTTPException(status_code=401, detail="Sem token do Trello.")
+    url = ("https://api.trello.com/1/cards/%s/attachments/%s/download/%s"
+           % (urllib.parse.quote(card), urllib.parse.quote(anexo),
+              urllib.parse.quote(nome)))
+    req = urllib.request.Request(url, headers={
+        "Authorization": 'OAuth oauth_consumer_key="%s", oauth_token="%s"'
+                         % (FT_TRELLO_KEY, token),
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=45) as r:
+            dados = r.read()
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=e.code,
+            detail="Trello recusou: " + e.read().decode("utf-8", "ignore")[:200])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Falha ao buscar o anexo: %r" % (e,))
+    # o visualizador roda o HTML dentro de um iframe sandbox, na origem deste servidor
+    return Response(content=dados, media_type="text/html; charset=utf-8", headers={
+        "Cache-Control": "private, max-age=300",
+        "X-Content-Type-Options": "nosniff",
+    })
+
+def _powerup(arquivo):
+    p = os.path.join(os.path.dirname(__file__), "powerup", arquivo)
+    if not os.path.exists(p):
+        raise HTTPException(status_code=404, detail="Power-Up não encontrado: " + arquivo)
+    tipos = {".html": "text/html", ".js": "application/javascript",
+             ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml"}
+    ext = os.path.splitext(arquivo)[1]
+    return FileResponse(p, media_type=tipos.get(ext, "text/plain"))
+
+@app.get("/powerup/{arquivo:path}")
+def powerup(arquivo: str):
+    if ".." in arquivo or arquivo.startswith("/"):
+        raise HTTPException(status_code=400, detail="caminho inválido")
+    return _powerup(arquivo)
+
 # ------------- Editor online (opcional) -------------
 def _editor_path():
     achados = sorted(glob.glob(os.path.join(os.path.dirname(__file__), "*editor*.html")))

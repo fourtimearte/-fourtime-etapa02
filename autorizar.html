@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<style>
+  body{margin:0;padding:16px;font:13px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif;color:#33363D;}
+  p{margin:0 0 14px;}
+  button{border:0;background:#C6161B;color:#fff;border-radius:7px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer;}
+  button:hover{filter:brightness(1.08);}
+</style>
+</head>
+<body>
+<p>Para abrir os orçamentos anexados, o Power-Up precisa da sua autorização no Trello. É pedida uma única vez.</p>
+<button id="ok">Autorizar</button>
+<script>
+var CHAVE='COLE_AQUI_A_API_KEY';   /* mesma chave do FT_TRELLO_KEY do servidor */
+var t=TrelloPowerUp.iframe({ appKey:CHAVE, appName:'Fourtime Orçamentos' });
+document.getElementById('ok').onclick=function(){
+  return t.authorize({ type:'popup', name:'Fourtime Orçamentos', scope:{read:true}, expiration:'never' })
+    .then(function(token){
+      return t.set('member','private','token',token);
+    })
+    .then(function(){ return t.closePopup(); })
+    .catch(function(e){ alert('Não foi possível autorizar: '+(e&&e.message||e)); });
+};
+</script>
+</body>
+</html>

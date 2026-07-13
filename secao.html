@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+<style>
+  :root{--vm:#C6161B;--b:#E3E4E8;--t:#33363D;--t2:#6B6F78;}
+  *{box-sizing:border-box;}
+  body{margin:0;padding:6px 2px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--t);background:transparent;}
+  .item{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--b);border-radius:8px;margin-bottom:7px;background:#fff;}
+  .item .nome{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
+  .item .tam{color:var(--t2);font-size:11.5px;flex:0 0 auto;}
+  .item button{flex:0 0 auto;border:1px solid var(--vm);background:var(--vm);color:#fff;border-radius:6px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;}
+  .item button:hover{filter:brightness(1.08);}
+  .vazio,.erro{color:var(--t2);padding:10px 4px;}
+  .erro{color:var(--vm);}
+</style>
+</head>
+<body>
+<div id="lista"><div class="vazio">Carregando…</div></div>
+<script>
+var SERVIDOR='https://fourtime-etapa02.onrender.com';
+var t=TrelloPowerUp.iframe();
+var lista=document.getElementById('lista');
+
+function kb(n){
+  if(!n) return '';
+  return n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.round(n/1024)+' KB';
+}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+t.card('id','attachments').then(function(card){
+  var itens=(card.attachments||[]).filter(function(a){return /\.html?$/i.test(a.name||'');});
+  if(!itens.length){ lista.innerHTML='<div class="vazio">Nenhum orçamento anexado.</div>'; t.sizeTo('body'); return; }
+  lista.innerHTML=itens.map(function(a){
+    return '<div class="item"><span class="nome">'+esc(a.name)+'</span>'+
+           '<span class="tam">'+kb(a.bytes)+'</span>'+
+           '<button data-id="'+esc(a.id)+'" data-nome="'+esc(a.name)+'">Abrir</button></div>';
+  }).join('');
+  Array.prototype.forEach.call(lista.querySelectorAll('button'),function(b){
+    b.onclick=function(){
+      var q='card='+encodeURIComponent(card.id)
+           +'&anexo='+encodeURIComponent(b.dataset.id)
+           +'&nome='+encodeURIComponent(b.dataset.nome);
+      /* tela cheia dentro do Trello */
+      t.modal({
+        url: SERVIDOR+'/powerup/visualizador.html',
+        args: { q:q, titulo:b.dataset.nome },
+        accentColor: '#C6161B',
+        fullscreen: true,
+        title: b.dataset.nome
+      });
+    };
+  });
+  t.sizeTo('body');
+}).catch(function(e){
+  lista.innerHTML='<div class="erro">Não consegui ler os anexos: '+esc(e&&e.message||e)+'</div>';
+  t.sizeTo('body');
+});
+</script>
+</body>
+</html>

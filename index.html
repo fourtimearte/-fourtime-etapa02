@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Fourtime — conector do Power-Up</title>
+<script src="https://p.trellocdn.com/power-up.min.js"></script>
+</head>
+<body>
+<script>
+/* ============================================================
+   POWER-UP FOURTIME — conector
+   Mostra um botão em cada anexo .html do cartão. Ao clicar,
+   abre o orçamento em tela cheia, dentro do Trello.
+   ============================================================ */
+var SERVIDOR = 'https://fourtime-etapa02.onrender.com';
+var ICONE = SERVIDOR + '/powerup/icone.svg';
+
+function ehOrcamento(nome){
+  return /\.html?$/i.test(nome || '');
+}
+
+TrelloPowerUp.initialize({
+
+  /* um botão dentro da seção de anexos, por arquivo .html */
+  'attachment-sections': function(t, opts){
+    var meus = (opts.entries || []).filter(function(a){ return ehOrcamento(a.name); });
+    if(!meus.length) return [];
+    return [{
+      id: 'fourtime-orcamentos',
+      claimed: meus,
+      icon: ICONE,
+      title: 'Orçamento Fourtime',
+      content: {
+        type: 'iframe',
+        url: t.signUrl(SERVIDOR + '/powerup/secao.html'),
+        height: 40 + meus.length * 44
+      }
+    }];
+  },
+
+  /* selo no cartão quando existe um orçamento anexado */
+  'card-detail-badges': function(t){
+    return t.card('attachments').then(function(c){
+      var n = (c.attachments || []).filter(function(a){ return ehOrcamento(a.name); }).length;
+      if(!n) return [];
+      return [{
+        title: 'Orçamento',
+        text: n === 1 ? 'Ver orçamento' : 'Ver ' + n + ' orçamentos',
+        color: 'red',
+        callback: function(t){
+          return t.popup({
+            title: 'Orçamentos deste pedido',
+            url: SERVIDOR + '/powerup/secao.html',
+            height: 200
+          });
+        }
+      }];
+    });
+  },
+
+  /* autorização: o proxy precisa do token do usuário para ler o anexo */
+  'authorization-status': function(t){
+    return t.get('member', 'private', 'token').then(function(tk){
+      return { authorized: !!tk };
+    });
+  },
+  'show-authorization': function(t){
+    return t.popup({
+      title: 'Conectar ao Trello',
+      url: SERVIDOR + '/powerup/autorizar.html',
+      height: 180
+    });
+  }
+});
+</script>
+</body>
+</html>
