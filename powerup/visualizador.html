@@ -65,9 +65,9 @@
   sandbox="allow-same-origin allow-scripts allow-modals allow-popups allow-downloads"></iframe>
 
 <div id="zoomBar">
-  <button id="zOut" title="Diminuir (roda do mouse)"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+  <button id="zOut" title="Diminuir  (Ctrl + roda)"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
   <span class="pct" id="zPct" title="Voltar ao tamanho da tela">100%</span>
-  <button id="zIn" title="Aumentar (roda do mouse)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button id="zIn" title="Aumentar  (Ctrl + roda)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
   <span class="sep"></span>
   <button id="zFit" title="Ajustar à tela"><svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg></button>
 </div>
@@ -240,17 +240,23 @@ function montaVisor(){
   area.style.overflow  = 'auto';
   d.documentElement.style.overflow = 'hidden';
 
-  /* 3. roda do mouse = zoom (no ponto do cursor) */
+  /* 3. roda do mouse ROLA o documento; Ctrl (ou ⌘) + roda dá ZOOM */
   d.addEventListener('wheel', function(e){
-    e.preventDefault();
-    var fator = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-    zAplica(Z.z * fator, { x: e.clientX, y: e.clientY });
+    if(e.ctrlKey || e.metaKey){
+      e.preventDefault();
+      var fator = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      zAplica(Z.z * fator, { x: e.clientX, y: e.clientY });
+      return;
+    }
+    /* sem Ctrl: rolagem normal — deixa o próprio navegador rolar a área */
   }, { passive: false });
 
-  /* 4. arrastar move o documento (menos sobre a imagem, que tem o duplo clique) */
+  /* 4. arrastar com o botão do MEIO move o documento (o esquerdo fica livre
+        para selecionar texto e para o duplo clique de ampliar a imagem) */
   var pegando = false, x0 = 0, y0 = 0, sx0 = 0, sy0 = 0;
   d.addEventListener('mousedown', function(e){
-    if(e.button !== 0) return;
+    if(e.button !== 1) return;                 /* só o botão do meio */
+    e.preventDefault();
     pegando = true;
     x0 = e.clientX; y0 = e.clientY;
     sx0 = area.scrollLeft; sy0 = area.scrollTop;
