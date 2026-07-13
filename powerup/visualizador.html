@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -22,6 +23,18 @@
   .caixa button:hover{filter:brightness(1.1);}
   .caixa .erro{color:#FF9A9D;font-size:12.5px;margin-top:14px;word-break:break-word;}
   .caixa code{background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;}
+  .caixa a{color:#FF8F92;}
+  .caixa .manual{margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.14);text-align:left;font-size:12.5px;}
+  .caixa .manual b{color:#fff;}
+  .caixa .manual ol{margin:8px 0 12px;padding-left:20px;color:#C4C8CC;}
+  .caixa .manual li{margin-bottom:5px;}
+  .caixa .linha{display:flex;gap:8px;}
+  .caixa input{flex:1;min-width:0;border:1px solid rgba(255,255,255,.22);background:rgba(0,0,0,.22);
+    color:#fff;border-radius:7px;padding:9px 10px;font:inherit;font-size:12.5px;outline:none;}
+  .caixa input:focus{border-color:#C6161B;}
+  .caixa .linha button{padding:9px 16px;font-size:13px;}
+  .caixa .sec{background:transparent;border:1px solid rgba(255,255,255,.25);}
+  .caixa .sec:hover{border-color:#C6161B;background:#C6161B;}
 </style>
 </head>
 <body>
@@ -54,31 +67,81 @@ document.getElementById('bFechar').onclick = function(){ t.closeModal(); };
 
 function msg(html){ caixa.innerHTML = html; painel.style.display = 'flex'; quadro.hidden = true; }
 
+function urlManual(){
+  return 'https://trello.com/1/authorize?expiration=never&scope=read&response_type=token'
+       + '&name=' + encodeURIComponent('Fourtime Orcamentos')
+       + '&key='  + encodeURIComponent(CHAVE);
+}
+
+function guarda(token, origem){
+  token = (token || '').trim();
+  if(!token) return;
+  t.set('member', 'private', 'token', token).then(abre).catch(function(e){
+    pedeAutorizacao('Não consegui guardar o token: ' + (e && e.message || e));
+  });
+}
+
 function pedeAutorizacao(erro){
+  if(CHAVE === 'COLE_AQUI_A_API_KEY'){
+    msg('<h2>Falta a API key</h2><p>O arquivo <code>powerup/visualizador.html</code> ainda está com o texto '
+      + '<code>COLE_AQUI_A_API_KEY</code>. Troque pela chave do Power-Up e suba de novo.</p>');
+    return;
+  }
   msg('<h2>Conectar ao Trello</h2>'
     + '<p>Para abrir o orçamento, o Power-Up precisa de permissão para ler os anexos deste cartão. '
     + 'É pedido uma única vez.</p>'
     + '<button id="bAut">Autorizar</button>'
-    + (erro ? '<div class="erro">' + erro + '</div>' : ''));
+    + (erro ? '<div class="erro">' + erro + '</div>' : '')
+    + '<div class="manual">'
+    +   '<b>Se o botão não funcionar</b> (bloqueador de anúncios costuma travar a janela):'
+    +   '<ol>'
+    +     '<li><a id="lnk" href="' + urlManual() + '" target="_blank" rel="noopener">Abrir a autorização do Trello</a> '
+    +         'numa aba nova e clicar em <b>Allow</b>.</li>'
+    +     '<li>O Trello mostra um <b>token</b> (texto longo). Copie e cole aqui:</li>'
+    +   '</ol>'
+    +   '<div class="linha">'
+    +     '<input id="tkManual" type="text" placeholder="cole o token aqui" autocomplete="off" spellcheck="false">'
+    +     '<button class="sec" id="bManual">Salvar</button>'
+    +   '</div>'
+    + '</div>');
+
+  document.getElementById('bManual').onclick = function(){
+    guarda(document.getElementById('tkManual').value, 'manual');
+  };
+  document.getElementById('tkManual').onkeydown = function(e){
+    if(e.key === 'Enter') document.getElementById('bManual').click();
+  };
+
   document.getElementById('bAut').onclick = function(){
-    if(CHAVE === 'COLE_AQUI_A_API_KEY'){
-      msg('<h2>Falta a API key</h2><p>O arquivo <code>powerup/visualizador.html</code> ainda está com o texto '
-        + '<code>COLE_AQUI_A_API_KEY</code>. Troque pela chave do Power-Up e suba de novo.</p>');
-      return;
-    }
-    caixa.innerHTML = '<p>Abrindo a janela do Trello…</p>';
+    var b = document.getElementById('bAut');
+    b.disabled = true;
+    b.textContent = 'Abrindo a janela do Trello…';
+    var respondeu = false;
+
+    /* se o popup for bloqueado, o t.authorize fica pendurado para sempre:
+       damos 25s e caímos no caminho manual, que sempre funciona */
+    var relogio = setTimeout(function(){
+      if(respondeu) return;
+      respondeu = true;
+      pedeAutorizacao('A janela do Trello não respondeu (provavelmente bloqueada). '
+                    + 'Use o caminho manual abaixo — funciona igual.');
+    }, 25000);
+
     t.authorize({
       type: 'popup',
       name: 'Fourtime Orçamentos',
       scope: { read: true },
       expiration: 'never'
     }).then(function(token){
+      if(respondeu) return;
+      respondeu = true; clearTimeout(relogio);
       if(!token) throw new Error('O Trello não devolveu o token.');
-      return t.set('member', 'private', 'token', token);
-    }).then(function(){
-      abre();                                   /* autorizado: carrega na hora */
+      guarda(token, 'popup');
     }).catch(function(e){
-      pedeAutorizacao('Não foi possível autorizar: ' + (e && e.message || e));
+      if(respondeu) return;
+      respondeu = true; clearTimeout(relogio);
+      pedeAutorizacao('Não foi possível autorizar automaticamente: ' + (e && e.message || e)
+                    + ' — use o caminho manual abaixo.');
     });
   };
 }
