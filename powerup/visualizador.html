@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -23,6 +24,20 @@
   .caixa button:hover{filter:brightness(1.1);}
   .caixa .erro{color:#FF9A9D;font-size:12.5px;margin-top:14px;word-break:break-word;}
   .caixa code{background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;}
+  /* ---- controles de zoom, canto inferior direito ---- */
+  #zoomBar{position:fixed;right:18px;bottom:18px;z-index:6;display:none;
+    align-items:center;gap:4px;padding:5px;border-radius:11px;
+    background:rgba(30,35,40,.92);box-shadow:0 6px 22px rgba(0,0,0,.35);
+    font:12px/1 Roboto,-apple-system,'Segoe UI',sans-serif;color:#fff;}
+  #zoomBar.on{display:flex;}
+  #zoomBar button{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:#fff;
+    cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
+  #zoomBar button:hover{background:#C6161B;}
+  #zoomBar button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;}
+  #zoomBar .pct{min-width:48px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;
+    padding:0 4px;border-radius:7px;}
+  #zoomBar .pct:hover{background:rgba(255,255,255,.14);}
+  #zoomBar .sep{width:1px;height:18px;background:rgba(255,255,255,.20);margin:0 2px;}
   .caixa a{color:#FF8F92;}
   .caixa .manual{margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.14);text-align:left;font-size:12.5px;}
   .caixa .manual b{color:#fff;}
@@ -49,12 +64,20 @@
 <iframe id="quadro" hidden
   sandbox="allow-same-origin allow-scripts allow-modals allow-popups allow-downloads"></iframe>
 
+<div id="zoomBar">
+  <button id="zOut" title="Diminuir (roda do mouse)"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+  <span class="pct" id="zPct" title="Voltar ao tamanho da tela">100%</span>
+  <button id="zIn" title="Aumentar (roda do mouse)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <span class="sep"></span>
+  <button id="zFit" title="Ajustar à tela"><svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg></button>
+</div>
+
 <script>
 /* ============================================================
    A MESMA API KEY que está em FT_TRELLO_KEY no Render.
    Sem ela o botão Autorizar não funciona.
    ============================================================ */
-var CHAVE    = '5a21d827fc21ad2d68ec766dd4ba2011';
+var CHAVE    = '5a21d827fc21ad2d68ec766dd4ba2011';   /* API key do Power-Up — pública por natureza */
 var SERVIDOR = 'https://fourtime-etapa02.onrender.com';
 
 var t = TrelloPowerUp.iframe({ appKey: CHAVE, appName: 'Fourtime Orçamentos' });
@@ -82,9 +105,8 @@ function guarda(token, origem){
 }
 
 function pedeAutorizacao(erro){
-  if(CHAVE === 'COLE_AQUI_A_API_KEY'){
-    msg('<h2>Falta a API key</h2><p>O arquivo <code>powerup/visualizador.html</code> ainda está com o texto '
-      + '<code>COLE_AQUI_A_API_KEY</code>. Troque pela chave do Power-Up e suba de novo.</p>');
+  if(!CHAVE || CHAVE.length < 20){
+    msg('<h2>Falta a API key</h2><p>A constante <code>CHAVE</code> em <code>powerup/visualizador.html</code> está vazia.</p>');
     return;
   }
   msg('<h2>Conectar ao Trello</h2>'
@@ -146,6 +168,132 @@ function pedeAutorizacao(erro){
   };
 }
 
+/* ================================================================
+   VISOR — zoom próprio
+   O orçamento traz o auto-zoom do editor, feito para a tela do editor.
+   Aqui ele é desligado e o zoom passa a ser nosso:
+     · ajuste automático: a folha cresce até ENCOSTAR primeiro na largura
+       OU na altura — o que acontecer antes
+     · roda do mouse dá zoom, mantendo sob o cursor o ponto que estava lá
+     · arrastar move o documento
+     · botões + / − / ajustar no canto inferior direito
+     · Esc fecha
+   ================================================================ */
+var Z = { z:1, fit:1, area:null, folha:null, jan:null, doc:null };
+var zoomBar = document.getElementById('zoomBar');
+var zPct = document.getElementById('zPct');
+var MARGEM = 34;      /* respiro em volta da folha */
+
+function zAplica(nz, foco){
+  if(!Z.area) return;
+  var novo = Math.min(5, Math.max(0.12, nz));
+  var k = novo / Z.z;
+  var sx = Z.area.scrollLeft, sy = Z.area.scrollTop;
+  Z.z = novo;
+  Z.area.style.setProperty('--zoom', String(novo));
+  zPct.textContent = Math.round(novo * 100) + '%';
+  /* mantém sob o cursor (ou no centro) o mesmo ponto do documento */
+  var px = foco ? foco.x : Z.jan.innerWidth / 2;
+  var py = foco ? foco.y : Z.jan.innerHeight / 2;
+  Z.area.scrollLeft = (sx + px) * k - px;
+  Z.area.scrollTop  = (sy + py) * k - py;
+}
+
+function zTamanhoFolha(){
+  var antes = Z.area.style.getPropertyValue('--zoom');
+  Z.area.style.setProperty('--zoom', '1');
+  var t = { w: Z.folha.offsetWidth, h: Z.folha.offsetHeight };
+  Z.area.style.setProperty('--zoom', antes || String(Z.z));
+  return t;
+}
+
+function zAjusta(){
+  if(!Z.area || !Z.folha) return;
+  var f = zTamanhoFolha();
+  if(!f.w || !f.h) return;
+  var vw = Z.jan.innerWidth  - MARGEM * 2;
+  var vh = Z.jan.innerHeight - MARGEM * 2;
+  Z.fit = Math.min(vw / f.w, vh / f.h);     /* o que encostar primeiro manda */
+  Z.z = 1;                                   /* zAplica calcula a partir daqui */
+  Z.area.style.setProperty('--zoom', '1');
+  zAplica(Z.fit);
+  Z.area.scrollTop = 0;
+  Z.area.scrollLeft = Math.max(0, (Z.area.scrollWidth - Z.area.clientWidth) / 2);
+}
+
+function montaVisor(){
+  var w, d;
+  try{ w = quadro.contentWindow; d = quadro.contentDocument; }catch(e){ return; }
+  if(!w || !d) return;
+  var area  = d.querySelector('.area-paginas');
+  var folha = d.querySelector('.folha-a4');
+  if(!area || !folha){ setTimeout(montaVisor, 200); return; }
+
+  Z.jan = w; Z.doc = d; Z.area = area; Z.folha = folha;
+
+  /* 1. desliga o auto-zoom do editor: quem manda agora é o visor */
+  try{ w.aplicaZoom = function(){}; }catch(e){}
+
+  /* 2. a área ocupa a janela inteira do iframe e rola sozinha */
+  area.style.maxHeight = '100vh';
+  area.style.height    = '100vh';
+  area.style.overflow  = 'auto';
+  d.documentElement.style.overflow = 'hidden';
+
+  /* 3. roda do mouse = zoom (no ponto do cursor) */
+  d.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var fator = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    zAplica(Z.z * fator, { x: e.clientX, y: e.clientY });
+  }, { passive: false });
+
+  /* 4. arrastar move o documento (menos sobre a imagem, que tem o duplo clique) */
+  var pegando = false, x0 = 0, y0 = 0, sx0 = 0, sy0 = 0;
+  d.addEventListener('mousedown', function(e){
+    if(e.button !== 0) return;
+    pegando = true;
+    x0 = e.clientX; y0 = e.clientY;
+    sx0 = area.scrollLeft; sy0 = area.scrollTop;
+    d.body.style.cursor = 'grabbing';
+  });
+  d.addEventListener('mousemove', function(e){
+    if(!pegando) return;
+    area.scrollLeft = sx0 - (e.clientX - x0);
+    area.scrollTop  = sy0 - (e.clientY - y0);
+  });
+  ['mouseup','mouseleave'].forEach(function(ev){
+    d.addEventListener(ev, function(){ pegando = false; d.body.style.cursor = ''; });
+  });
+
+  /* 5. Esc fecha o visualizador, mesmo com o foco dentro do orçamento */
+  d.addEventListener('keydown', function(e){ if(e.key === 'Escape') t.closeModal(); });
+
+  /* 6. a janela do iframe mudou de tamanho? refaz o ajuste se ainda estiver nele */
+  w.addEventListener('resize', function(){
+    if(Math.abs(Z.z - Z.fit) < 0.01) zAjusta();
+  });
+
+  zoomBar.classList.add('on');
+  zAjusta();
+  requestAnimationFrame(zAjusta);        /* 2º passe: imagens já medidas */
+  setTimeout(zAjusta, 300);
+}
+
+/* botões e teclado do lado de fora */
+document.getElementById('zIn').onclick  = function(){ zAplica(Z.z * 1.2); };
+document.getElementById('zOut').onclick = function(){ zAplica(Z.z / 1.2); };
+document.getElementById('zFit').onclick = zAjusta;
+zPct.onclick = zAjusta;
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){ t.closeModal(); return; }
+  if(e.key === '+' || e.key === '=') zAplica(Z.z * 1.2);
+  if(e.key === '-' || e.key === '_') zAplica(Z.z / 1.2);
+  if(e.key === '0') zAjusta();
+});
+window.addEventListener('resize', function(){
+  if(Z.area && Math.abs(Z.z - Z.fit) < 0.01) zAjusta();
+});
+
 function abre(){
   caixa.textContent = 'Carregando o orçamento…';
   painel.style.display = 'flex';
@@ -166,29 +314,11 @@ function abre(){
       }
       return r.text().then(function(html){
         /* ORDEM IMPORTA: o iframe tem de estar VISÍVEL antes de receber o conteúdo.
-           O orçamento calcula o zoom da folha a partir da altura da janela — com o
-           iframe escondido essa altura é ZERO, e a folha sai espremida. */
+           Escondido, ele tem altura zero — e a folha sai espremida.               */
         painel.style.display = 'none';
         quadro.hidden = false;
-
-        function recalcula(){                       /* faz o orçamento se reajustar */
-          try{
-            var w = quadro.contentWindow;
-            if(!w) return;
-            w.dispatchEvent(new w.Event('resize'));
-            if(typeof w.aplicaZoom === 'function') w.aplicaZoom();
-            if(typeof w.reajusta === 'function')   w.reajusta();
-          }catch(e){}
-        }
-        quadro.onload = function(){
-          recalcula();
-          requestAnimationFrame(recalcula);         /* 2º passe: imagens já medidas */
-          setTimeout(recalcula, 250);
-        };
+        quadro.onload = function(){ montaVisor(); };
         quadro.srcdoc = html;
-
-        /* a janela do Trello pode mudar de tamanho (maximizar, girar o tablet) */
-        window.addEventListener('resize', recalcula);
 
         var bI = document.getElementById('bImprimir');
         bI.hidden = false;
