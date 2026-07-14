@@ -9,15 +9,15 @@
      e dentro do modal do Trello isso pode ser zero — a página colapsa e sobra
      só o fundo cinza do Trello. Unidades de viewport não dependem de ninguém. */
   html,body{margin:0;min-height:100vh;background:#fff;}
-  #barra{position:fixed;inset:0 0 auto 0;height:44px;display:flex;align-items:center;gap:12px;
+  #barra{position:fixed;inset:0 0 auto 0;height:38px;display:flex;align-items:center;gap:12px;
     padding:0 14px;background:#1E2328;color:#fff;font:13px/1 Roboto,-apple-system,'Segoe UI',sans-serif;z-index:5;}
   #barra .tit{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
   #barra button{border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:7px;
     padding:6px 11px;font:inherit;font-size:12px;cursor:pointer;}
   #barra button:hover{border-color:#C6161B;background:#C6161B;}
-  #quadro{position:fixed;top:44px;left:0;
-    width:100vw;height:calc(100vh - 44px);border:0;background:#fff;display:block;}
-  #painel{position:fixed;top:44px;left:0;width:100vw;height:calc(100vh - 44px);
+  #quadro{position:fixed;top:38px;left:0;
+    width:100vw;height:calc(100vh - 38px);border:0;background:#fff;display:block;}
+  #painel{position:fixed;top:38px;left:0;width:100vw;height:calc(100vh - 38px);
     display:flex;align-items:center;justify-content:center;padding:24px;
     background:#3B4045;box-sizing:border-box;}
   .caixa{max-width:440px;text-align:center;color:#E4E7EA;font:14px/1.6 Roboto,-apple-system,'Segoe UI',sans-serif;}
@@ -236,8 +236,12 @@ function montaVisor(){
     '}';
   d.head.appendChild(limpeza);
 
-  /* 3. roda do mouse ROLA o documento; Ctrl (ou ⌘) + roda dá ZOOM */
+  /* 3. roda do mouse ROLA o documento; Ctrl (ou ⌘) + roda dá ZOOM.
+        MAS: se a LUPA da imagem estiver aberta, ela tem prioridade absoluta.
+        Antes eu não checava isso, e o Ctrl+roda dentro da lupa ampliava a
+        imagem E o documento inteiro ao mesmo tempo — os dois zooms brigavam. */
   d.addEventListener('wheel', function(e){
+    if(lupaAberta()) return;            /* a lupa cuida do próprio zoom */
     if(e.ctrlKey || e.metaKey){
       e.preventDefault();
       var fator = e.deltaY < 0 ? 1.12 : 1 / 1.12;
@@ -293,12 +297,13 @@ function fechaVisualizador(){
 
 /* botões e teclado do lado de fora */
 function zCemPorCento(){ zAplica(1); }        /* tamanho real do documento */
-document.getElementById('zIn').onclick  = function(){ zAplica(Z.z * 1.2); };
-document.getElementById('zOut').onclick = function(){ zAplica(Z.z / 1.2); };
+document.getElementById('zIn').onclick  = function(){ if(!lupaAberta())zAplica(Z.z * 1.2); };
+document.getElementById('zOut').onclick = function(){ if(!lupaAberta())zAplica(Z.z / 1.2); };
 document.getElementById('zCem').onclick = zCemPorCento;
 document.getElementById('zFit').onclick = zAjusta;
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape'){ fechaVisualizador(); return; }
+  if(lupaAberta()) return;          /* com a lupa aberta, o teclado é dela */
   if(e.key === '+' || e.key === '=') zAplica(Z.z * 1.2);
   if(e.key === '-' || e.key === '_') zAplica(Z.z / 1.2);
   if(e.key === '0') zAjusta();
