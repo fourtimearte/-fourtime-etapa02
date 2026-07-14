@@ -58,19 +58,10 @@ TrelloPowerUp.initialize({
     });
   },
 
-  /* autorização: o proxy precisa do token do usuário para ler o anexo */
-  'authorization-status': function(t){
-    return t.get('member', 'private', 'token').then(function(tk){
-      return { authorized: !!tk };
-    });
-  },
-  'show-authorization': function(t){
-    return t.popup({
-      title: 'Conectar ao Trello',
-      url: SERVIDOR + '/powerup/autorizar.html',
-      height: 180
-    });
-  }
+  /* Sem 'authorization-status' nem 'show-authorization':
+     ninguém precisa autorizar nada. O servidor baixa os anexos com um
+     token de serviço, e cada chamada é provada por um JWT que o Trello
+     assina com o segredo do Power-Up. */
 });
 </script>
 </body>
