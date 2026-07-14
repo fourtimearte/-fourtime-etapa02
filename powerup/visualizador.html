@@ -89,7 +89,7 @@ var CHAVE    = '5a21d827fc21ad2d68ec766dd4ba2011';   /* API key do Power-Up — 
 var SERVIDOR = 'https://fourtime-etapa02.onrender.com';
 
 var t = TrelloPowerUp.iframe({ appKey: CHAVE, appName: 'Fourtime Orçamentos' });
-var args   = { q: t.arg('q'), titulo: t.arg('titulo') };
+var args   = { anexo: t.arg('anexo'), titulo: t.arg('titulo') };
 var quadro = document.getElementById('quadro');
 var painel = document.getElementById('painel');
 var caixa  = document.getElementById('caixa');
@@ -98,83 +98,23 @@ document.getElementById('bFechar').onclick = function(){ t.closeModal(); };
 
 function msg(html){ caixa.innerHTML = html; painel.style.display = 'flex'; quadro.hidden = true; }
 
-function urlManual(){
-  return 'https://trello.com/1/authorize?expiration=never&scope=read&response_type=token'
-       + '&name=' + encodeURIComponent('Fourtime Orcamentos')
-       + '&key='  + encodeURIComponent(CHAVE);
-}
-
-function guarda(token, origem){
-  token = (token || '').trim();
-  if(!token) return;
-  t.set('member', 'private', 'token', token).then(abre).catch(function(e){
-    pedeAutorizacao('Não consegui guardar o token: ' + (e && e.message || e));
-  });
-}
-
-function pedeAutorizacao(erro){
-  if(!CHAVE || CHAVE.length < 20){
-    msg('<h2>Falta a API key</h2><p>A constante <code>CHAVE</code> em <code>powerup/visualizador.html</code> está vazia.</p>');
-    return;
+/* ============================================================
+   Sem autorização por pessoa.
+   O Power-Up pede ao Trello um JWT assinado com o segredo do nosso
+   Power-Up. Quem baixa o anexo é o SERVIDOR, com o token de serviço.
+   O servidor confere a assinatura e tira o ID do cartão de DENTRO do
+   JWT — então ninguém consegue pedir anexo de outro cartão.
+   Resultado: a equipe inteira abre orçamentos sem autorizar nada.
+   ============================================================ */
+function pedeJwt(){
+  try{
+    var p = t.jwt({ state: 'orcamento' });
+    return p && p.then ? p : Promise.reject(new Error('t.jwt indisponível'));
+  }catch(e){
+    return Promise.reject(e);
   }
-  msg('<h2>Conectar ao Trello</h2>'
-    + '<p>Para abrir o orçamento, o Power-Up precisa de permissão para ler os anexos deste cartão. '
-    + 'É pedido uma única vez.</p>'
-    + '<button id="bAut">Autorizar</button>'
-    + (erro ? '<div class="erro">' + erro + '</div>' : '')
-    + '<div class="manual">'
-    +   '<b>Se o botão não funcionar</b> (bloqueador de anúncios costuma travar a janela):'
-    +   '<ol>'
-    +     '<li><a id="lnk" href="' + urlManual() + '" target="_blank" rel="noopener">Abrir a autorização do Trello</a> '
-    +         'numa aba nova e clicar em <b>Allow</b>.</li>'
-    +     '<li>O Trello mostra um <b>token</b> (texto longo). Copie e cole aqui:</li>'
-    +   '</ol>'
-    +   '<div class="linha">'
-    +     '<input id="tkManual" type="text" placeholder="cole o token aqui" autocomplete="off" spellcheck="false">'
-    +     '<button class="sec" id="bManual">Salvar</button>'
-    +   '</div>'
-    + '</div>');
-
-  document.getElementById('bManual').onclick = function(){
-    guarda(document.getElementById('tkManual').value, 'manual');
-  };
-  document.getElementById('tkManual').onkeydown = function(e){
-    if(e.key === 'Enter') document.getElementById('bManual').click();
-  };
-
-  document.getElementById('bAut').onclick = function(){
-    var b = document.getElementById('bAut');
-    b.disabled = true;
-    b.textContent = 'Abrindo a janela do Trello…';
-    var respondeu = false;
-
-    /* se o popup for bloqueado, o t.authorize fica pendurado para sempre:
-       damos 25s e caímos no caminho manual, que sempre funciona */
-    var relogio = setTimeout(function(){
-      if(respondeu) return;
-      respondeu = true;
-      pedeAutorizacao('A janela do Trello não respondeu (provavelmente bloqueada). '
-                    + 'Use o caminho manual abaixo — funciona igual.');
-    }, 25000);
-
-    t.authorize({
-      type: 'popup',
-      name: 'Fourtime Orçamentos',
-      scope: { read: true },
-      expiration: 'never'
-    }).then(function(token){
-      if(respondeu) return;
-      respondeu = true; clearTimeout(relogio);
-      if(!token) throw new Error('O Trello não devolveu o token.');
-      guarda(token, 'popup');
-    }).catch(function(e){
-      if(respondeu) return;
-      respondeu = true; clearTimeout(relogio);
-      pedeAutorizacao('Não foi possível autorizar automaticamente: ' + (e && e.message || e)
-                    + ' — use o caminho manual abaixo.');
-    });
-  };
 }
+
 
 /* ================================================================
    VISOR — zoom próprio
@@ -182,10 +122,10 @@ function pedeAutorizacao(erro){
    Aqui ele é desligado e o zoom passa a ser nosso:
      · ajuste automático: a folha cresce até ENCOSTAR primeiro na largura
        OU na altura — o que acontecer antes
-     · roda do mouse dá zoom, mantendo sob o cursor o ponto que estava lá
-     · arrastar move o documento
-     · botões + / − / ajustar no canto inferior direito
-     · Esc fecha
+     · roda do mouse ROLA; Ctrl (ou ⌘) + roda dá ZOOM no ponto do cursor
+     · botão do meio: autoscroll NATIVO do navegador (não interceptamos)
+     · botões − / % / + / 100% / Ajustar na barra do topo
+     · Esc em dois estágios: 1º fecha a lupa da imagem, 2º fecha o visor
    ================================================================ */
 var Z = { z:1, fit:1, area:null, folha:null, jan:null, doc:null };
 var zoomBar = document.getElementById('zoomBar');
@@ -222,7 +162,7 @@ function zAjusta(){
   var vw = Z.jan.innerWidth  - MARGEM * 2;
   var vh = Z.jan.innerHeight - MARGEM * 2;
   Z.fit = Math.min(vw / f.w, vh / f.h);     /* o que encostar primeiro manda */
-  Z.z = 1;                                   /* zAplica calcula a partir daqui */
+  Z.z = 1;
   Z.area.style.setProperty('--fz', '1');
   zAplica(Z.fit);
   Z.area.scrollTop = 0;
@@ -230,7 +170,7 @@ function zAjusta(){
 }
 
 /* celular/tablet: o orçamento tem layout próprio (empilhado). Nada de
-   encaixar folha A4, nada de zoom nosso — quem manda é o CSS de lá.   */
+   encaixar folha A4, nada de zoom nosso — quem manda é o CSS de lá. */
 function ehToque(){
   try{
     return window.matchMedia('(max-width:820px) and (pointer:coarse)').matches;
@@ -246,7 +186,6 @@ function montaVisor(){
   if(!area || !folha){ setTimeout(montaVisor, 200); return; }
 
   if(ehToque()){
-    /* deixa o orçamento se virar sozinho: rolagem normal, pinça do sistema */
     try{ w.aplicaZoom = function(){}; }catch(e){}
     area.style.removeProperty('--fz');
     zoomBar.classList.remove('on');
@@ -261,19 +200,12 @@ function montaVisor(){
   /* 1. desliga o auto-zoom do editor: quem manda agora é o visor */
   try{ w.aplicaZoom = function(){}; }catch(e){}
 
-  /* 2. tira o cinza e a moldura do editor — SÓ COR E BORDA.
-        Nada de mexer em altura/overflow aqui: forçar height:100% e
-        overflow:hidden colapsava a área e o orçamento sumia da tela
-        (ficava só o fundo). O orçamento já sabe se organizar sozinho. */
+  /* 2. tira o cinza e a moldura — e conserta o corte no zoom */
   var limpeza = d.createElement('style');
   limpeza.textContent =
-    /* ------------------------------------------------------------------
-       TUDO daqui é @media screen. Sem isso, estas regras (com !important)
+    /* TUDO daqui é @media screen. Sem isso, estas regras (com !important)
        valem TAMBÉM na impressão: a área fica presa em 100vw x 100vh com
-       overflow:auto, e o papel recebe só o retângulo que está na tela.
-       Na impressão, o orçamento já sabe se paginar sozinho — é só sair
-       da frente.
-       ------------------------------------------------------------------ */
+       overflow:auto, e o papel recebe só o retângulo que está na tela. */
     '@media screen{' +
       'html,body{background:#fff !important;}' +
       '.app{padding:0 !important;background:#fff !important;overflow:visible !important;}' +
@@ -311,23 +243,19 @@ function montaVisor(){
       zAplica(Z.z * fator, { x: e.clientX, y: e.clientY });
       return;
     }
-    /* sem Ctrl: rolagem normal — deixa o próprio navegador rolar a área */
+    /* sem Ctrl: rolagem normal — deixa o navegador rolar a área */
   }, { passive: false });
 
   /* 4. botão do MEIO: NÃO fazemos nada.
-        O navegador já tem o autoscroll nativo (aquela bússola que rola sozinha
-        conforme você move o mouse). Antes eu interceptava o mousedown e dava
-        preventDefault — o que MATAVA o autoscroll e o trocava por um "arrastar
-        com a mão". Sem código, o comportamento nativo volta.
-        O botão esquerdo também fica livre: selecionar texto e duplo clique
-        para ampliar a imagem continuam funcionando.                          */
+        O navegador já tem o autoscroll nativo (a bússola que rola sozinha).
+        Interceptar o mousedown com preventDefault MATAVA esse comportamento. */
 
   /* 5. Esc em DOIS ESTÁGIOS: se a lupa da imagem estiver aberta, o primeiro Esc
         fecha só a lupa (o próprio orçamento cuida disso). Só o segundo Esc,
         já sem a lupa, fecha o visualizador do Trello. */
   d.addEventListener('keydown', function(e){
     if(e.key !== 'Escape') return;
-    if(lupaAberta()) return;          /* deixa o orçamento fechar a lupa primeiro */
+    if(lupaAberta()) return;
     t.closeModal();
   });
 
@@ -399,40 +327,45 @@ function comPrazo(promessa, ms, oQue){
 }
 
 function abre(){
-  caixa.textContent = 'Carregando o orçamento…';
+  caixa.textContent = 'Conectando ao Trello…';
   painel.style.display = 'flex';
   quadro.hidden = true;
-  comPrazo(t.get('member', 'private', 'token'), 10000, 'ler a autorização').then(function(tk){
-    if(!tk){ pedeAutorizacao(); return; }
-    var url = SERVIDOR + '/api/trello/anexo?' + args.q + '&token=' + encodeURIComponent(tk);
+
+  comPrazo(pedeJwt(), 15000, 'assinar o pedido').then(function(jwt){
+    if(!jwt) throw new Error('O Trello não devolveu o JWT.');
+
+    var url = SERVIDOR + '/api/trello/anexo?anexo=' + encodeURIComponent(args.anexo)
+            + '&nome=' + encodeURIComponent(args.titulo || 'orcamento.html');
+
     var bB = document.getElementById('bBaixar');
     bB.hidden = false;
-    bB.onclick = function(){ window.open(url, '_blank'); };
-    caixa.textContent = 'Baixando o orçamento do Trello…';
-    return comPrazo(fetch(url, { credentials: 'omit' }), 90000, 'baixar o anexo').then(function(r){
-      if(r.status === 401){                     /* token revogado ou inválido: pede de novo */
-        return t.remove('member', 'private', 'token').then(function(){
-          pedeAutorizacao('A autorização anterior não vale mais.');
+    bB.onclick = function(){
+      /* abrir em aba nova precisa do JWT na URL (não dá para pôr cabeçalho) */
+      window.open(url + '&jwt=' + encodeURIComponent(jwt), '_blank');
+    };
+
+    caixa.textContent = 'Baixando o orçamento…';
+    return comPrazo(fetch(url, {
+      credentials: 'omit',
+      headers: { 'X-FT-JWT': jwt }
+    }), 90000, 'baixar o anexo').then(function(r){
+      if(!r.ok){
+        return r.text().then(function(txt){
+          throw new Error('HTTP ' + r.status + ' — ' + txt.slice(0, 200));
         });
       }
-      if(!r.ok){
-        return r.text().then(function(txt){ throw new Error('HTTP ' + r.status + ' — ' + txt.slice(0, 180)); });
-      }
       return r.text().then(function(html){
-        /* ORDEM IMPORTA: o iframe tem de estar VISÍVEL antes de receber o conteúdo.
-           Escondido, ele tem altura zero — e a folha sai espremida.               */
+        /* o iframe tem de estar VISÍVEL antes de receber o conteúdo:
+           escondido, ele tem altura zero e a folha sai espremida */
         painel.style.display = 'none';
         quadro.hidden = false;
         var carregou = false;
         quadro.onload = function(){ carregou = true; montaVisor(); };
         quadro.srcdoc = html;
-
-        /* nunca mais uma tela morta: se não renderizar, o visualizador fala */
         setTimeout(function(){
-          if(carregou) return;
-          msg('<h2>O orçamento não renderizou</h2>'
-            + '<p>O arquivo foi baixado do Trello, mas não abriu na tela. '
-            + 'Tente “Baixar HTML” e abrir no navegador.</p>');
+          if(!carregou) msg('<h2>O orçamento não renderizou</h2>'
+            + '<p>O arquivo veio do Trello, mas não abriu na tela. '
+            + 'Use “Baixar HTML” e abra no navegador.</p>');
         }, 8000);
 
         var bI = document.getElementById('bImprimir');
@@ -443,10 +376,11 @@ function abre(){
       });
     });
   }).catch(function(e){
-    msg('<h2>Não consegui abrir</h2><p>' + (e && e.message || e) + '</p>'
-      + '<button id="bAut">Autorizar de novo</button>');
-    var b = document.getElementById('bAut');
-    if(b) b.onclick = function(){ pedeAutorizacao(); };
+    msg('<h2>Não consegui abrir o orçamento</h2>'
+      + '<p>' + (e && e.message || e) + '</p>'
+      + '<button id="bRetry">Tentar de novo</button>');
+    var b = document.getElementById('bRetry');
+    if(b) b.onclick = abre;
   });
 }
 
