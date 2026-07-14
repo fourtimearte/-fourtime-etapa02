@@ -28,20 +28,21 @@
   .caixa button:hover{filter:brightness(1.1);}
   .caixa .erro{color:#FF9A9D;font-size:12.5px;margin-top:14px;word-break:break-word;}
   .caixa code{background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;}
-  /* ---- controles de zoom, canto inferior direito ---- */
-  #zoomBar{position:fixed;right:18px;bottom:18px;z-index:6;display:none;
-    align-items:center;gap:4px;padding:5px;border-radius:11px;
-    background:rgba(30,35,40,.92);box-shadow:0 6px 22px rgba(0,0,0,.35);
-    font:12px/1 Roboto,-apple-system,'Segoe UI',sans-serif;color:#fff;}
+  /* ---- controles de zoom: mesma linguagem visual dos outros botões da barra ---- */
+  #zoomBar{display:none;align-items:center;gap:6px;}
   #zoomBar.on{display:flex;}
-  #zoomBar button{width:30px;height:30px;border:0;border-radius:8px;background:transparent;color:#fff;
-    cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
-  #zoomBar button:hover{background:#C6161B;}
-  #zoomBar button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;}
-  #zoomBar .pct{min-width:48px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;
-    padding:0 4px;border-radius:7px;}
-  #zoomBar .pct:hover{background:rgba(255,255,255,.14);}
-  #zoomBar .sep{width:1px;height:18px;background:rgba(255,255,255,.20);margin:0 2px;}
+  #zoomBar button{
+    border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:7px;
+    height:28px;padding:0 9px;font:inherit;font-size:12px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:5px;
+  }
+  #zoomBar button:hover{border-color:#C6161B;background:#C6161B;}
+  #zoomBar button.ico{width:28px;padding:0;}
+  #zoomBar button svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;}
+  #zoomBar .pct{
+    min-width:44px;text-align:center;font-size:12px;font-weight:600;
+    font-variant-numeric:tabular-nums;color:#C4C8CC;user-select:none;
+  }
   .caixa a{color:#FF8F92;}
   .caixa .manual{margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.14);text-align:left;font-size:12.5px;}
   .caixa .manual b{color:#fff;}
@@ -59,6 +60,16 @@
 <body>
 <div id="barra">
   <span class="tit" id="tit">Orçamento</span>
+  <div id="zoomBar">
+    <button class="ico" id="zOut" title="Diminuir  (Ctrl + roda)"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+    <span class="pct" id="zPct">100%</span>
+    <button class="ico" id="zIn" title="Aumentar  (Ctrl + roda)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button id="zCem" title="Tamanho real do documento (tecla 1)">100%</button>
+    <button id="zFit" title="Ajustar à tela (tecla 0)">
+      <svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg>
+      Ajustar
+    </button>
+  </div>
   <button id="bImprimir" hidden>Imprimir / PDF</button>
   <button id="bBaixar" hidden>Baixar HTML</button>
   <button id="bFechar">Fechar</button>
@@ -68,13 +79,6 @@
 <iframe id="quadro" hidden
   sandbox="allow-same-origin allow-scripts allow-modals allow-popups allow-downloads"></iframe>
 
-<div id="zoomBar">
-  <button id="zOut" title="Diminuir  (Ctrl + roda)"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
-  <span class="pct" id="zPct" title="Voltar ao tamanho da tela">100%</span>
-  <button id="zIn" title="Aumentar  (Ctrl + roda)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-  <span class="sep"></span>
-  <button id="zFit" title="Ajustar à tela"><svg viewBox="0 0 24 24"><path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"/></svg></button>
-</div>
 
 <script>
 /* ============================================================
@@ -194,7 +198,7 @@ function zAplica(nz, foco){
   var k = novo / Z.z;
   var sx = Z.area.scrollLeft, sy = Z.area.scrollTop;
   Z.z = novo;
-  Z.area.style.setProperty('--zoom', String(novo));
+  Z.area.style.setProperty('--fz', String(novo));   /* amplia as FOLHAS */
   zPct.textContent = Math.round(novo * 100) + '%';
   /* mantém sob o cursor (ou no centro) o mesmo ponto do documento */
   var px = foco ? foco.x : Z.jan.innerWidth / 2;
@@ -204,10 +208,10 @@ function zAplica(nz, foco){
 }
 
 function zTamanhoFolha(){
-  var antes = Z.area.style.getPropertyValue('--zoom');
-  Z.area.style.setProperty('--zoom', '1');
+  var antes = Z.area.style.getPropertyValue('--fz');
+  Z.area.style.setProperty('--fz', '1');
   var t = { w: Z.folha.offsetWidth, h: Z.folha.offsetHeight };
-  Z.area.style.setProperty('--zoom', antes || String(Z.z));
+  Z.area.style.setProperty('--fz', antes || String(Z.z));
   return t;
 }
 
@@ -219,7 +223,7 @@ function zAjusta(){
   var vh = Z.jan.innerHeight - MARGEM * 2;
   Z.fit = Math.min(vw / f.w, vh / f.h);     /* o que encostar primeiro manda */
   Z.z = 1;                                   /* zAplica calcula a partir daqui */
-  Z.area.style.setProperty('--zoom', '1');
+  Z.area.style.setProperty('--fz', '1');
   zAplica(Z.fit);
   Z.area.scrollTop = 0;
   Z.area.scrollLeft = Math.max(0, (Z.area.scrollWidth - Z.area.clientWidth) / 2);
@@ -244,7 +248,7 @@ function montaVisor(){
   if(ehToque()){
     /* deixa o orçamento se virar sozinho: rolagem normal, pinça do sistema */
     try{ w.aplicaZoom = function(){}; }catch(e){}
-    area.style.removeProperty('--zoom');
+    area.style.removeProperty('--fz');
     zoomBar.classList.remove('on');
     d.addEventListener('keydown', function(e){
       if(e.key === 'Escape' && !lupaAberta()) t.closeModal();
@@ -263,12 +267,40 @@ function montaVisor(){
         (ficava só o fundo). O orçamento já sabe se organizar sozinho. */
   var limpeza = d.createElement('style');
   limpeza.textContent =
-    'html,body{background:#fff !important;}' +
-    '.app{padding:0 !important;background:#fff !important;}' +
-    '.casca{border-radius:0 !important;box-shadow:none !important;border:0 !important;' +
-      'background:#fff !important;}' +
-    '.ft-menu{display:none !important;}' +
-    '.area-paginas{background:#fff !important;max-height:100vh !important;padding:16px !important;}';
+    /* ------------------------------------------------------------------
+       TUDO daqui é @media screen. Sem isso, estas regras (com !important)
+       valem TAMBÉM na impressão: a área fica presa em 100vw x 100vh com
+       overflow:auto, e o papel recebe só o retângulo que está na tela.
+       Na impressão, o orçamento já sabe se paginar sozinho — é só sair
+       da frente.
+       ------------------------------------------------------------------ */
+    '@media screen{' +
+      'html,body{background:#fff !important;}' +
+      '.app{padding:0 !important;background:#fff !important;overflow:visible !important;}' +
+      /* a casca tem overflow:hidden no editor — aqui ela CORTA o documento ampliado */
+      '.casca{border-radius:0 !important;box-shadow:none !important;border:0 !important;' +
+        'background:#fff !important;overflow:visible !important;}' +
+      '.ft-menu{display:none !important;}' +
+      /* O zoom do editor é `zoom` na PRÓPRIA .area-paginas — o contêiner que
+         rola. Ampliando, ele cresce junto, estoura a casca e é cortado; e o
+         align-items:center joga o que transborda para fora do alcance da
+         rolagem. Aqui o contêiner fica FIXO no tamanho da tela e rola nos dois
+         eixos; quem amplia são as FOLHAS. */
+      '.area-paginas{background:#fff !important;zoom:1 !important;' +
+        'width:100vw !important;height:100vh !important;max-height:100vh !important;' +
+        'overflow:auto !important;padding:16px !important;box-sizing:border-box !important;' +
+        'align-items:flex-start !important;}' +
+      '.area-paginas > *{zoom:var(--fz,1) !important;' +
+        'margin-left:auto !important;margin-right:auto !important;}' +
+    '}' +
+    /* na impressão o zoom da tela NUNCA vai para o papel */
+    '@media print{' +
+      '.ft-menu{display:none !important;}' +
+      '.area-paginas{zoom:1 !important;width:auto !important;height:auto !important;' +
+        'max-height:none !important;overflow:visible !important;padding:0 !important;}' +
+      '.area-paginas > *{zoom:1 !important;}' +
+      '.casca{overflow:visible !important;}' +
+    '}';
   d.head.appendChild(limpeza);
 
   /* 3. roda do mouse ROLA o documento; Ctrl (ou ⌘) + roda dá ZOOM */
@@ -282,25 +314,13 @@ function montaVisor(){
     /* sem Ctrl: rolagem normal — deixa o próprio navegador rolar a área */
   }, { passive: false });
 
-  /* 4. arrastar com o botão do MEIO move o documento (o esquerdo fica livre
-        para selecionar texto e para o duplo clique de ampliar a imagem) */
-  var pegando = false, x0 = 0, y0 = 0, sx0 = 0, sy0 = 0;
-  d.addEventListener('mousedown', function(e){
-    if(e.button !== 1) return;                 /* só o botão do meio */
-    e.preventDefault();
-    pegando = true;
-    x0 = e.clientX; y0 = e.clientY;
-    sx0 = area.scrollLeft; sy0 = area.scrollTop;
-    d.body.style.cursor = 'grabbing';
-  });
-  d.addEventListener('mousemove', function(e){
-    if(!pegando) return;
-    area.scrollLeft = sx0 - (e.clientX - x0);
-    area.scrollTop  = sy0 - (e.clientY - y0);
-  });
-  ['mouseup','mouseleave'].forEach(function(ev){
-    d.addEventListener(ev, function(){ pegando = false; d.body.style.cursor = ''; });
-  });
+  /* 4. botão do MEIO: NÃO fazemos nada.
+        O navegador já tem o autoscroll nativo (aquela bússola que rola sozinha
+        conforme você move o mouse). Antes eu interceptava o mousedown e dava
+        preventDefault — o que MATAVA o autoscroll e o trocava por um "arrastar
+        com a mão". Sem código, o comportamento nativo volta.
+        O botão esquerdo também fica livre: selecionar texto e duplo clique
+        para ampliar a imagem continuam funcionando.                          */
 
   /* 5. Esc em DOIS ESTÁGIOS: se a lupa da imagem estiver aberta, o primeiro Esc
         fecha só a lupa (o próprio orçamento cuida disso). Só o segundo Esc,
@@ -343,15 +363,17 @@ function fechaVisualizador(){
 }
 
 /* botões e teclado do lado de fora */
+function zCemPorCento(){ zAplica(1); }        /* tamanho real do documento */
 document.getElementById('zIn').onclick  = function(){ zAplica(Z.z * 1.2); };
 document.getElementById('zOut').onclick = function(){ zAplica(Z.z / 1.2); };
+document.getElementById('zCem').onclick = zCemPorCento;
 document.getElementById('zFit').onclick = zAjusta;
-zPct.onclick = zAjusta;
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape'){ fechaVisualizador(); return; }
   if(e.key === '+' || e.key === '=') zAplica(Z.z * 1.2);
   if(e.key === '-' || e.key === '_') zAplica(Z.z / 1.2);
   if(e.key === '0') zAjusta();
+  if(e.key === '1') zCemPorCento();
 });
 window.addEventListener('resize', function(){
   if(Z.area && Math.abs(Z.z - Z.fit) < 0.01) zAjusta();
