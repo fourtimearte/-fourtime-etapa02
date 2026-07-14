@@ -23,6 +23,9 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 FT_TOKEN = os.environ.get("FT_TOKEN", "fourtime2026")
+# Token do ADMIN: só quem tem este pode APAGAR ou RENOMEAR itens do banco.
+# Sem ele, o servidor MESCLA tudo — ninguém consegue destruir o trabalho alheio.
+FT_ADMIN_TOKEN = os.environ.get("FT_ADMIN_TOKEN", "").strip()
 DB_PATH  = os.environ.get("FT_DB_PATH", os.path.join(os.path.dirname(__file__), "fourtime.db"))
 
 app = FastAPI(title="Fourtime Etapa 02", docs_url=None, redoc_url=None)
@@ -76,6 +79,81 @@ def ping(request: Request):
     return {"ok": True, "servidor": "Fourtime Etapa 02", "hora": agora()}
 
 @app.get("/api/db")
+# ============================================================
+#  MESCLAGEM DO BANCO
+#
+#  Antes era "a última gravação vence": dois vendedores cadastrando clientes
+#  ao mesmo tempo → o segundo levava 409, o editor baixava o banco do servidor
+#  por cima, e as adições dele SUMIAM. Era perda de dados silenciosa.
+#
+#  Agora toda gravação é uma MESCLAGEM (união). O que cada um acrescenta se
+#  soma; ninguém apaga nada por omissão. Apagar e renomear exigem o token de
+#  ADMIN e vão numa lista explícita ("remocoes"). Assim, um navegador com o
+#  banco velho ou vazio não consegue destruir nada.
+# ============================================================
+def _chave(item):
+    """Como saber se dois itens são 'o mesmo'."""
+    if isinstance(item, dict):
+        return str(item.get("n", "")).strip().upper()
+    return str(item).strip().upper()
+
+def mescla_listas(base, novos):
+    """União preservando a ordem: primeiro o que já existia, depois o que é novo.
+       Itens que já existem têm os CAMPOS atualizados (cor do tecido, CPF do cliente)."""
+    saida, indice = [], {}
+    for it in (base or []):
+        k = _chave(it)
+        if not k or k in indice:
+            continue
+        indice[k] = len(saida)
+        saida.append(it)
+    for it in (novos or []):
+        k = _chave(it)
+        if not k:
+            continue
+        if k in indice:
+            antigo = saida[indice[k]]
+            # objeto: campos preenchidos vencem os vazios (não apaga o doc de ninguém)
+            if isinstance(antigo, dict) and isinstance(it, dict):
+                junto = dict(antigo)
+                for campo, valor in it.items():
+                    if valor not in (None, "", []):
+                        junto[campo] = valor
+                saida[indice[k]] = junto
+        else:
+            indice[k] = len(saida)
+            saida.append(it)
+    return saida
+
+def mescla_banco(base, novo, remocoes=None):
+    base = base or {}
+    novo = novo or {}
+    saida = {}
+    for cat in set(list(base.keys()) + list(novo.keys())):
+        b, n = base.get(cat), novo.get(cat)
+        if isinstance(b, list) or isinstance(n, list):
+            saida[cat] = mescla_listas(b if isinstance(b, list) else [],
+                                       n if isinstance(n, list) else [])
+        else:
+            saida[cat] = n if cat in novo else b
+
+    for cat, chaves in (remocoes or {}).items():
+        if not isinstance(saida.get(cat), list):
+            continue
+        fora = {str(k).strip().upper() for k in (chaves or [])}
+        saida[cat] = [it for it in saida[cat] if _chave(it) not in fora]
+    return saida
+
+def eh_admin(request: Request) -> bool:
+    if not FT_ADMIN_TOKEN:
+        return False
+    return request.headers.get("X-FT-Admin", "").strip() == FT_ADMIN_TOKEN
+
+@app.get("/api/db/sou-admin")
+def sou_admin(request: Request):
+    exige_token(request)
+    return {"admin": eh_admin(request), "admin_configurado": bool(FT_ADMIN_TOKEN)}
+
 def ler_db(request: Request):
     """A verdade mora no Drive. O SQLite é só cache, porque o disco do Render
        é apagado a cada deploy e a cada hibernação."""
@@ -114,53 +192,44 @@ def _guarda_cache(rev, dados):
 async def gravar_db(request: Request):
     exige_token(request)
     corpo = await request.json()
-    rev_cliente = int(corpo.get("rev", 0))
     dados = corpo.get("data")
     if not isinstance(dados, dict):
         raise HTTPException(status_code=400, detail="Campo 'data' inválido")
 
+    remocoes = corpo.get("remocoes") or {}
+    if remocoes and not eh_admin(request):
+        raise HTTPException(status_code=403, detail=(
+            "Só o administrador pode apagar ou renomear itens do banco. "
+            "Suas ADIÇÕES foram preservadas; as exclusões, não."))
+    admin = eh_admin(request)
+
     if not drive_ligado():
         with _lock, conn() as c:
             atual = c.execute("SELECT rev,data FROM banco WHERE id=1").fetchone()
-            if rev_cliente < atual["rev"]:
-                return JSONResponse(status_code=409, content={
-                    "rev": atual["rev"], "data": json.loads(atual["data"]),
-                    "detalhe": "Banco no servidor é mais novo. Sincronize antes de gravar."})
+            base = json.loads(atual["data"])
+            junto = mescla_banco(base, dados, remocoes if admin else None)
             nova = atual["rev"] + 1
             c.execute("UPDATE banco SET rev=?,data=?,atualizado=? WHERE id=1",
-                      (nova, json.dumps(dados, ensure_ascii=False), agora()))
-        return {"rev": nova, "ok": True, "onde": "sqlite-efemero"}
+                      (nova, json.dumps(junto, ensure_ascii=False), agora()))
+        return {"rev": nova, "ok": True, "onde": "sqlite-efemero",
+                "data": junto, "mesclado": True, "admin": admin}
 
     with _db_lock:
         atual = le_banco_drive()
         rev_atual = atual["rev"] if atual else 0
+        base = atual["data"] if atual else {}
 
-        if rev_cliente < rev_atual:
-            # o cliente está atrasado: devolve o que existe, não deixa sobrescrever
-            return JSONResponse(status_code=409, content={
-                "rev": rev_atual, "data": atual["data"],
-                "detalhe": "Banco no servidor é mais novo. Sincronize antes de gravar."})
-
-        # ---- REDE DE SEGURANÇA ----
-        # Um cliente enviando um banco MUITO menor que o do servidor é quase
-        # sempre acidente (abriu num navegador limpo e empurrou o vazio por cima).
-        # Sem isso, uma máquina apagaria o trabalho das outras.
-        if atual:
-            def conta(x):
-                return sum(len(v) for v in x.values() if isinstance(v, list))
-            antes, depois = conta(atual["data"]), conta(dados)
-            if antes >= 20 and depois < antes * 0.5 and not corpo.get("forcar"):
-                return JSONResponse(status_code=409, content={
-                    "rev": rev_atual, "data": atual["data"],
-                    "encolheu": {"antes": antes, "depois": depois},
-                    "detalhe": "O banco enviado é MUITO menor que o do servidor (%d → %d itens). "
-                               "Não gravei, para não apagar o trabalho de outra máquina. "
-                               "Se for intencional, envie de novo com forcar=true." % (antes, depois)})
+        # MESCLAGEM: ninguém apaga por omissão. A revisão do cliente já não
+        # precisa bater — o merge resolve concorrência sem descartar trabalho.
+        junto = mescla_banco(base, dados, remocoes if admin else None)
 
         nova = rev_atual + 1
-        grava_banco_drive(nova, dados)
-        _guarda_cache(nova, dados)
-    return {"rev": nova, "ok": True, "onde": "drive"}
+        grava_banco_drive(nova, junto)
+        _guarda_cache(nova, junto)
+
+    return {"rev": nova, "ok": True, "onde": "drive",
+            "data": junto, "mesclado": True, "admin": admin,
+            "removidos": sum(len(v or []) for v in remocoes.values()) if admin else 0}
 
 @app.get("/api/db/diagnostico")
 def db_diagnostico(request: Request):
