@@ -77,10 +77,38 @@ def ping(request: Request):
 
 @app.get("/api/db")
 def ler_db(request: Request):
+    """A verdade mora no Drive. O SQLite é só cache, porque o disco do Render
+       é apagado a cada deploy e a cada hibernação."""
     exige_token(request)
+    if drive_ligado():
+        try:
+            d = le_banco_drive()
+        except HTTPException:
+            raise
+        except Exception as e:
+            # NUNCA responder "banco vazio" quando o Drive falha: o editor
+            # entenderia como servidor novo e sobrescreveria tudo.
+            raise HTTPException(status_code=502,
+                detail="Não consegui ler o banco no Drive: %r" % (e,))
+        if d:
+            _guarda_cache(d["rev"], d["data"])
+            return {"rev": d["rev"], "data": d["data"],
+                    "atualizado": d.get("atualizado", ""), "onde": "drive"}
+        # não existe ainda: o primeiro a gravar cria
+        return {"rev": 0, "data": {}, "atualizado": "", "onde": "drive-vazio"}
+
     with conn() as c:
         r = c.execute("SELECT rev,data,atualizado FROM banco WHERE id=1").fetchone()
-    return {"rev": r["rev"], "data": json.loads(r["data"]), "atualizado": r["atualizado"]}
+    return {"rev": r["rev"], "data": json.loads(r["data"]),
+            "atualizado": r["atualizado"], "onde": "sqlite-efemero"}
+
+def _guarda_cache(rev, dados):
+    try:
+        with conn() as c:
+            c.execute("UPDATE banco SET rev=?,data=?,atualizado=? WHERE id=1",
+                      (rev, json.dumps(dados, ensure_ascii=False), agora()))
+    except Exception:
+        pass
 
 @app.put("/api/db")
 async def gravar_db(request: Request):
@@ -90,17 +118,71 @@ async def gravar_db(request: Request):
     dados = corpo.get("data")
     if not isinstance(dados, dict):
         raise HTTPException(status_code=400, detail="Campo 'data' inválido")
-    with _lock, conn() as c:
-        atual = c.execute("SELECT rev,data FROM banco WHERE id=1").fetchone()
-        if rev_cliente < atual["rev"]:
-            # cliente está desatualizado — devolve a versão do servidor
+
+    if not drive_ligado():
+        with _lock, conn() as c:
+            atual = c.execute("SELECT rev,data FROM banco WHERE id=1").fetchone()
+            if rev_cliente < atual["rev"]:
+                return JSONResponse(status_code=409, content={
+                    "rev": atual["rev"], "data": json.loads(atual["data"]),
+                    "detalhe": "Banco no servidor é mais novo. Sincronize antes de gravar."})
+            nova = atual["rev"] + 1
+            c.execute("UPDATE banco SET rev=?,data=?,atualizado=? WHERE id=1",
+                      (nova, json.dumps(dados, ensure_ascii=False), agora()))
+        return {"rev": nova, "ok": True, "onde": "sqlite-efemero"}
+
+    with _db_lock:
+        atual = le_banco_drive()
+        rev_atual = atual["rev"] if atual else 0
+
+        if rev_cliente < rev_atual:
+            # o cliente está atrasado: devolve o que existe, não deixa sobrescrever
             return JSONResponse(status_code=409, content={
-                "rev": atual["rev"], "data": json.loads(atual["data"]),
+                "rev": rev_atual, "data": atual["data"],
                 "detalhe": "Banco no servidor é mais novo. Sincronize antes de gravar."})
-        nova_rev = atual["rev"] + 1
-        c.execute("UPDATE banco SET rev=?,data=?,atualizado=? WHERE id=1",
-                  (nova_rev, json.dumps(dados, ensure_ascii=False), agora()))
-    return {"rev": nova_rev, "ok": True}
+
+        # ---- REDE DE SEGURANÇA ----
+        # Um cliente enviando um banco MUITO menor que o do servidor é quase
+        # sempre acidente (abriu num navegador limpo e empurrou o vazio por cima).
+        # Sem isso, uma máquina apagaria o trabalho das outras.
+        if atual:
+            def conta(x):
+                return sum(len(v) for v in x.values() if isinstance(v, list))
+            antes, depois = conta(atual["data"]), conta(dados)
+            if antes >= 20 and depois < antes * 0.5 and not corpo.get("forcar"):
+                return JSONResponse(status_code=409, content={
+                    "rev": rev_atual, "data": atual["data"],
+                    "encolheu": {"antes": antes, "depois": depois},
+                    "detalhe": "O banco enviado é MUITO menor que o do servidor (%d → %d itens). "
+                               "Não gravei, para não apagar o trabalho de outra máquina. "
+                               "Se for intencional, envie de novo com forcar=true." % (antes, depois)})
+
+        nova = rev_atual + 1
+        grava_banco_drive(nova, dados)
+        _guarda_cache(nova, dados)
+    return {"rev": nova, "ok": True, "onde": "drive"}
+
+@app.get("/api/db/diagnostico")
+def db_diagnostico(request: Request):
+    """Onde o banco está morando de verdade, e se sobrevive a um reinício."""
+    exige_token(request)
+    if not drive_ligado():
+        return {"onde": "sqlite-efemero", "aviso":
+                "O banco está no disco do Render, que é APAGADO a cada deploy e a cada "
+                "hibernação. Configure FT_DRIVE_CREDENCIAIS e FT_DRIVE_PASTA para o banco "
+                "morar no Google Drive.", "persistente": False}
+    try:
+        d = le_banco_drive()
+    except HTTPException as e:
+        return {"onde": "drive", "persistente": None, "erro": str(e.detail)}
+    if not d:
+        return {"onde": "drive", "persistente": True, "arquivo": DB_NOME,
+                "pasta": _pasta_do_banco(), "existe": False,
+                "aviso": "O arquivo ainda não existe. Ele nasce na primeira gravação."}
+    itens = {k: len(v) for k, v in (d.get("data") or {}).items() if isinstance(v, list)}
+    return {"onde": "drive", "persistente": True, "arquivo": DB_NOME,
+            "pasta": _pasta_do_banco(), "existe": True,
+            "rev": d.get("rev"), "atualizado": d.get("atualizado"), "itens": itens}
 
 @app.get("/api/orcamentos")
 def listar_orc(request: Request):
@@ -176,7 +258,7 @@ def _credencial():
                 from google.oauth2 import service_account
                 info = json.loads(FT_DRIVE_CREDENCIAIS)
                 _cred = service_account.Credentials.from_service_account_info(
-                    info, scopes=["https://www.googleapis.com/auth/drive.readonly"])
+                    info, scopes=["https://www.googleapis.com/auth/drive"])   # escrita: o banco vive aqui
     return _cred
 
 def _precisa_renovar(c):
@@ -227,6 +309,110 @@ def _drive_get(caminho, params=None, binario=False, tentativas=3):
         time.sleep(0.4 * (n + 1))
     raise HTTPException(status_code=502,
         detail="Falha ao falar com o Google Drive: %r" % (ultimo,))
+
+# ============================================================
+#  O BANCO DE DADOS MORA NO GOOGLE DRIVE
+#
+#  O disco do Render (plano free) é EFÊMERO: some a cada deploy e a cada
+#  hibernação. O SQLite ali era uma ilusão de persistência — por isso a
+#  segunda máquina encontrava o servidor vazio.
+#  Agora a verdade fica num arquivo JSON no Drive. O SQLite continua como
+#  cache local (rápido), mas quem manda é o Drive.
+#
+#  Variáveis: FT_DRIVE_DB_PASTA (opcional; padrão = FT_DRIVE_PASTA)
+# ============================================================
+DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3"
+FT_DRIVE_DB_PASTA = os.environ.get("FT_DRIVE_DB_PASTA", "").strip()
+DB_NOME = "fourtime-banco.json"
+
+_db_drive_id = None
+_db_lock = threading.Lock()
+
+def _pasta_do_banco():
+    return FT_DRIVE_DB_PASTA or FT_DRIVE_PASTA
+
+def drive_ligado():
+    return bool(FT_DRIVE_CREDENCIAIS and _pasta_do_banco())
+
+def _drive_post(caminho, params, corpo, tipo):
+    url = DRIVE_UPLOAD + caminho + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, data=corpo, method=params.pop("_metodo", "POST"))
+    req.add_header("Authorization", "Bearer " + _token_drive())
+    req.add_header("Content-Type", tipo)
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read())
+
+def _acha_arquivo_banco():
+    """Procura o fourtime-banco.json na pasta. Guarda o id."""
+    global _db_drive_id
+    if _db_drive_id:
+        return _db_drive_id
+    q = ("'%s' in parents and name = '%s' and trashed = false"
+         % (_pasta_do_banco(), DB_NOME))
+    r = _drive_get("/files", {"q": q, "fields": "files(id,name)",
+                              "includeItemsFromAllDrives": "true",
+                              "supportsAllDrives": "true"})
+    arqs = r.get("files", [])
+    _db_drive_id = arqs[0]["id"] if arqs else None
+    return _db_drive_id
+
+def le_banco_drive():
+    """Devolve {rev, data, atualizado} ou None se ainda não existe."""
+    fid = _acha_arquivo_banco()
+    if not fid:
+        return None
+    dados, _ = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"},
+                          binario=True)
+    try:
+        d = json.loads(dados)
+    except Exception:
+        raise HTTPException(status_code=502,
+            detail="O arquivo do banco no Drive está corrompido. Restaure uma versão anterior "
+                   "pelo histórico do Google Drive.")
+    if not isinstance(d, dict) or "data" not in d:
+        raise HTTPException(status_code=502, detail="O arquivo do banco no Drive tem formato inesperado.")
+    return d
+
+def grava_banco_drive(rev, data):
+    global _db_drive_id
+    corpo = json.dumps({"rev": rev, "data": data, "atualizado": agora()},
+                       ensure_ascii=False).encode("utf-8")
+    fid = _acha_arquivo_banco()
+    if fid:
+        # atualiza o conteúdo (o Drive guarda o histórico de versões — dá para restaurar)
+        url = DRIVE_UPLOAD + "/files/" + fid + "?uploadType=media&supportsAllDrives=true"
+        req = urllib.request.Request(url, data=corpo, method="PATCH")
+        req.add_header("Authorization", "Bearer " + _token_drive())
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=60) as r:
+            r.read()
+        return fid
+
+    # ainda não existe: cria (multipart = metadados + conteúdo)
+    limite = "----ft-" + hashlib.sha1(os.urandom(8)).hexdigest()[:16]
+    meta = json.dumps({"name": DB_NOME, "parents": [_pasta_do_banco()],
+                       "mimeType": "application/json"}).encode()
+    partes = (b"--" + limite.encode() + b"\r\n"
+              b"Content-Type: application/json; charset=UTF-8\r\n\r\n" + meta + b"\r\n"
+              b"--" + limite.encode() + b"\r\n"
+              b"Content-Type: application/json\r\n\r\n" + corpo + b"\r\n"
+              b"--" + limite.encode() + b"--")
+    url = DRIVE_UPLOAD + "/files?uploadType=multipart&supportsAllDrives=true"
+    req = urllib.request.Request(url, data=partes, method="POST")
+    req.add_header("Authorization", "Bearer " + _token_drive())
+    req.add_header("Content-Type", "multipart/related; boundary=" + limite)
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            novo = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        corpo_erro = e.read().decode("utf-8", "ignore")[:250]
+        if e.code in (403, 404):
+            raise HTTPException(status_code=502,
+                detail="O Drive recusou a ESCRITA. A pasta precisa estar compartilhada com a "
+                       "service account como EDITOR (não Leitor). " + corpo_erro)
+        raise HTTPException(status_code=502, detail="Drive recusou: " + corpo_erro)
+    _db_drive_id = novo.get("id")
+    return _db_drive_id
 
 def exige_drive():
     if not FT_DRIVE_CREDENCIAIS or not FT_DRIVE_PASTA:
