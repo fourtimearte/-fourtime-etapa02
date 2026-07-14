@@ -82,7 +82,6 @@ def ping(request: Request):
     exige_token(request)
     return {"ok": True, "servidor": "Fourtime Etapa 02", "hora": agora()}
 
-@app.get("/api/db")
 # ============================================================
 #  MESCLAGEM DO BANCO
 #
@@ -205,6 +204,7 @@ def sou_admin(request: Request):
     exige_token(request)
     return {"admin": eh_admin(request), "admin_configurado": bool(FT_ADMIN_TOKEN)}
 
+@app.get("/api/db")
 def ler_db(request: Request):
     """A verdade mora no Drive. O SQLite é só cache, porque o disco do Render
        é apagado a cada deploy e a cada hibernação."""
