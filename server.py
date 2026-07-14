@@ -439,42 +439,108 @@ def drive_imagem(fid: str, request: Request):
 # ============================================================
 import hmac, hashlib, base64
 
-FT_TRELLO_KEY    = os.environ.get("FT_TRELLO_KEY", "")
-FT_TRELLO_SECRET = os.environ.get("FT_TRELLO_SECRET", "")
-FT_TRELLO_TOKEN  = os.environ.get("FT_TRELLO_TOKEN", "")
-FT_TRELLO_QUADRO = os.environ.get("FT_TRELLO_QUADRO", "")   # opcional
-
-def _b64url(dados: bytes) -> bytes:
-    return base64.urlsafe_b64encode(dados).rstrip(b"=")
+# .strip(): colar no Render costuma trazer espaço ou quebra de linha invisível,
+# e um único caractere a mais faz a assinatura do JWT não bater.
+FT_TRELLO_KEY    = os.environ.get("FT_TRELLO_KEY", "").strip()
+FT_TRELLO_SECRET = os.environ.get("FT_TRELLO_SECRET", "").strip()
+FT_TRELLO_TOKEN  = os.environ.get("FT_TRELLO_TOKEN", "").strip()
+FT_TRELLO_QUADRO = os.environ.get("FT_TRELLO_QUADRO", "").strip()   # opcional
 
 def _b64url_decode(txt: str) -> bytes:
     falta = "=" * (-len(txt) % 4)
     return base64.urlsafe_b64decode(txt + falta)
 
-def verifica_jwt(jwt: str) -> dict:
-    """Confere a assinatura do Trello e devolve o conteúdo. Levanta 401 se não bater."""
-    if not FT_TRELLO_SECRET:
-        raise HTTPException(status_code=503, detail="FT_TRELLO_SECRET não configurado no servidor.")
-    partes = (jwt or "").split(".")
-    if len(partes) != 3:
+# ---------------- Chaves públicas do Trello ----------------
+# O t.jwt() é assinado em RS256 com a chave PRIVADA do Trello (não com o nosso
+# secret — isso foi uma premissa errada). Verificamos com a chave PÚBLICA que o
+# Trello publica. O secret continua útil só para OAuth1, que não usamos aqui.
+TRELLO_CHAVES_URL = "https://api.trello.com/1/resource/jwt-public-keys"
+_chaves_cache = {"quando": 0, "chaves": []}
+_chaves_lock = threading.Lock()
+
+def _chaves_trello(forcar=False):
+    """Baixa e guarda as chaves públicas por 12h. Aceita JWKS ou lista de PEM."""
+    agora_s = time.time()
+    with _chaves_lock:
+        if not forcar and _chaves_cache["chaves"] and agora_s - _chaves_cache["quando"] < 43200:
+            return _chaves_cache["chaves"]
+    req = urllib.request.Request(TRELLO_CHAVES_URL, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        bruto = json.loads(r.read())
+
+    chaves = []
+    def junta(v):
+        if isinstance(v, str) and "BEGIN" in v:
+            chaves.append({"tipo": "pem", "valor": v})
+        elif isinstance(v, dict):
+            if v.get("kty") == "RSA" and v.get("n"):
+                chaves.append({"tipo": "jwk", "valor": v, "kid": v.get("kid")})
+            else:
+                for x in v.values():
+                    junta(x)
+        elif isinstance(v, list):
+            for x in v:
+                junta(x)
+    junta(bruto)
+
+    with _chaves_lock:
+        _chaves_cache["chaves"] = chaves
+        _chaves_cache["quando"] = agora_s
+    return chaves
+
+def _verifica_rs256(jwt: str, chave) -> dict:
+    import jwt as pyjwt
+    from jwt.algorithms import RSAAlgorithm
+    if chave["tipo"] == "jwk":
+        k = RSAAlgorithm.from_jwk(json.dumps(chave["valor"]))
+    else:
+        k = chave["valor"]
+    return pyjwt.decode(
+        jwt, k,
+        algorithms=["RS256"],          # NUNCA aceitar o alg que vem no JWT: só RS256
+        options={"verify_aud": False},
+        leeway=60,
+    )
+
+def verifica_jwt(token: str) -> dict:
+    """Confere a assinatura do Trello (RS256, chave pública) e devolve o conteúdo."""
+    if not token or token.count(".") != 2:
         raise HTTPException(status_code=401, detail="JWT malformado.")
-    cabecalho, corpo, assinatura = partes
-    esperada = _b64url(hmac.new(FT_TRELLO_SECRET.encode("utf-8"),
-                                (cabecalho + "." + corpo).encode("utf-8"),
-                                hashlib.sha256).digest()).decode()
-    if not hmac.compare_digest(esperada, assinatura):
-        raise HTTPException(status_code=401, detail="Assinatura do JWT inválida.")
     try:
-        dados = json.loads(_b64url_decode(corpo))
+        cab = json.loads(_b64url_decode(token.split(".")[0]))
     except Exception:
-        raise HTTPException(status_code=401, detail="Conteúdo do JWT ilegível.")
-    exp = dados.get("exp")
-    if exp and time.time() > float(exp) + 60:      # 60s de tolerância de relógio
-        raise HTTPException(status_code=401, detail="JWT expirado. Recarregue o Trello.")
-    return dados
+        raise HTTPException(status_code=401, detail="Cabeçalho do JWT ilegível.")
+    if cab.get("alg") != "RS256":
+        raise HTTPException(status_code=401, detail="Algoritmo inesperado: %r" % cab.get("alg"))
+
+    import jwt as pyjwt
+    ultimo = None
+    for tentativa in (False, True):                 # 2ª volta: força recarregar as chaves
+        try:
+            chaves = _chaves_trello(forcar=tentativa)
+        except Exception as e:
+            raise HTTPException(status_code=502,
+                detail="Não consegui buscar as chaves públicas do Trello: %r" % (e,))
+        kid = cab.get("kid")
+        ordenadas = ([c for c in chaves if c.get("kid") == kid] or []) + chaves
+        for c in ordenadas:
+            try:
+                dados = _verifica_rs256(token, c)
+                if dados.get("iss") not in (None, "trello"):
+                    raise HTTPException(status_code=401, detail="Emissor inesperado.")
+                return dados
+            except pyjwt.ExpiredSignatureError:
+                raise HTTPException(status_code=401, detail="JWT expirado. Recarregue o Trello.")
+            except HTTPException:
+                raise
+            except Exception as e:
+                ultimo = e
+        if not tentativa:
+            continue
+    raise HTTPException(status_code=401,
+        detail="Assinatura do JWT não confere com nenhuma chave pública do Trello: %r" % (ultimo,))
 
 def _do_jwt(dados: dict, *chaves):
-    """O Trello já usou nomes diferentes para os campos do contexto; aceita todos."""
     ctx = dados.get("context") or {}
     for c in chaves:
         if ctx.get(c):
@@ -485,11 +551,37 @@ def _do_jwt(dados: dict, *chaves):
 
 def exige_trello():
     faltando = [n for n, v in [("FT_TRELLO_KEY", FT_TRELLO_KEY),
-                               ("FT_TRELLO_SECRET", FT_TRELLO_SECRET),
                                ("FT_TRELLO_TOKEN", FT_TRELLO_TOKEN)] if not v]
     if faltando:
         raise HTTPException(status_code=503,
             detail="Faltam variáveis no servidor: " + ", ".join(faltando))
+
+# ---------------- O cartão pertence mesmo ao quadro do JWT? ----------------
+# O JWT do Trello NÃO diz de qual cartão veio — só o QUADRO e o MEMBRO. Então
+# o cartão vem do cliente, e o servidor confere que ele é daquele quadro. Sem
+# isso, qualquer pessoa de qualquer quadro poderia pedir qualquer anexo.
+_cartao_cache = {}
+_cartao_lock = threading.Lock()
+
+def _quadro_do_cartao(card: str) -> str:
+    with _cartao_lock:
+        if card in _cartao_cache:
+            return _cartao_cache[card]
+    url = ("https://api.trello.com/1/cards/%s?fields=idBoard&key=%s&token=%s"
+           % (urllib.parse.quote(card), urllib.parse.quote(FT_TRELLO_KEY),
+              urllib.parse.quote(FT_TRELLO_TOKEN)))
+    try:
+        with urllib.request.urlopen(url, timeout=25) as r:
+            d = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=404 if e.code == 404 else 502,
+            detail="Não consegui ler o cartão no Trello (%s)." % e.code)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Falha ao ler o cartão: %r" % (e,))
+    q = d.get("idBoard", "")
+    with _cartao_lock:
+        _cartao_cache[card] = q
+    return q
 
 def _baixa_anexo(card: str, anexo: str, nome: str) -> bytes:
     url = ("https://api.trello.com/1/cards/%s/attachments/%s/download/%s"
@@ -506,28 +598,33 @@ def _baixa_anexo(card: str, anexo: str, nome: str) -> bytes:
         corpo = e.read().decode("utf-8", "ignore")[:200]
         if e.code in (401, 403):
             raise HTTPException(status_code=502,
-                detail="O token de serviço do Trello não tem acesso a este anexo. " + corpo)
+                detail="O token de serviço não tem acesso a este anexo. " + corpo)
         raise HTTPException(status_code=e.code, detail="Trello recusou: " + corpo)
     except Exception as e:
         raise HTTPException(status_code=502, detail="Falha ao buscar o anexo: %r" % (e,))
 
 @app.get("/api/trello/anexo")
-def trello_anexo(request: Request, anexo: str, nome: str = "orcamento.html"):
-    """Baixa um anexo do cartão. O cartão vem do JWT — nunca do cliente."""
+def trello_anexo(request: Request, anexo: str, card: str = "", nome: str = "orcamento.html"):
+    """Baixa um anexo. O JWT prova que quem pede está no quadro; o servidor
+       confere que o cartão pedido é DAQUELE quadro antes de entregar."""
     exige_trello()
-    jwt = request.headers.get("X-FT-JWT", "") or request.query_params.get("jwt", "")
-    if not jwt:
+    token = request.headers.get("X-FT-JWT", "") or request.query_params.get("jwt", "")
+    if not token:
         raise HTTPException(status_code=401, detail="Sem JWT do Trello.")
-    dados = verifica_jwt(jwt)
+    dados = verifica_jwt(token)
 
-    card = _do_jwt(dados, "card", "idCard")
+    quadro_jwt = _do_jwt(dados, "idBoard", "board")
+    if not quadro_jwt:
+        raise HTTPException(status_code=401, detail="O JWT não diz de qual quadro veio.")
     if not card:
-        raise HTTPException(status_code=401, detail="O JWT não diz de qual cartão veio.")
+        raise HTTPException(status_code=400, detail="Faltou o cartão.")
 
-    if FT_TRELLO_QUADRO:
-        quadro = _do_jwt(dados, "board", "idBoard")
-        if quadro and quadro != FT_TRELLO_QUADRO:
-            raise HTTPException(status_code=403, detail="Cartão fora do quadro permitido.")
+    if _quadro_do_cartao(card) != quadro_jwt:
+        raise HTTPException(status_code=403,
+            detail="Este cartão não pertence ao quadro de onde o pedido veio.")
+
+    if FT_TRELLO_QUADRO and quadro_jwt != FT_TRELLO_QUADRO:
+        raise HTTPException(status_code=403, detail="Quadro não permitido.")
 
     dados_arq = _baixa_anexo(card, anexo, nome)
     return Response(content=dados_arq, media_type="text/html; charset=utf-8", headers={
@@ -536,17 +633,18 @@ def trello_anexo(request: Request, anexo: str, nome: str = "orcamento.html"):
     })
 
 @app.get("/api/trello/diagnostico")
-def trello_diagnostico(request: Request, jwt: str = ""):
+def trello_diagnostico(request: Request, jwt: str = "", card: str = ""):
     """Diz exatamente o que está faltando, sem expor nenhum segredo."""
     passos = []
     def passo(nome, ok, info=""):
-        passos.append({"passo": nome, "ok": bool(ok), "info": info})
+        passos.append({"passo": nome, "ok": (None if ok is None else bool(ok)), "info": info})
         return ok
 
-    passo("FT_TRELLO_KEY",    bool(FT_TRELLO_KEY),    "definida" if FT_TRELLO_KEY else "FALTANDO")
-    passo("FT_TRELLO_SECRET", bool(FT_TRELLO_SECRET), "definido" if FT_TRELLO_SECRET else "FALTANDO")
-    passo("FT_TRELLO_TOKEN",  bool(FT_TRELLO_TOKEN),  "definido" if FT_TRELLO_TOKEN else "FALTANDO")
-    if not (FT_TRELLO_KEY and FT_TRELLO_SECRET and FT_TRELLO_TOKEN):
+    passo("FT_TRELLO_KEY",   bool(FT_TRELLO_KEY),   "definida" if FT_TRELLO_KEY else "FALTANDO")
+    passo("FT_TRELLO_TOKEN", bool(FT_TRELLO_TOKEN), "definido" if FT_TRELLO_TOKEN else "FALTANDO")
+    passo("FT_TRELLO_SECRET", None,
+          "não é usado: o t.jwt() do Trello é RS256, verificado com a CHAVE PÚBLICA dele")
+    if not (FT_TRELLO_KEY and FT_TRELLO_TOKEN):
         return {"passos": passos, "conclusao": "Falta variável de ambiente no Render."}
 
     try:
@@ -559,17 +657,47 @@ def trello_diagnostico(request: Request, jwt: str = ""):
         passo("token de serviço vale", False, repr(e)[:160])
         return {"passos": passos, "conclusao": "O FT_TRELLO_TOKEN não é aceito pelo Trello."}
 
-    if jwt:
+    try:
+        ch = _chaves_trello(forcar=True)
+        passo("chaves públicas do Trello", bool(ch),
+              {"quantas": len(ch), "tipos": sorted({c["tipo"] for c in ch})})
+    except Exception as e:
+        passo("chaves públicas do Trello", False, repr(e)[:160])
+        return {"passos": passos, "conclusao": "Não consegui baixar as chaves públicas do Trello."}
+
+    if not jwt:
+        passo("JWT", None, "não enviado (mande ?jwt=... para testar de verdade)")
+        return {"passos": passos, "conclusao": "Servidor pronto. Falta testar o JWT."}
+
+    try:
+        cab = json.loads(_b64url_decode(jwt.split(".")[0]))
+        corpo = json.loads(_b64url_decode(jwt.split(".")[1]))
+        passo("JWT recebido", True, {"algoritmo": cab.get("alg"), "kid": cab.get("kid"),
+                                     "campos": sorted(corpo.keys())})
+    except Exception as e:
+        passo("JWT recebido", False, "não consegui decodificar: " + repr(e)[:120])
+        return {"passos": passos, "conclusao": "O que chegou não parece um JWT."}
+
+    try:
+        d = verifica_jwt(jwt)
+        passo("assinatura confere com a chave pública", True,
+              {"quadro": _do_jwt(d, "idBoard", "board"),
+               "membro": _do_jwt(d, "idMember", "member"),
+               "powerup": _do_jwt(d, "idPlugin")})
+    except HTTPException as e:
+        passo("assinatura confere com a chave pública", False, str(e.detail))
+        return {"passos": passos, "conclusao": "A assinatura do JWT não confere."}
+
+    if card:
         try:
-            d = verifica_jwt(jwt)
-            passo("JWT do Power-Up confere", True,
-                  {"cartao": _do_jwt(d, "card", "idCard"),
-                   "quadro": _do_jwt(d, "board", "idBoard")})
+            q = _quadro_do_cartao(card)
+            bate = (q == _do_jwt(d, "idBoard", "board"))
+            passo("o cartão pertence ao quadro do JWT", bate, {"quadro_do_cartao": q})
+            if not bate:
+                return {"passos": passos, "conclusao": "O cartão não é do quadro de onde o pedido veio."}
         except HTTPException as e:
-            passo("JWT do Power-Up confere", False, str(e.detail))
-            return {"passos": passos, "conclusao": "O JWT não bate com o FT_TRELLO_SECRET."}
-    else:
-        passos.append({"passo": "JWT", "ok": None, "info": "não enviado (opcional neste teste)"})
+            passo("o cartão pertence ao quadro do JWT", False, str(e.detail))
+            return {"passos": passos, "conclusao": "Não consegui ler o cartão."}
 
     return {"passos": passos, "conclusao": "Tudo certo."}
 
