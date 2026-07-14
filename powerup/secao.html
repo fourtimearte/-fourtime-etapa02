@@ -39,13 +39,10 @@ t.card('id','attachments').then(function(card){
   }).join('');
   Array.prototype.forEach.call(lista.querySelectorAll('button'),function(b){
     b.onclick=function(){
-      var q='card='+encodeURIComponent(card.id)
-           +'&anexo='+encodeURIComponent(b.dataset.id)
-           +'&nome='+encodeURIComponent(b.dataset.nome);
-      /* tela cheia dentro do Trello */
+      /* só o ID do anexo: o cartão o servidor tira do JWT assinado pelo Trello */
       t.modal({
         url: SERVIDOR+'/powerup/visualizador.html',
-        args: { q:q, titulo:b.dataset.nome },
+        args: { anexo:b.dataset.id, titulo:b.dataset.nome },
         accentColor: '#C6161B',
         fullscreen: true,
         title: b.dataset.nome
