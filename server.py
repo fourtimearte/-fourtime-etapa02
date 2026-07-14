@@ -305,7 +305,8 @@ def rev_db(request: Request):
         except Exception:
             r = 0
         _rev_memoria["rev"] = r
-    return {"rev": r, "minimo": FT_EDITOR_MINIMO}
+    return {"rev": r, "minimo": FT_EDITOR_MINIMO,
+            "editor": versao_publicada()["versao"]}   # de brinde: o editor compara com o dele
 
 @app.get("/api/db/diagnostico")
 def db_diagnostico(request: Request):
@@ -1083,13 +1084,51 @@ def powerup(arquivo: str):
     return _powerup(arquivo)
 
 # ------------- Editor online (opcional) -------------
+import re as _re
+
 def _editor_path():
     achados = sorted(glob.glob(os.path.join(os.path.dirname(__file__), "*editor*.html")))
     return achados[-1] if achados else None
+
+_versao_cache = {"quando": 0, "versao": "", "arquivo": ""}
+
+def versao_publicada():
+    """Lê a versão de dentro do editor mais novo que está na pasta.
+       Assim, subir um editor novo JÁ atualiza o aviso — sem mexer em variável."""
+    p = _editor_path()
+    if not p:
+        return {"versao": "", "arquivo": ""}
+    marca = os.path.getmtime(p)
+    if _versao_cache["quando"] == marca and _versao_cache["arquivo"] == p:
+        return {"versao": _versao_cache["versao"], "arquivo": os.path.basename(p)}
+    versao = ""
+    try:
+        with open(p, "r", encoding="utf-8", errors="ignore") as f:
+            trecho = f.read(400000)      # a constante fica no começo do script
+        m = _re.search(r"const\s+FT_EDITOR\s*=\s*['\"]([0-9.]+)['\"]", trecho)
+        if m:
+            versao = m.group(1)
+    except Exception:
+        pass
+    _versao_cache.update({"quando": marca, "versao": versao, "arquivo": p})
+    return {"versao": versao, "arquivo": os.path.basename(p)}
+
+@app.get("/api/versao")
+def api_versao(request: Request):
+    exige_token(request)
+    v = versao_publicada()
+    return {"editor": v["versao"], "arquivo": v["arquivo"], "minimo": FT_EDITOR_MINIMO}
 
 @app.get("/")
 def raiz():
     p = _editor_path()
     if p:
-        return FileResponse(p, media_type="text/html")
+        # SEM CACHE: o navegador não pode servir uma versão velha do editor.
+        # Isso NÃO recarrega ninguém no meio do trabalho — só garante que,
+        # ao ABRIR o editor da próxima vez, venha a versão publicada.
+        return FileResponse(p, media_type="text/html", headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        })
     return {"servidor": "Fourtime Etapa 02", "editor": "nenhum editor*.html na pasta"}
