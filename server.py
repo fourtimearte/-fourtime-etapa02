@@ -26,6 +26,10 @@ FT_TOKEN = os.environ.get("FT_TOKEN", "fourtime2026")
 # Token do ADMIN: só quem tem este pode APAGAR ou RENOMEAR itens do banco.
 # Sem ele, o servidor MESCLA tudo — ninguém consegue destruir o trabalho alheio.
 FT_ADMIN_TOKEN = os.environ.get("FT_ADMIN_TOKEN", "").strip()
+# Versão MÍNIMA do editor aceita para GRAVAR. Editores antigos têm um banco
+# local possivelmente velho — e a mesclagem ressuscitaria itens já apagados.
+# Ler, qualquer versão pode; gravar, só quem está em dia.
+FT_EDITOR_MINIMO = os.environ.get("FT_EDITOR_MINIMO", "3.131").strip()
 DB_PATH  = os.environ.get("FT_DB_PATH", os.path.join(os.path.dirname(__file__), "fourtime.db"))
 
 app = FastAPI(title="Fourtime Etapa 02", docs_url=None, redoc_url=None)
@@ -91,6 +95,25 @@ def ping(request: Request):
 #  ADMIN e vão numa lista explícita ("remocoes"). Assim, um navegador com o
 #  banco velho ou vazio não consegue destruir nada.
 # ============================================================
+def _versao_num(v):
+    """'3.131' → (3,131). Tolera lixo."""
+    try:
+        return tuple(int(x) for x in str(v).strip().split(".")[:3])
+    except Exception:
+        return (0,)
+
+def exige_editor_atual(request: Request):
+    v = request.headers.get("X-FT-Editor", "").strip()
+    if not v:
+        raise HTTPException(status_code=426, detail=(
+            "Editor antigo demais (não diz a versão). Atualize para a v%s ou mais nova. "
+            "Versões antigas podem RESSUSCITAR itens já apagados do banco." % FT_EDITOR_MINIMO))
+    if _versao_num(v) < _versao_num(FT_EDITOR_MINIMO):
+        raise HTTPException(status_code=426, detail=(
+            "Este editor é a v%s e o mínimo é a v%s. Atualize antes de gravar — "
+            "versões antigas carregam um banco local velho e ressuscitariam itens "
+            "já apagados." % (v, FT_EDITOR_MINIMO)))
+
 def _chave(item):
     """Como saber se dois itens são 'o mesmo'."""
     if isinstance(item, dict):
@@ -125,23 +148,51 @@ def mescla_listas(base, novos):
             saida.append(it)
     return saida
 
-def mescla_banco(base, novo, remocoes=None):
+LAPIDES = "_removidos"   # não é categoria do banco: não aparece na tela
+
+def mescla_banco(base, novo, remocoes=None, admin=False):
+    """Une base + novo. Itens com LÁPIDE não voltam — é isso que impede um
+       navegador com banco velho de ressuscitar o que já foi apagado."""
     base = base or {}
     novo = novo or {}
+    lapides = dict(base.get(LAPIDES) or {})
+
+    # o admin, ao ACRESCENTAR um item que estava enterrado, o desenterra
+    if admin:
+        for cat, itens in novo.items():
+            if not isinstance(itens, list) or cat not in lapides:
+                continue
+            for it in itens:
+                lapides[cat].pop(_chave(it), None)
+            if not lapides[cat]:
+                lapides.pop(cat, None)
+
     saida = {}
     for cat in set(list(base.keys()) + list(novo.keys())):
+        if cat == LAPIDES:
+            continue
         b, n = base.get(cat), novo.get(cat)
         if isinstance(b, list) or isinstance(n, list):
-            saida[cat] = mescla_listas(b if isinstance(b, list) else [],
-                                       n if isinstance(n, list) else [])
+            enterrados = set((lapides.get(cat) or {}).keys())
+            junto = mescla_listas(b if isinstance(b, list) else [],
+                                  n if isinstance(n, list) else [])
+            saida[cat] = [it for it in junto if _chave(it) not in enterrados]
         else:
             saida[cat] = n if cat in novo else b
 
+    # novas remoções (só chegam aqui se for admin) viram lápides permanentes
     for cat, chaves in (remocoes or {}).items():
-        if not isinstance(saida.get(cat), list):
+        fora = {str(k).strip().upper() for k in (chaves or []) if str(k).strip()}
+        if not fora:
             continue
-        fora = {str(k).strip().upper() for k in (chaves or [])}
-        saida[cat] = [it for it in saida[cat] if _chave(it) not in fora]
+        if isinstance(saida.get(cat), list):
+            saida[cat] = [it for it in saida[cat] if _chave(it) not in fora]
+        marca = lapides.setdefault(cat, {})
+        for k in fora:
+            marca[k] = agora()
+
+    if lapides:
+        saida[LAPIDES] = lapides
     return saida
 
 def eh_admin(request: Request) -> bool:
@@ -170,6 +221,7 @@ def ler_db(request: Request):
                 detail="Não consegui ler o banco no Drive: %r" % (e,))
         if d:
             _guarda_cache(d["rev"], d["data"])
+            _rev_memoria["rev"] = d["rev"]
             return {"rev": d["rev"], "data": d["data"],
                     "atualizado": d.get("atualizado", ""), "onde": "drive"}
         # não existe ainda: o primeiro a gravar cria
@@ -191,6 +243,7 @@ def _guarda_cache(rev, dados):
 @app.put("/api/db")
 async def gravar_db(request: Request):
     exige_token(request)
+    exige_editor_atual(request)          # editor velho não grava (ressuscitaria itens)
     corpo = await request.json()
     dados = corpo.get("data")
     if not isinstance(dados, dict):
@@ -207,10 +260,11 @@ async def gravar_db(request: Request):
         with _lock, conn() as c:
             atual = c.execute("SELECT rev,data FROM banco WHERE id=1").fetchone()
             base = json.loads(atual["data"])
-            junto = mescla_banco(base, dados, remocoes if admin else None)
+            junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin)
             nova = atual["rev"] + 1
             c.execute("UPDATE banco SET rev=?,data=?,atualizado=? WHERE id=1",
                       (nova, json.dumps(junto, ensure_ascii=False), agora()))
+        _rev_memoria["rev"] = nova          # sem isto, /api/db/rev congelava 
         return {"rev": nova, "ok": True, "onde": "sqlite-efemero",
                 "data": junto, "mesclado": True, "admin": admin}
 
@@ -221,15 +275,37 @@ async def gravar_db(request: Request):
 
         # MESCLAGEM: ninguém apaga por omissão. A revisão do cliente já não
         # precisa bater — o merge resolve concorrência sem descartar trabalho.
-        junto = mescla_banco(base, dados, remocoes if admin else None)
+        junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin)
 
         nova = rev_atual + 1
         grava_banco_drive(nova, junto)
         _guarda_cache(nova, junto)
+        _rev_memoria["rev"] = nova
 
     return {"rev": nova, "ok": True, "onde": "drive",
             "data": junto, "mesclado": True, "admin": admin,
             "removidos": sum(len(v or []) for v in remocoes.values()) if admin else 0}
+
+@app.get("/api/db/rev")
+def rev_db(request: Request):
+    """Só o número da revisão. É o que os editores consultam de 5 em 5 segundos
+       para saber se alguém mexeu no banco — resposta minúscula, servida da
+       memória, sem tocar no Drive. Só quando o número MUDA é que o editor
+       baixa o banco inteiro."""
+    exige_token(request)
+    r = _rev_memoria["rev"]
+    if r is None:                       # servidor recém-iniciado: lê uma vez
+        try:
+            if drive_ligado():
+                d = le_banco_drive()
+                r = d["rev"] if d else 0
+            else:
+                with conn() as c:
+                    r = c.execute("SELECT rev FROM banco WHERE id=1").fetchone()["rev"]
+        except Exception:
+            r = 0
+        _rev_memoria["rev"] = r
+    return {"rev": r, "minimo": FT_EDITOR_MINIMO}
 
 @app.get("/api/db/diagnostico")
 def db_diagnostico(request: Request):
@@ -412,6 +488,7 @@ DB_NOME = "fourtime-banco.json"
 
 _db_drive_id = None
 _db_lock = threading.Lock()
+_rev_memoria = {"rev": None}   # espelho da revisão: deixa /api/db/rev ser instantâneo
 
 def _pasta_do_banco():
     return FT_DRIVE_DB_PASTA or FT_DRIVE_PASTA
