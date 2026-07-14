@@ -419,47 +419,159 @@ def drive_imagem(fid: str, request: Request):
                     headers={"Cache-Control": "public, max-age=3600"})
 
 # ============================================================
-#  POWER-UP DO TRELLO — proxy dos anexos
+#  POWER-UP DO TRELLO — proxy dos anexos, com JWT
 #
-#  Desde dez/2023 os anexos do Trello exigem autorização: a URL do
-#  S3 não abre sem sessão, e o navegador não pode buscá-la por CORS.
-#  Por isso o Power-Up não lê o anexo direto — pede a ESTE servidor,
-#  que busca com as credenciais e devolve o HTML.
+#  Ninguém da equipe autoriza nada. Quem baixa o anexo é o SERVIDOR,
+#  com um token de serviço (FT_TRELLO_TOKEN).
+#
+#  Para isso não virar uma porta aberta na internet, cada chamada tem
+#  de trazer um JWT ASSINADO PELO TRELLO com o segredo do nosso Power-Up
+#  (FT_TRELLO_SECRET). O Trello só emite esse JWT para quem está mesmo
+#  no quadro, através do Power-Up. O servidor confere a assinatura e usa
+#  o ID DO CARTÃO que vem DENTRO do JWT — não o que o cliente mandou.
+#  Assim ninguém consegue pedir anexo de outro cartão, nem forjar acesso.
 #
 #  Variáveis de ambiente:
-#    FT_TRELLO_KEY  = API key do Power-Up (trello.com/power-ups/admin)
-#  O token é do próprio usuário, obtido pelo Power-Up e enviado na chamada.
+#    FT_TRELLO_KEY     = API key do Power-Up (pública)
+#    FT_TRELLO_SECRET  = segredo do Power-Up  (assina/verifica o JWT)
+#    FT_TRELLO_TOKEN   = token de serviço que enxerga o quadro
+#    FT_TRELLO_QUADRO  = (opcional) ID do quadro permitido
 # ============================================================
-FT_TRELLO_KEY = os.environ.get("FT_TRELLO_KEY", "")
+import hmac, hashlib, base64
 
-@app.get("/api/trello/anexo")
-def trello_anexo(request: Request, card: str, anexo: str, nome: str = "orcamento.html",
-                 token: str = ""):
-    """Baixa um anexo do cartão e devolve o HTML. Sem token do Trello não passa."""
-    if not FT_TRELLO_KEY:
-        raise HTTPException(status_code=503, detail="FT_TRELLO_KEY não configurada no servidor.")
-    if not token:
-        raise HTTPException(status_code=401, detail="Sem token do Trello.")
+FT_TRELLO_KEY    = os.environ.get("FT_TRELLO_KEY", "")
+FT_TRELLO_SECRET = os.environ.get("FT_TRELLO_SECRET", "")
+FT_TRELLO_TOKEN  = os.environ.get("FT_TRELLO_TOKEN", "")
+FT_TRELLO_QUADRO = os.environ.get("FT_TRELLO_QUADRO", "")   # opcional
+
+def _b64url(dados: bytes) -> bytes:
+    return base64.urlsafe_b64encode(dados).rstrip(b"=")
+
+def _b64url_decode(txt: str) -> bytes:
+    falta = "=" * (-len(txt) % 4)
+    return base64.urlsafe_b64decode(txt + falta)
+
+def verifica_jwt(jwt: str) -> dict:
+    """Confere a assinatura do Trello e devolve o conteúdo. Levanta 401 se não bater."""
+    if not FT_TRELLO_SECRET:
+        raise HTTPException(status_code=503, detail="FT_TRELLO_SECRET não configurado no servidor.")
+    partes = (jwt or "").split(".")
+    if len(partes) != 3:
+        raise HTTPException(status_code=401, detail="JWT malformado.")
+    cabecalho, corpo, assinatura = partes
+    esperada = _b64url(hmac.new(FT_TRELLO_SECRET.encode("utf-8"),
+                                (cabecalho + "." + corpo).encode("utf-8"),
+                                hashlib.sha256).digest()).decode()
+    if not hmac.compare_digest(esperada, assinatura):
+        raise HTTPException(status_code=401, detail="Assinatura do JWT inválida.")
+    try:
+        dados = json.loads(_b64url_decode(corpo))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Conteúdo do JWT ilegível.")
+    exp = dados.get("exp")
+    if exp and time.time() > float(exp) + 60:      # 60s de tolerância de relógio
+        raise HTTPException(status_code=401, detail="JWT expirado. Recarregue o Trello.")
+    return dados
+
+def _do_jwt(dados: dict, *chaves):
+    """O Trello já usou nomes diferentes para os campos do contexto; aceita todos."""
+    ctx = dados.get("context") or {}
+    for c in chaves:
+        if ctx.get(c):
+            return ctx[c]
+        if dados.get(c):
+            return dados[c]
+    return None
+
+def exige_trello():
+    faltando = [n for n, v in [("FT_TRELLO_KEY", FT_TRELLO_KEY),
+                               ("FT_TRELLO_SECRET", FT_TRELLO_SECRET),
+                               ("FT_TRELLO_TOKEN", FT_TRELLO_TOKEN)] if not v]
+    if faltando:
+        raise HTTPException(status_code=503,
+            detail="Faltam variáveis no servidor: " + ", ".join(faltando))
+
+def _baixa_anexo(card: str, anexo: str, nome: str) -> bytes:
     url = ("https://api.trello.com/1/cards/%s/attachments/%s/download/%s"
            % (urllib.parse.quote(card), urllib.parse.quote(anexo),
-              urllib.parse.quote(nome)))
+              urllib.parse.quote(nome or "orcamento.html")))
     req = urllib.request.Request(url, headers={
         "Authorization": 'OAuth oauth_consumer_key="%s", oauth_token="%s"'
-                         % (FT_TRELLO_KEY, token),
+                         % (FT_TRELLO_KEY, FT_TRELLO_TOKEN),
     })
     try:
-        with urllib.request.urlopen(req, timeout=45) as r:
-            dados = r.read()
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.read()
     except urllib.error.HTTPError as e:
-        raise HTTPException(status_code=e.code,
-            detail="Trello recusou: " + e.read().decode("utf-8", "ignore")[:200])
+        corpo = e.read().decode("utf-8", "ignore")[:200]
+        if e.code in (401, 403):
+            raise HTTPException(status_code=502,
+                detail="O token de serviço do Trello não tem acesso a este anexo. " + corpo)
+        raise HTTPException(status_code=e.code, detail="Trello recusou: " + corpo)
     except Exception as e:
         raise HTTPException(status_code=502, detail="Falha ao buscar o anexo: %r" % (e,))
-    # o visualizador roda o HTML dentro de um iframe sandbox, na origem deste servidor
-    return Response(content=dados, media_type="text/html; charset=utf-8", headers={
+
+@app.get("/api/trello/anexo")
+def trello_anexo(request: Request, anexo: str, nome: str = "orcamento.html"):
+    """Baixa um anexo do cartão. O cartão vem do JWT — nunca do cliente."""
+    exige_trello()
+    jwt = request.headers.get("X-FT-JWT", "") or request.query_params.get("jwt", "")
+    if not jwt:
+        raise HTTPException(status_code=401, detail="Sem JWT do Trello.")
+    dados = verifica_jwt(jwt)
+
+    card = _do_jwt(dados, "card", "idCard")
+    if not card:
+        raise HTTPException(status_code=401, detail="O JWT não diz de qual cartão veio.")
+
+    if FT_TRELLO_QUADRO:
+        quadro = _do_jwt(dados, "board", "idBoard")
+        if quadro and quadro != FT_TRELLO_QUADRO:
+            raise HTTPException(status_code=403, detail="Cartão fora do quadro permitido.")
+
+    dados_arq = _baixa_anexo(card, anexo, nome)
+    return Response(content=dados_arq, media_type="text/html; charset=utf-8", headers={
         "Cache-Control": "private, max-age=300",
         "X-Content-Type-Options": "nosniff",
     })
+
+@app.get("/api/trello/diagnostico")
+def trello_diagnostico(request: Request, jwt: str = ""):
+    """Diz exatamente o que está faltando, sem expor nenhum segredo."""
+    passos = []
+    def passo(nome, ok, info=""):
+        passos.append({"passo": nome, "ok": bool(ok), "info": info})
+        return ok
+
+    passo("FT_TRELLO_KEY",    bool(FT_TRELLO_KEY),    "definida" if FT_TRELLO_KEY else "FALTANDO")
+    passo("FT_TRELLO_SECRET", bool(FT_TRELLO_SECRET), "definido" if FT_TRELLO_SECRET else "FALTANDO")
+    passo("FT_TRELLO_TOKEN",  bool(FT_TRELLO_TOKEN),  "definido" if FT_TRELLO_TOKEN else "FALTANDO")
+    if not (FT_TRELLO_KEY and FT_TRELLO_SECRET and FT_TRELLO_TOKEN):
+        return {"passos": passos, "conclusao": "Falta variável de ambiente no Render."}
+
+    try:
+        url = ("https://api.trello.com/1/members/me?key=%s&token=%s"
+               % (urllib.parse.quote(FT_TRELLO_KEY), urllib.parse.quote(FT_TRELLO_TOKEN)))
+        with urllib.request.urlopen(url, timeout=20) as r:
+            eu = json.loads(r.read())
+        passo("token de serviço vale", True, "conta: " + str(eu.get("username", "?")))
+    except Exception as e:
+        passo("token de serviço vale", False, repr(e)[:160])
+        return {"passos": passos, "conclusao": "O FT_TRELLO_TOKEN não é aceito pelo Trello."}
+
+    if jwt:
+        try:
+            d = verifica_jwt(jwt)
+            passo("JWT do Power-Up confere", True,
+                  {"cartao": _do_jwt(d, "card", "idCard"),
+                   "quadro": _do_jwt(d, "board", "idBoard")})
+        except HTTPException as e:
+            passo("JWT do Power-Up confere", False, str(e.detail))
+            return {"passos": passos, "conclusao": "O JWT não bate com o FT_TRELLO_SECRET."}
+    else:
+        passos.append({"passo": "JWT", "ok": None, "info": "não enviado (opcional neste teste)"})
+
+    return {"passos": passos, "conclusao": "Tudo certo."}
 
 def _powerup(arquivo):
     p = os.path.join(os.path.dirname(__file__), "powerup", arquivo)
