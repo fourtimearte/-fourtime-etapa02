@@ -16,7 +16,7 @@
 #  Se existir um arquivo editor*.html na mesma pasta, ele é
 #  servido em "/" — editor completamente online.
 # ============================================================
-import os, json, glob, sqlite3, threading
+import os, re, json, glob, sqlite3, threading
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -1118,6 +1118,235 @@ def api_versao(request: Request):
     exige_token(request)
     v = versao_publicada()
     return {"editor": v["versao"], "arquivo": v["arquivo"], "minimo": FT_EDITOR_MINIMO}
+
+
+
+# ============================================================
+#  ORÇAMENTOS (.ft) NO GOOGLE DRIVE  (v152)
+#
+#  Estrutura automática de pastas dentro da pasta de orçamentos:
+#      ANO  >  "ANO - MM - MÊS"      (ex.: 2026 > 2026 - 07 - JULHO)
+#  O mês vem da DATA NO NOME do arquivo (DDMMAA, ex. 140726);
+#  se o nome não tiver data, vale a data de hoje.
+#
+#  Variáveis de ambiente:
+#    FT_DRIVE_ORCAMENTOS  = ID da pasta raiz de orçamentos (obrigatória)
+#    FT_SCRIPT_ORCAMENTOS = URL do Apps Script (opcional — ver abaixo)
+#
+#  POR QUE O APPS SCRIPT EXISTE: service accounts NÃO TÊM cota de
+#  armazenamento e o Google recusa que elas CRIEM arquivos no "Meu Drive"
+#  de uma conta Gmail (storageQuotaExceeded) — foi a mesma limitação do
+#  fourtime-banco.json. Elas LEEM e BUSCAM sem problema. Então:
+#    - buscar/abrir  -> service account (rápido, já configurada)
+#    - salvar        -> tenta a service account; se o Google recusar por
+#                       cota, delega ao Apps Script (que roda como o DONO
+#                       da conta e pode criar o que quiser)
+# ============================================================
+FT_DRIVE_ORCAMENTOS = os.environ.get("FT_DRIVE_ORCAMENTOS", "").strip()
+FT_SCRIPT_ORCAMENTOS = os.environ.get("FT_SCRIPT_ORCAMENTOS", "").strip()
+
+MESES_FT = ["JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO",
+            "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"]
+
+_orc_arvore_cache = {}          # (fid) -> True/False: está dentro da pasta de orçamentos?
+_orc_pastas_cache = {}          # "2026" ou "2026/2026 - 07 - JULHO" -> id da pasta
+
+def exige_orcamentos():
+    if not FT_DRIVE_CREDENCIAIS or not FT_DRIVE_ORCAMENTOS:
+        raise HTTPException(status_code=503,
+            detail="Orçamentos no Drive não configurados (FT_DRIVE_ORCAMENTOS no Render).")
+
+def _orc_ano_mes(nome):
+    """Extrai DDMMAA do nome do arquivo. Sem data -> hoje."""
+    m = re.search(r"(\d{2})(\d{2})(\d{2})", nome or "")
+    if m:
+        dd, mm, aa = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if 1 <= mm <= 12 and 1 <= dd <= 31:
+            return 2000 + aa, mm
+    h = datetime.now(timezone.utc)
+    return h.year, h.month
+
+def _orc_nome_pasta_mes(ano, mes):
+    return "%d - %02d - %s" % (ano, mes, MESES_FT[mes - 1])
+
+def _drive_acha_pasta(nome, pai):
+    q = ("'%s' in parents and name = '%s' and "
+         "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+         % (pai, nome.replace("'", "\\'")))
+    r = _drive_get("/files", {"q": q, "fields": "files(id,name)", "pageSize": "5",
+                              "includeItemsFromAllDrives": "true",
+                              "supportsAllDrives": "true"})
+    arqs = r.get("files", [])
+    return arqs[0]["id"] if arqs else None
+
+def _drive_cria_pasta(nome, pai):
+    meta = json.dumps({"name": nome, "parents": [pai],
+                       "mimeType": "application/vnd.google-apps.folder"}).encode()
+    url = DRIVE_API + "/files?supportsAllDrives=true"
+    req = urllib.request.Request(url, data=meta, method="POST")
+    req.add_header("Authorization", "Bearer " + _token_drive())
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read())["id"]
+
+def _orc_pasta_destino(ano, mes):
+    """Acha (ou cria) ANO > 'ANO - MM - MÊS'. Devolve (id, 'caminho legível')."""
+    nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
+    chave = nome_ano + "/" + nome_mes
+    if chave in _orc_pastas_cache:
+        return _orc_pastas_cache[chave], chave
+    pid_ano = _orc_pastas_cache.get(nome_ano) or _drive_acha_pasta(nome_ano, FT_DRIVE_ORCAMENTOS)
+    if not pid_ano:
+        pid_ano = _drive_cria_pasta(nome_ano, FT_DRIVE_ORCAMENTOS)
+    _orc_pastas_cache[nome_ano] = pid_ano
+    pid_mes = _drive_acha_pasta(nome_mes, pid_ano)
+    if not pid_mes:
+        pid_mes = _drive_cria_pasta(nome_mes, pid_ano)
+    _orc_pastas_cache[chave] = pid_mes
+    return pid_mes, chave
+
+def _orc_acha_arquivo(nome, pasta):
+    q = ("'%s' in parents and name = '%s' and trashed = false"
+         % (pasta, nome.replace("'", "\\'")))
+    r = _drive_get("/files", {"q": q, "fields": "files(id,name)", "pageSize": "3",
+                              "includeItemsFromAllDrives": "true",
+                              "supportsAllDrives": "true"})
+    arqs = r.get("files", [])
+    return arqs[0]["id"] if arqs else None
+
+def _orc_sobe_arquivo(nome, pasta_id, corpo):
+    """Atualiza se já existe (isso a service account PODE); senão cria."""
+    fid = _orc_acha_arquivo(nome, pasta_id)
+    if fid:
+        url = DRIVE_UPLOAD + "/files/" + fid + "?uploadType=media&supportsAllDrives=true"
+        req = urllib.request.Request(url, data=corpo, method="PATCH")
+        req.add_header("Authorization", "Bearer " + _token_drive())
+        req.add_header("Content-Type", "application/octet-stream")
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+        return fid, "atualizado"
+    limite = "----ft-" + hashlib.sha1(os.urandom(8)).hexdigest()[:16]
+    meta = json.dumps({"name": nome, "parents": [pasta_id]}).encode()
+    partes = (b"--" + limite.encode() + b"\r\n"
+              b"Content-Type: application/json; charset=UTF-8\r\n\r\n" + meta + b"\r\n"
+              b"--" + limite.encode() + b"\r\n"
+              b"Content-Type: application/octet-stream\r\n\r\n" + corpo + b"\r\n"
+              b"--" + limite.encode() + b"--")
+    url = DRIVE_UPLOAD + "/files?uploadType=multipart&supportsAllDrives=true"
+    req = urllib.request.Request(url, data=partes, method="POST")
+    req.add_header("Authorization", "Bearer " + _token_drive())
+    req.add_header("Content-Type", "multipart/related; boundary=" + limite)
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return json.loads(r.read())["id"], "criado"
+
+def _orc_salva_via_script(nome, ano, mes, conteudo_texto):
+    """Plano B: o Apps Script cria as pastas e o arquivo COMO DONO da conta."""
+    corpo = json.dumps({
+        "token": FT_TOKEN, "nome": nome,
+        "ano": str(ano), "mesPasta": _orc_nome_pasta_mes(ano, mes),
+        "conteudo": conteudo_texto,
+    }).encode("utf-8")
+    req = urllib.request.Request(FT_SCRIPT_ORCAMENTOS, data=corpo, method="POST")
+    req.add_header("Content-Type", "text/plain; charset=utf-8")   # evita preflight do Apps Script
+    with urllib.request.urlopen(req, timeout=120) as r:
+        d = json.loads(r.read())
+    if not d.get("ok"):
+        raise HTTPException(status_code=502, detail="Apps Script recusou: %s" % d.get("erro", "?"))
+    return d.get("id", "")
+
+def _orc_dentro(fid, profundidade=8):
+    """O arquivo está dentro da pasta de orçamentos? (sobe pelos pais, com cache)"""
+    if fid in _orc_arvore_cache:
+        return _orc_arvore_cache[fid]
+    atual, ok = fid, False
+    for _ in range(profundidade):
+        if atual == FT_DRIVE_ORCAMENTOS:
+            ok = True
+            break
+        atual = _pai(atual)
+        if not atual:
+            break
+    _orc_arvore_cache[fid] = ok
+    return ok
+
+@app.post("/api/ft/salvar")
+async def ft_salvar(request: Request):
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON inválido.")
+    nome = (corpo.get("nome") or "").strip()
+    conteudo = corpo.get("conteudo")
+    if not nome or conteudo is None:
+        raise HTTPException(status_code=400, detail="Campos 'nome' e 'conteudo' são obrigatórios.")
+    if not nome.lower().endswith(".ft"):
+        nome += ".ft"
+    nome = re.sub(r'[\\/:*?"<>|]+', "-", nome)
+    texto = json.dumps(conteudo, ensure_ascii=False, indent=1)
+    ano, mes = _orc_ano_mes(nome)
+    pasta_id, caminho = _orc_pasta_destino(ano, mes)
+    try:
+        fid, acao = _orc_sobe_arquivo(nome, pasta_id, texto.encode("utf-8"))
+        return {"ok": True, "id": fid, "pasta": caminho, "acao": acao, "via": "service-account"}
+    except urllib.error.HTTPError as e:
+        erro = e.read().decode("utf-8", "ignore")[:400]
+        sem_cota = "storageQuotaExceeded" in erro or "quota" in erro.lower()
+        if sem_cota and FT_SCRIPT_ORCAMENTOS:
+            fid = _orc_salva_via_script(nome, ano, mes, texto)
+            return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado", "via": "apps-script"}
+        if sem_cota:
+            raise HTTPException(status_code=502, detail=(
+                "O Google não deixa a service account CRIAR arquivos (sem cota). "
+                "Configure a variável FT_SCRIPT_ORCAMENTOS no Render com a URL do "
+                "Apps Script de gravação — o roteiro está no repositório."))
+        raise HTTPException(status_code=502, detail="Drive recusou a gravação: " + erro)
+
+@app.get("/api/ft/buscar")
+def ft_buscar(request: Request, q: str = ""):
+    exige_token(request)
+    exige_orcamentos()
+    q = (q or "").strip()
+    filtro = ("trashed = false and mimeType != 'application/vnd.google-apps.folder'"
+              " and name contains '.ft'")
+    if q:
+        filtro += " and name contains '%s'" % q.replace("'", "\\'")
+    r = _drive_get("/files", {
+        "q": filtro, "orderBy": "modifiedTime desc", "pageSize": "60",
+        "fields": "files(id,name,modifiedTime,size,parents)",
+        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
+    itens = []
+    for f in r.get("files", []):
+        if not f["name"].lower().endswith(".ft"):
+            continue
+        if not _orc_dentro(f["id"]):
+            continue        # a service account enxerga outras pastas: só valem os orçamentos
+        itens.append({"id": f["id"], "nome": f["name"],
+                      "modificado": f.get("modifiedTime", ""),
+                      "tamanho": int(f.get("size") or 0)})
+        if len(itens) >= 30:
+            break
+    return {"ok": True, "itens": itens}
+
+@app.get("/api/ft/abrir/{fid}")
+def ft_abrir(fid: str, request: Request):
+    exige_token(request)
+    exige_orcamentos()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
+        raise HTTPException(status_code=400, detail="ID inválido.")
+    if not _orc_dentro(fid):
+        raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
+    meta = _drive_get("/files/" + fid, {"fields": "id,name", "supportsAllDrives": "true"})
+    dados, _tipo = _drive_get("/files/" + fid,
+                              {"alt": "media", "supportsAllDrives": "true"}, binario=True)
+    try:
+        doc = json.loads(dados.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=502, detail="O arquivo no Drive não é um .ft válido.")
+    return {"ok": True, "nome": meta.get("name", ""), "conteudo": doc}
+
 
 @app.get("/")
 def raiz():
