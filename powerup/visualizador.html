@@ -253,27 +253,21 @@ function montaVisor(){
   /* 1. desliga o auto-zoom do editor: quem manda agora é o visor */
   try{ w.aplicaZoom = function(){}; }catch(e){}
 
-  /* 2. tira a "moldura" do editor: nada de fundo cinza, caixa arredondada ou
-        sombra. Aqui o orçamento É a página — ocupa tudo, fundo branco.       */
+  /* 2. tira o cinza e a moldura do editor — SÓ COR E BORDA.
+        Nada de mexer em altura/overflow aqui: forçar height:100% e
+        overflow:hidden colapsava a área e o orçamento sumia da tela
+        (ficava só o fundo). O orçamento já sabe se organizar sozinho. */
   var limpeza = d.createElement('style');
   limpeza.textContent =
-    'html,body{background:#fff !important;margin:0 !important;}' +
-    '.app{padding:0 !important;background:#fff !important;display:block !important;'
-      + 'max-width:none !important;height:100% !important;}' +
-    '.casca{border-radius:0 !important;box-shadow:none !important;background:#fff !important;'
-      + 'height:100% !important;display:block !important;overflow:visible !important;}' +
+    'html,body{background:#fff !important;}' +
+    '.app{padding:0 !important;background:#fff !important;}' +
+    '.casca{border-radius:0 !important;box-shadow:none !important;border:0 !important;' +
+      'background:#fff !important;}' +
     '.ft-menu{display:none !important;}' +
-    '.area-paginas{background:#fff !important;}';
+    '.area-paginas{background:#fff !important;max-height:100vh !important;padding:16px !important;}';
   d.head.appendChild(limpeza);
 
-  /* 3. a área ocupa a janela inteira do iframe e rola sozinha */
-  area.style.maxHeight = '100vh';
-  area.style.height    = '100vh';
-  area.style.overflow  = 'auto';
-  area.style.padding   = '18px';
-  d.documentElement.style.overflow = 'hidden';
-
-  /* 4. roda do mouse ROLA o documento; Ctrl (ou ⌘) + roda dá ZOOM */
+  /* 3. roda do mouse ROLA o documento; Ctrl (ou ⌘) + roda dá ZOOM */
   d.addEventListener('wheel', function(e){
     if(e.ctrlKey || e.metaKey){
       e.preventDefault();
@@ -284,7 +278,7 @@ function montaVisor(){
     /* sem Ctrl: rolagem normal — deixa o próprio navegador rolar a área */
   }, { passive: false });
 
-  /* 5. arrastar com o botão do MEIO move o documento (o esquerdo fica livre
+  /* 4. arrastar com o botão do MEIO move o documento (o esquerdo fica livre
         para selecionar texto e para o duplo clique de ampliar a imagem) */
   var pegando = false, x0 = 0, y0 = 0, sx0 = 0, sy0 = 0;
   d.addEventListener('mousedown', function(e){
@@ -304,7 +298,7 @@ function montaVisor(){
     d.addEventListener(ev, function(){ pegando = false; d.body.style.cursor = ''; });
   });
 
-  /* 6. Esc em DOIS ESTÁGIOS: se a lupa da imagem estiver aberta, o primeiro Esc
+  /* 5. Esc em DOIS ESTÁGIOS: se a lupa da imagem estiver aberta, o primeiro Esc
         fecha só a lupa (o próprio orçamento cuida disso). Só o segundo Esc,
         já sem a lupa, fecha o visualizador do Trello. */
   d.addEventListener('keydown', function(e){
@@ -313,7 +307,7 @@ function montaVisor(){
     t.closeModal();
   });
 
-  /* 7. a janela do iframe mudou de tamanho? refaz o ajuste se ainda estiver nele */
+  /* 6. a janela do iframe mudou de tamanho? refaz o ajuste se ainda estiver nele */
   w.addEventListener('resize', function(){
     if(Math.abs(Z.z - Z.fit) < 0.01) zAjusta();
   });
@@ -382,8 +376,17 @@ function abre(){
            Escondido, ele tem altura zero — e a folha sai espremida.               */
         painel.style.display = 'none';
         quadro.hidden = false;
-        quadro.onload = function(){ montaVisor(); };
+        var carregou = false;
+        quadro.onload = function(){ carregou = true; montaVisor(); };
         quadro.srcdoc = html;
+
+        /* nunca mais uma tela morta: se não renderizar, o visualizador fala */
+        setTimeout(function(){
+          if(carregou) return;
+          msg('<h2>O orçamento não renderizou</h2>'
+            + '<p>O arquivo foi baixado do Trello, mas não abriu na tela. '
+            + 'Tente “Baixar HTML” e abrir no navegador.</p>');
+        }, 8000);
 
         var bI = document.getElementById('bImprimir');
         bI.hidden = false;
