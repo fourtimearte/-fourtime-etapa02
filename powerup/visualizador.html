@@ -5,17 +5,21 @@
 <title>Orçamento Fourtime</title>
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <style>
-  html,body{margin:0;height:100%;background:#fff;}
+  /* NADA de height:100% / position:absolute aqui: dependem de o pai ter altura,
+     e dentro do modal do Trello isso pode ser zero — a página colapsa e sobra
+     só o fundo cinza do Trello. Unidades de viewport não dependem de ninguém. */
+  html,body{margin:0;min-height:100vh;background:#fff;}
   #barra{position:fixed;inset:0 0 auto 0;height:44px;display:flex;align-items:center;gap:12px;
     padding:0 14px;background:#1E2328;color:#fff;font:13px/1 Roboto,-apple-system,'Segoe UI',sans-serif;z-index:5;}
   #barra .tit{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
   #barra button{border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;border-radius:7px;
     padding:6px 11px;font:inherit;font-size:12px;cursor:pointer;}
   #barra button:hover{border-color:#C6161B;background:#C6161B;}
-  #quadro{position:absolute;top:44px;left:0;right:0;bottom:0;
-    width:100%;height:calc(100% - 44px);border:0;background:transparent;display:block;}
-  #painel{position:absolute;inset:44px 0 0 0;display:flex;align-items:center;justify-content:center;
-    padding:24px;background:#3B4045;}
+  #quadro{position:fixed;top:44px;left:0;
+    width:100vw;height:calc(100vh - 44px);border:0;background:#fff;display:block;}
+  #painel{position:fixed;top:44px;left:0;width:100vw;height:calc(100vh - 44px);
+    display:flex;align-items:center;justify-content:center;padding:24px;
+    background:#3B4045;box-sizing:border-box;}
   .caixa{max-width:440px;text-align:center;color:#E4E7EA;font:14px/1.6 Roboto,-apple-system,'Segoe UI',sans-serif;}
   .caixa h2{margin:0 0 10px;font-size:17px;color:#fff;}
   .caixa p{margin:0 0 18px;color:#C4C8CC;}
@@ -353,16 +357,37 @@ window.addEventListener('resize', function(){
   if(Z.area && Math.abs(Z.z - Z.fit) < 0.01) zAjusta();
 });
 
+/* promessa com prazo: nada pode ficar pendurado para sempre e deixar a tela muda */
+function comPrazo(promessa, ms, oQue){
+  return new Promise(function(ok, erro){
+    var pronto = false;
+    var relogio = setTimeout(function(){
+      if(pronto) return;
+      pronto = true;
+      erro(new Error('O Trello não respondeu (' + oQue + ').'));
+    }, ms);
+    promessa.then(function(v){
+      if(pronto) return;
+      pronto = true; clearTimeout(relogio); ok(v);
+    }, function(e){
+      if(pronto) return;
+      pronto = true; clearTimeout(relogio); erro(e);
+    });
+  });
+}
+
 function abre(){
   caixa.textContent = 'Carregando o orçamento…';
   painel.style.display = 'flex';
-  t.get('member', 'private', 'token').then(function(tk){
+  quadro.hidden = true;
+  comPrazo(t.get('member', 'private', 'token'), 10000, 'ler a autorização').then(function(tk){
     if(!tk){ pedeAutorizacao(); return; }
     var url = SERVIDOR + '/api/trello/anexo?' + args.q + '&token=' + encodeURIComponent(tk);
     var bB = document.getElementById('bBaixar');
     bB.hidden = false;
     bB.onclick = function(){ window.open(url, '_blank'); };
-    return fetch(url, { credentials: 'omit' }).then(function(r){
+    caixa.textContent = 'Baixando o orçamento do Trello…';
+    return comPrazo(fetch(url, { credentials: 'omit' }), 90000, 'baixar o anexo').then(function(r){
       if(r.status === 401){                     /* token revogado ou inválido: pede de novo */
         return t.remove('member', 'private', 'token').then(function(){
           pedeAutorizacao('A autorização anterior não vale mais.');
