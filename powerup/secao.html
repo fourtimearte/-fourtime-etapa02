@@ -42,12 +42,14 @@ t.card('id','attachments').then(function(card){
       /* O JWT do Trello prova o QUADRO e o MEMBRO, mas não diz o cartão.
          Então o cartão vai aqui — e o servidor confere que ele pertence
          mesmo ao quadro de onde o pedido veio. */
+      /* SEM 'title' e SEM 'accentColor': é o que faz o Trello desenhar aquela
+         barra vermelha em cima. Sem eles, o modal vem limpo e a NOSSA barra
+         (nome do arquivo + zoom + fechar) fica sendo a única — sem desperdício
+         de altura. */
       t.modal({
         url: SERVIDOR+'/powerup/visualizador.html',
         args: { card:card.id, anexo:b.dataset.id, titulo:b.dataset.nome },
-        accentColor: '#C6161B',
-        fullscreen: true,
-        title: b.dataset.nome
+        fullscreen: true
       });
     };
   });
