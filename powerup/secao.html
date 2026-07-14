@@ -39,10 +39,12 @@ t.card('id','attachments').then(function(card){
   }).join('');
   Array.prototype.forEach.call(lista.querySelectorAll('button'),function(b){
     b.onclick=function(){
-      /* só o ID do anexo: o cartão o servidor tira do JWT assinado pelo Trello */
+      /* O JWT do Trello prova o QUADRO e o MEMBRO, mas não diz o cartão.
+         Então o cartão vai aqui — e o servidor confere que ele pertence
+         mesmo ao quadro de onde o pedido veio. */
       t.modal({
         url: SERVIDOR+'/powerup/visualizador.html',
-        args: { anexo:b.dataset.id, titulo:b.dataset.nome },
+        args: { card:card.id, anexo:b.dataset.id, titulo:b.dataset.nome },
         accentColor: '#C6161B',
         fullscreen: true,
         title: b.dataset.nome
