@@ -89,7 +89,7 @@ var CHAVE    = '5a21d827fc21ad2d68ec766dd4ba2011';   /* API key do Power-Up — 
 var SERVIDOR = 'https://fourtime-etapa02.onrender.com';
 
 var t = TrelloPowerUp.iframe({ appKey: CHAVE, appName: 'Fourtime Orçamentos' });
-var args   = { anexo: t.arg('anexo'), titulo: t.arg('titulo') };
+var args   = { card: t.arg('card'), anexo: t.arg('anexo'), titulo: t.arg('titulo') };
 var quadro = document.getElementById('quadro');
 var painel = document.getElementById('painel');
 var caixa  = document.getElementById('caixa');
@@ -100,10 +100,11 @@ function msg(html){ caixa.innerHTML = html; painel.style.display = 'flex'; quadr
 
 /* ============================================================
    Sem autorização por pessoa.
-   O Power-Up pede ao Trello um JWT assinado com o segredo do nosso
-   Power-Up. Quem baixa o anexo é o SERVIDOR, com o token de serviço.
-   O servidor confere a assinatura e tira o ID do cartão de DENTRO do
-   JWT — então ninguém consegue pedir anexo de outro cartão.
+   O Power-Up pede ao Trello um JWT (RS256, assinado com a chave privada
+   DO TRELLO). Ele prova em qual QUADRO e como qual MEMBRO o pedido foi
+   feito. Quem baixa o anexo é o SERVIDOR, com o token de serviço.
+   Como o JWT não diz o cartão, mandamos o cartão junto — e o servidor
+   confere que ele pertence ao quadro provado pelo JWT.
    Resultado: a equipe inteira abre orçamentos sem autorizar nada.
    ============================================================ */
 function pedeJwt(){
@@ -334,8 +335,10 @@ function abre(){
   comPrazo(pedeJwt(), 15000, 'assinar o pedido').then(function(jwt){
     if(!jwt) throw new Error('O Trello não devolveu o JWT.');
 
-    var url = SERVIDOR + '/api/trello/anexo?anexo=' + encodeURIComponent(args.anexo)
-            + '&nome=' + encodeURIComponent(args.titulo || 'orcamento.html');
+    var url = SERVIDOR + '/api/trello/anexo'
+            + '?card='  + encodeURIComponent(args.card || '')
+            + '&anexo=' + encodeURIComponent(args.anexo || '')
+            + '&nome='  + encodeURIComponent(args.titulo || 'orcamento.html');
 
     var bB = document.getElementById('bBaixar');
     bB.hidden = false;
