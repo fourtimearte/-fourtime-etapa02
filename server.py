@@ -176,9 +176,25 @@ def db_diagnostico(request: Request):
     except HTTPException as e:
         return {"onde": "drive", "persistente": None, "erro": str(e.detail)}
     if not d:
-        return {"onde": "drive", "persistente": True, "arquivo": DB_NOME,
-                "pasta": _pasta_do_banco(), "existe": False,
-                "aviso": "O arquivo ainda não existe. Ele nasce na primeira gravação."}
+        # ATENÇÃO: quando a service account não ENXERGA a pasta, a busca volta vazia
+        # em vez de dar erro — então "não existe" pode significar "não consigo ver".
+        # Aqui a gente pergunta pela pasta em si, que aí sim dá erro se não houver acesso.
+        try:
+            info = _drive_get("/files/" + _pasta_do_banco(),
+                              {"fields": "id,name,capabilities(canAddChildren)",
+                               "supportsAllDrives": "true"})
+            pode = (info.get("capabilities") or {}).get("canAddChildren")
+            return {"onde": "drive", "persistente": True, "arquivo": DB_NOME,
+                    "pasta": _pasta_do_banco(), "pasta_nome": info.get("name"),
+                    "enxerga_a_pasta": True, "pode_escrever_na_pasta": pode, "existe": False,
+                    "aviso": ("Crie um arquivo chamado '%s' dentro dessa pasta. A service account "
+                              "não consegue criar arquivos (contas de serviço não têm cota), mas "
+                              "consegue EDITAR um que já exista." % DB_NOME)}
+        except HTTPException as e:
+            return {"onde": "drive", "persistente": True, "pasta": _pasta_do_banco(),
+                    "enxerga_a_pasta": False, "erro": str(e.detail),
+                    "aviso": "A service account NÃO enxerga essa pasta. Confira o ID e o "
+                             "compartilhamento (precisa ser Editor)."}
     itens = {k: len(v) for k, v in (d.get("data") or {}).items() if isinstance(v, list)}
     return {"onde": "drive", "persistente": True, "arquivo": DB_NOME,
             "pasta": _pasta_do_banco(), "existe": True,
@@ -363,14 +379,21 @@ def le_banco_drive():
         return None
     dados, _ = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"},
                           binario=True)
+    bruto = (dados or b"").strip()
+    if not bruto:
+        # arquivo semente vazio: ainda não tem banco, mas já existe para a
+        # service account escrever dentro (ela não pode CRIAR, só EDITAR)
+        return {"rev": 0, "data": {}, "atualizado": ""}
     try:
-        d = json.loads(dados)
+        d = json.loads(bruto)
     except Exception:
         raise HTTPException(status_code=502,
             detail="O arquivo do banco no Drive está corrompido. Restaure uma versão anterior "
-                   "pelo histórico do Google Drive.")
-    if not isinstance(d, dict) or "data" not in d:
+                   "pelo histórico do Google Drive (botão direito no arquivo → Gerenciar versões).")
+    if not isinstance(d, dict):
         raise HTTPException(status_code=502, detail="O arquivo do banco no Drive tem formato inesperado.")
+    if "data" not in d:
+        return {"rev": 0, "data": {}, "atualizado": ""}
     return d
 
 def grava_banco_drive(rev, data):
@@ -405,7 +428,18 @@ def grava_banco_drive(rev, data):
         with urllib.request.urlopen(req, timeout=60) as r:
             novo = json.loads(r.read())
     except urllib.error.HTTPError as e:
-        corpo_erro = e.read().decode("utf-8", "ignore")[:250]
+        corpo_erro = e.read().decode("utf-8", "ignore")[:400]
+        if "storageQuotaExceeded" in corpo_erro or "quota" in corpo_erro.lower():
+            # Limitação conhecida do Google: service accounts NÃO TÊM COTA própria.
+            # Elas não conseguem CRIAR arquivos numa pasta de uma conta Gmail (o arquivo
+            # ficaria com elas como donas, e elas têm 0 bytes). Mas conseguem EDITAR um
+            # arquivo que já exista e pertença a você. A saída é você criar o arquivo.
+            raise HTTPException(status_code=502, detail=(
+                "A service account não pode CRIAR arquivos no Drive (contas de serviço não têm "
+                "cota de armazenamento — é uma limitação do Google, não é permissão). "
+                "SOLUÇÃO: crie você mesmo um arquivo chamado '%s' dentro da pasta do banco "
+                "(pode ser um arquivo de texto vazio). Depois disso o servidor passa a atualizá-lo "
+                "normalmente, porque EDITAR um arquivo que é seu ela pode." % DB_NOME))
         if e.code in (403, 404):
             raise HTTPException(status_code=502,
                 detail="O Drive recusou a ESCRITA. A pasta precisa estar compartilhada com a "
