@@ -6,7 +6,7 @@
 <title>Orçamento Fourtime</title>
 <script src="https://p.trellocdn.com/power-up.min.js"></script>
 <style>
-  html,body{margin:0;height:100%;background:#5C5C5C;}
+  html,body{margin:0;height:100%;background:#fff;}
   #barra{position:fixed;inset:0 0 auto 0;height:44px;display:flex;align-items:center;gap:12px;
     padding:0 14px;background:#1E2328;color:#fff;font:13px/1 Roboto,-apple-system,'Segoe UI',sans-serif;z-index:5;}
   #barra .tit{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
@@ -14,8 +14,9 @@
     padding:6px 11px;font:inherit;font-size:12px;cursor:pointer;}
   #barra button:hover{border-color:#C6161B;background:#C6161B;}
   #quadro{position:absolute;top:44px;left:0;right:0;bottom:0;
-    width:100%;height:calc(100% - 44px);border:0;background:#5C5C5C;display:block;}
-  #painel{position:absolute;inset:44px 0 0 0;display:flex;align-items:center;justify-content:center;padding:24px;}
+    width:100%;height:calc(100% - 44px);border:0;background:transparent;display:block;}
+  #painel{position:absolute;inset:44px 0 0 0;display:flex;align-items:center;justify-content:center;
+    padding:24px;background:#3B4045;}
   .caixa{max-width:440px;text-align:center;color:#E4E7EA;font:14px/1.6 Roboto,-apple-system,'Segoe UI',sans-serif;}
   .caixa h2{margin:0 0 10px;font-size:17px;color:#fff;}
   .caixa p{margin:0 0 18px;color:#C4C8CC;}
@@ -182,7 +183,7 @@ function pedeAutorizacao(erro){
 var Z = { z:1, fit:1, area:null, folha:null, jan:null, doc:null };
 var zoomBar = document.getElementById('zoomBar');
 var zPct = document.getElementById('zPct');
-var MARGEM = 34;      /* respiro em volta da folha */
+var MARGEM = 24;      /* respiro em volta da folha */
 
 function zAplica(nz, foco){
   if(!Z.area) return;
@@ -221,6 +222,14 @@ function zAjusta(){
   Z.area.scrollLeft = Math.max(0, (Z.area.scrollWidth - Z.area.clientWidth) / 2);
 }
 
+/* celular/tablet: o orçamento tem layout próprio (empilhado). Nada de
+   encaixar folha A4, nada de zoom nosso — quem manda é o CSS de lá.   */
+function ehToque(){
+  try{
+    return window.matchMedia('(max-width:820px) and (pointer:coarse)').matches;
+  }catch(e){ return false; }
+}
+
 function montaVisor(){
   var w, d;
   try{ w = quadro.contentWindow; d = quadro.contentDocument; }catch(e){ return; }
@@ -229,18 +238,43 @@ function montaVisor(){
   var folha = d.querySelector('.folha-a4');
   if(!area || !folha){ setTimeout(montaVisor, 200); return; }
 
+  if(ehToque()){
+    /* deixa o orçamento se virar sozinho: rolagem normal, pinça do sistema */
+    try{ w.aplicaZoom = function(){}; }catch(e){}
+    area.style.removeProperty('--zoom');
+    zoomBar.classList.remove('on');
+    d.addEventListener('keydown', function(e){
+      if(e.key === 'Escape' && !lupaAberta()) t.closeModal();
+    });
+    return;
+  }
+
   Z.jan = w; Z.doc = d; Z.area = area; Z.folha = folha;
 
   /* 1. desliga o auto-zoom do editor: quem manda agora é o visor */
   try{ w.aplicaZoom = function(){}; }catch(e){}
 
-  /* 2. a área ocupa a janela inteira do iframe e rola sozinha */
+  /* 2. tira a "moldura" do editor: nada de fundo cinza, caixa arredondada ou
+        sombra. Aqui o orçamento É a página — ocupa tudo, fundo branco.       */
+  var limpeza = d.createElement('style');
+  limpeza.textContent =
+    'html,body{background:#fff !important;margin:0 !important;}' +
+    '.app{padding:0 !important;background:#fff !important;display:block !important;'
+      + 'max-width:none !important;height:100% !important;}' +
+    '.casca{border-radius:0 !important;box-shadow:none !important;background:#fff !important;'
+      + 'height:100% !important;display:block !important;overflow:visible !important;}' +
+    '.ft-menu{display:none !important;}' +
+    '.area-paginas{background:#fff !important;}';
+  d.head.appendChild(limpeza);
+
+  /* 3. a área ocupa a janela inteira do iframe e rola sozinha */
   area.style.maxHeight = '100vh';
   area.style.height    = '100vh';
   area.style.overflow  = 'auto';
+  area.style.padding   = '18px';
   d.documentElement.style.overflow = 'hidden';
 
-  /* 3. roda do mouse ROLA o documento; Ctrl (ou ⌘) + roda dá ZOOM */
+  /* 4. roda do mouse ROLA o documento; Ctrl (ou ⌘) + roda dá ZOOM */
   d.addEventListener('wheel', function(e){
     if(e.ctrlKey || e.metaKey){
       e.preventDefault();
@@ -251,7 +285,7 @@ function montaVisor(){
     /* sem Ctrl: rolagem normal — deixa o próprio navegador rolar a área */
   }, { passive: false });
 
-  /* 4. arrastar com o botão do MEIO move o documento (o esquerdo fica livre
+  /* 5. arrastar com o botão do MEIO move o documento (o esquerdo fica livre
         para selecionar texto e para o duplo clique de ampliar a imagem) */
   var pegando = false, x0 = 0, y0 = 0, sx0 = 0, sy0 = 0;
   d.addEventListener('mousedown', function(e){
@@ -271,10 +305,16 @@ function montaVisor(){
     d.addEventListener(ev, function(){ pegando = false; d.body.style.cursor = ''; });
   });
 
-  /* 5. Esc fecha o visualizador, mesmo com o foco dentro do orçamento */
-  d.addEventListener('keydown', function(e){ if(e.key === 'Escape') t.closeModal(); });
+  /* 6. Esc em DOIS ESTÁGIOS: se a lupa da imagem estiver aberta, o primeiro Esc
+        fecha só a lupa (o próprio orçamento cuida disso). Só o segundo Esc,
+        já sem a lupa, fecha o visualizador do Trello. */
+  d.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape') return;
+    if(lupaAberta()) return;          /* deixa o orçamento fechar a lupa primeiro */
+    t.closeModal();
+  });
 
-  /* 6. a janela do iframe mudou de tamanho? refaz o ajuste se ainda estiver nele */
+  /* 7. a janela do iframe mudou de tamanho? refaz o ajuste se ainda estiver nele */
   w.addEventListener('resize', function(){
     if(Math.abs(Z.z - Z.fit) < 0.01) zAjusta();
   });
@@ -285,13 +325,33 @@ function montaVisor(){
   setTimeout(zAjusta, 300);
 }
 
+/* a lupa de imagem do orçamento está aberta? (ela é o #viewer.open lá dentro) */
+function lupaAberta(){
+  try{
+    var d = quadro.contentDocument;
+    var v = d && d.getElementById('viewer');
+    return !!(v && v.classList.contains('open'));
+  }catch(e){ return false; }
+}
+function fechaVisualizador(){
+  if(lupaAberta()){
+    /* o foco pode estar aqui fora: manda o Esc para dentro, que fecha a lupa */
+    try{
+      var w = quadro.contentWindow;
+      w.dispatchEvent(new w.KeyboardEvent('keydown', { key:'Escape', bubbles:true }));
+    }catch(e){}
+    return;                           /* 1º Esc: fecha só a lupa */
+  }
+  t.closeModal();                     /* 2º Esc: fecha o visualizador */
+}
+
 /* botões e teclado do lado de fora */
 document.getElementById('zIn').onclick  = function(){ zAplica(Z.z * 1.2); };
 document.getElementById('zOut').onclick = function(){ zAplica(Z.z / 1.2); };
 document.getElementById('zFit').onclick = zAjusta;
 zPct.onclick = zAjusta;
 document.addEventListener('keydown', function(e){
-  if(e.key === 'Escape'){ t.closeModal(); return; }
+  if(e.key === 'Escape'){ fechaVisualizador(); return; }
   if(e.key === '+' || e.key === '=') zAplica(Z.z * 1.2);
   if(e.key === '-' || e.key === '_') zAplica(Z.z / 1.2);
   if(e.key === '0') zAjusta();
