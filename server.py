@@ -1330,6 +1330,38 @@ def ft_buscar(request: Request, q: str = ""):
             break
     return {"ok": True, "itens": itens}
 
+
+@app.get("/api/ft/listar")
+def ft_listar(request: Request, pasta: str = ""):
+    """Navegação por pastas. Sem 'pasta' -> raiz de orçamentos.
+       Devolve subpastas e arquivos .ft daquele nível, já ordenados."""
+    exige_token(request)
+    exige_orcamentos()
+    pai = (pasta or "").strip() or FT_DRIVE_ORCAMENTOS
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", pai):
+        raise HTTPException(status_code=400, detail="ID de pasta inválido.")
+    # trava de segurança: a pasta pedida tem de estar dentro da raiz de orçamentos
+    if pai != FT_DRIVE_ORCAMENTOS and not _orc_dentro(pai):
+        raise HTTPException(status_code=403, detail="Pasta fora dos orçamentos.")
+    r = _drive_get("/files", {
+        "q": "'%s' in parents and trashed = false" % pai,
+        "orderBy": "folder,name desc,modifiedTime desc", "pageSize": "200",
+        "fields": "files(id,name,mimeType,modifiedTime,size)",
+        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
+    pastas, arquivos = [], []
+    for f in r.get("files", []):
+        if f.get("mimeType") == "application/vnd.google-apps.folder":
+            pastas.append({"id": f["id"], "nome": f["name"]})
+        elif f["name"].lower().endswith(".ft"):
+            arquivos.append({"id": f["id"], "nome": f["name"],
+                             "modificado": f.get("modifiedTime", ""),
+                             "tamanho": int(f.get("size") or 0)})
+    # pastas de ANO/MÊS: as mais recentes primeiro (nome decrescente)
+    pastas.sort(key=lambda p: p["nome"], reverse=True)
+    arquivos.sort(key=lambda a: a["modificado"], reverse=True)
+    return {"ok": True, "pastas": pastas, "arquivos": arquivos, "raiz": pai == FT_DRIVE_ORCAMENTOS}
+
+
 @app.get("/api/ft/abrir/{fid}")
 def ft_abrir(fid: str, request: Request):
     exige_token(request)
