@@ -1317,32 +1317,53 @@ async def ft_salvar(request: Request):
 
     # destino: "trabalho" (rascunho, direto) | "organizado" (ano/mês pela data)
     destino = (corpo.get("destino") or "trabalho").strip().lower()
+    if destino != "organizado":
+        destino = "trabalho"
+    ano = mes = None
     if destino == "organizado":
         ano, mes = _orc_ano_mes(nome)
-        pasta_id, caminho = _orc_pasta_destino(ano, mes)
+        caminho = "%d/%s" % (ano, _orc_nome_pasta_mes(ano, mes))
     else:
-        destino = "trabalho"
-        pasta_id = _orc_subpasta_raiz(FT_PASTA_TRABALHO)
         caminho = FT_PASTA_TRABALHO
-        ano = mes = None
+
+    # Tenta pela service account (achar/criar a pasta E subir o arquivo).
+    # QUALQUER passo pode falhar por falta de cota — criar a subpasta, criar
+    # ano/mês, ou criar o arquivo. Em todos esses casos delegamos ao Apps
+    # Script, que roda como DONO e cria pastas + arquivo sem limite.
+    def _via_service_account():
+        if destino == "organizado":
+            pasta_id, _cam = _orc_pasta_destino(ano, mes)
+        else:
+            pasta_id = _orc_subpasta_raiz(FT_PASTA_TRABALHO)
+        return _orc_sobe_arquivo(nome, pasta_id, texto.encode("utf-8"))
 
     try:
-        fid, acao = _orc_sobe_arquivo(nome, pasta_id, texto.encode("utf-8"))
+        fid, acao = _via_service_account()
         return {"ok": True, "id": fid, "pasta": caminho, "acao": acao,
                 "destino": destino, "via": "service-account"}
     except urllib.error.HTTPError as e:
         erro = e.read().decode("utf-8", "ignore")[:400]
-        sem_cota = "storageQuotaExceeded" in erro or "quota" in erro.lower()
-        if sem_cota and FT_SCRIPT_ORCAMENTOS:
-            fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
-            return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
-                    "destino": destino, "via": "apps-script"}
-        if sem_cota:
-            raise HTTPException(status_code=502, detail=(
-                "O Google não deixa a service account CRIAR arquivos (sem cota). "
-                "Configure a variável FT_SCRIPT_ORCAMENTOS no Render com a URL do "
-                "Apps Script de gravação — o roteiro está no repositório."))
+        # cota OU qualquer recusa da service account -> tenta pelo Apps Script
+        if FT_SCRIPT_ORCAMENTOS:
+            try:
+                fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
+                return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
+                        "destino": destino, "via": "apps-script"}
+            except Exception as e2:
+                raise HTTPException(status_code=502,
+                    detail="Drive recusou e o Apps Script também: %s" % str(e2)[:300])
         raise HTTPException(status_code=502, detail="Drive recusou a gravação: " + erro)
+    except Exception as e:
+        # erro que não é HTTPError (ex.: falha ao criar a subpasta) -> Apps Script
+        if FT_SCRIPT_ORCAMENTOS:
+            try:
+                fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
+                return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
+                        "destino": destino, "via": "apps-script"}
+            except Exception as e2:
+                raise HTTPException(status_code=502,
+                    detail="Falha na service account e no Apps Script: %s" % str(e2)[:300])
+        raise HTTPException(status_code=500, detail="Erro ao salvar: %s" % str(e)[:300])
 
 @app.get("/api/ft/buscar")
 def ft_buscar(request: Request, q: str = ""):
