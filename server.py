@@ -1145,6 +1145,13 @@ def api_versao(request: Request):
 FT_DRIVE_ORCAMENTOS = os.environ.get("FT_DRIVE_ORCAMENTOS", "").strip()
 FT_SCRIPT_ORCAMENTOS = os.environ.get("FT_SCRIPT_ORCAMENTOS", "").strip()
 
+# Dentro da pasta raiz de orçamentos existem DUAS subpastas:
+#   - "Pasta de Trabalho"       -> rascunhos; salva direto, SEM ano/mês
+#   - "Orçamentos Organizados"  -> arquivo final; cria ANO > MÊS pela data do nome
+# Os nomes podem ser trocados por env, mas o padrão já casa com o combinado.
+FT_PASTA_TRABALHO  = os.environ.get("FT_PASTA_TRABALHO",  "Pasta de Trabalho").strip()
+FT_PASTA_ORGANIZADOS = os.environ.get("FT_PASTA_ORGANIZADOS", "Orçamentos Organizados").strip()
+
 MESES_FT = ["JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO",
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"]
 
@@ -1189,21 +1196,35 @@ def _drive_cria_pasta(nome, pai):
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read())["id"]
 
-def _orc_pasta_destino(ano, mes):
-    """Acha (ou cria) ANO > 'ANO - MM - MÊS'. Devolve (id, 'caminho legível')."""
-    nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
-    chave = nome_ano + "/" + nome_mes
+def _orc_subpasta_raiz(nome):
+    """Acha (ou cria) uma subpasta direta da raiz de orçamentos. Cacheada."""
+    chave = "@raiz/" + nome
     if chave in _orc_pastas_cache:
-        return _orc_pastas_cache[chave], chave
-    pid_ano = _orc_pastas_cache.get(nome_ano) or _drive_acha_pasta(nome_ano, FT_DRIVE_ORCAMENTOS)
+        return _orc_pastas_cache[chave]
+    pid = _drive_acha_pasta(nome, FT_DRIVE_ORCAMENTOS)
+    if not pid:
+        pid = _drive_cria_pasta(nome, FT_DRIVE_ORCAMENTOS)
+    _orc_pastas_cache[chave] = pid
+    return pid
+
+def _orc_pasta_destino(ano, mes):
+    """Acha (ou cria) 'Orçamentos Organizados' > ANO > 'ANO - MM - MÊS'.
+       Devolve (id, 'caminho legível')."""
+    raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
+    nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
+    chave = FT_PASTA_ORGANIZADOS + "/" + nome_ano + "/" + nome_mes
+    if chave in _orc_pastas_cache:
+        return _orc_pastas_cache[chave], nome_ano + "/" + nome_mes
+    chave_ano = FT_PASTA_ORGANIZADOS + "/" + nome_ano
+    pid_ano = _orc_pastas_cache.get(chave_ano) or _drive_acha_pasta(nome_ano, raiz_org)
     if not pid_ano:
-        pid_ano = _drive_cria_pasta(nome_ano, FT_DRIVE_ORCAMENTOS)
-    _orc_pastas_cache[nome_ano] = pid_ano
+        pid_ano = _drive_cria_pasta(nome_ano, raiz_org)
+    _orc_pastas_cache[chave_ano] = pid_ano
     pid_mes = _drive_acha_pasta(nome_mes, pid_ano)
     if not pid_mes:
         pid_mes = _drive_cria_pasta(nome_mes, pid_ano)
     _orc_pastas_cache[chave] = pid_mes
-    return pid_mes, chave
+    return pid_mes, nome_ano + "/" + nome_mes
 
 def _orc_acha_arquivo(nome, pasta):
     q = ("'%s' in parents and name = '%s' and trashed = false"
@@ -1239,13 +1260,20 @@ def _orc_sobe_arquivo(nome, pasta_id, corpo):
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read())["id"], "criado"
 
-def _orc_salva_via_script(nome, ano, mes, conteudo_texto):
-    """Plano B: o Apps Script cria as pastas e o arquivo COMO DONO da conta."""
-    corpo = json.dumps({
-        "token": FT_TOKEN, "nome": nome,
-        "ano": str(ano), "mesPasta": _orc_nome_pasta_mes(ano, mes),
-        "conteudo": conteudo_texto,
-    }).encode("utf-8")
+def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto):
+    """Plano B: o Apps Script cria as pastas e o arquivo COMO DONO da conta.
+       destino='trabalho' -> grava direto na subpasta de trabalho (sem ano/mês).
+       destino='organizado' -> cria 'Organizados' > ANO > MÊS."""
+    dados = {
+        "token": FT_TOKEN, "nome": nome, "conteudo": conteudo_texto,
+        "destino": destino,
+        "pastaTrabalho": FT_PASTA_TRABALHO,
+        "pastaOrganizados": FT_PASTA_ORGANIZADOS,
+    }
+    if destino == "organizado":
+        dados["ano"] = str(ano)
+        dados["mesPasta"] = _orc_nome_pasta_mes(ano, mes)
+    corpo = json.dumps(dados).encode("utf-8")
     req = urllib.request.Request(FT_SCRIPT_ORCAMENTOS, data=corpo, method="POST")
     req.add_header("Content-Type", "text/plain; charset=utf-8")   # evita preflight do Apps Script
     with urllib.request.urlopen(req, timeout=120) as r:
@@ -1286,17 +1314,29 @@ async def ft_salvar(request: Request):
         nome += ".ft"
     nome = re.sub(r'[\\/:*?"<>|]+', "-", nome)
     texto = json.dumps(conteudo, ensure_ascii=False, indent=1)
-    ano, mes = _orc_ano_mes(nome)
-    pasta_id, caminho = _orc_pasta_destino(ano, mes)
+
+    # destino: "trabalho" (rascunho, direto) | "organizado" (ano/mês pela data)
+    destino = (corpo.get("destino") or "trabalho").strip().lower()
+    if destino == "organizado":
+        ano, mes = _orc_ano_mes(nome)
+        pasta_id, caminho = _orc_pasta_destino(ano, mes)
+    else:
+        destino = "trabalho"
+        pasta_id = _orc_subpasta_raiz(FT_PASTA_TRABALHO)
+        caminho = FT_PASTA_TRABALHO
+        ano = mes = None
+
     try:
         fid, acao = _orc_sobe_arquivo(nome, pasta_id, texto.encode("utf-8"))
-        return {"ok": True, "id": fid, "pasta": caminho, "acao": acao, "via": "service-account"}
+        return {"ok": True, "id": fid, "pasta": caminho, "acao": acao,
+                "destino": destino, "via": "service-account"}
     except urllib.error.HTTPError as e:
         erro = e.read().decode("utf-8", "ignore")[:400]
         sem_cota = "storageQuotaExceeded" in erro or "quota" in erro.lower()
         if sem_cota and FT_SCRIPT_ORCAMENTOS:
-            fid = _orc_salva_via_script(nome, ano, mes, texto)
-            return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado", "via": "apps-script"}
+            fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
+            return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
+                    "destino": destino, "via": "apps-script"}
         if sem_cota:
             raise HTTPException(status_code=502, detail=(
                 "O Google não deixa a service account CRIAR arquivos (sem cota). "
