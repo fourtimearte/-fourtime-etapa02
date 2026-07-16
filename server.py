@@ -1441,6 +1441,38 @@ def ft_abrir(fid: str, request: Request):
     return {"ok": True, "nome": meta.get("name", ""), "conteudo": doc}
 
 
+
+# ------------- PWA (offline + instalável) -------------
+_PWA_DIR = os.path.join(os.path.dirname(__file__), "pwa")
+_PWA_MIME = {
+    ".json": "application/manifest+json",
+    ".js":   "application/javascript",
+    ".png":  "image/png",
+}
+
+@app.get("/pwa/{arquivo}")
+def pwa_estatico(arquivo: str):
+    """Serve manifest, service worker e ícones da pasta /pwa.
+       O service-worker.js precisa do header Service-Worker-Allowed: /
+       para poder controlar o editor na raiz (e não só a pasta /pwa)."""
+    # trava contra path traversal: só nome de arquivo simples
+    nome = os.path.basename(arquivo)
+    caminho = os.path.join(_PWA_DIR, nome)
+    if not os.path.isfile(caminho):
+        raise HTTPException(status_code=404, detail="arquivo PWA não encontrado")
+    ext = os.path.splitext(nome)[1].lower()
+    mime = _PWA_MIME.get(ext, "application/octet-stream")
+    headers = {}
+    if nome == "service-worker.js":
+        # deixa o SW controlar todo o site, mesmo estando em /pwa/
+        headers["Service-Worker-Allowed"] = "/"
+        # o SW nunca deve ficar preso em cache do navegador
+        headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    elif ext == ".png":
+        headers["Cache-Control"] = "public, max-age=86400"   # ícones podem cachear 1 dia
+    return FileResponse(caminho, media_type=mime, headers=headers)
+
+
 @app.get("/")
 def raiz():
     p = _editor_path()
