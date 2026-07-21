@@ -1151,6 +1151,8 @@ FT_SCRIPT_ORCAMENTOS = os.environ.get("FT_SCRIPT_ORCAMENTOS", "").strip()
 # Os nomes podem ser trocados por env, mas o padrão já casa com o combinado.
 FT_PASTA_TRABALHO  = os.environ.get("FT_PASTA_TRABALHO",  "Pasta de Trabalho").strip()
 FT_PASTA_ORGANIZADOS = os.environ.get("FT_PASTA_ORGANIZADOS", "Orçamentos Organizados").strip()
+# Para onde vão os rascunhos depois que a versão final é arquivada em Organizados.
+FT_PASTA_LIXEIRA = os.environ.get("FT_PASTA_LIXEIRA", "Lixeira da Área de Trabalho").strip()
 
 MESES_FT = ["JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO",
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"]
@@ -1260,27 +1262,120 @@ def _orc_sobe_arquivo(nome, pasta_id, corpo):
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read())["id"], "criado"
 
-def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto):
-    """Plano B: o Apps Script cria as pastas e o arquivo COMO DONO da conta.
-       destino='trabalho' -> grava direto na subpasta de trabalho (sem ano/mês).
-       destino='organizado' -> cria 'Organizados' > ANO > MÊS."""
-    dados = {
-        "token": FT_TOKEN, "nome": nome, "conteudo": conteudo_texto,
-        "destino": destino,
-        "pastaTrabalho": FT_PASTA_TRABALHO,
-        "pastaOrganizados": FT_PASTA_ORGANIZADOS,
-    }
-    if destino == "organizado":
-        dados["ano"] = str(ano)
-        dados["mesPasta"] = _orc_nome_pasta_mes(ano, mes)
+def _script_post(dados, timeout=120):
+    """Fala com o Apps Script, que roda COMO DONO da conta (a service account
+       não tem cota: não cria arquivo nem pasta, e às vezes não move/renomeia).
+       Todo pedido leva o token e os nomes das pastas."""
+    if not FT_SCRIPT_ORCAMENTOS:
+        raise HTTPException(status_code=502, detail=(
+            "Falta configurar FT_SCRIPT_ORCAMENTOS no Render (URL do Apps Script)."))
+    dados = dict(dados)
+    dados.setdefault("token", FT_TOKEN)
+    dados.setdefault("pastaTrabalho", FT_PASTA_TRABALHO)
+    dados.setdefault("pastaOrganizados", FT_PASTA_ORGANIZADOS)
+    dados.setdefault("pastaLixeira", FT_PASTA_LIXEIRA)
     corpo = json.dumps(dados).encode("utf-8")
     req = urllib.request.Request(FT_SCRIPT_ORCAMENTOS, data=corpo, method="POST")
     req.add_header("Content-Type", "text/plain; charset=utf-8")   # evita preflight do Apps Script
-    with urllib.request.urlopen(req, timeout=120) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         d = json.loads(r.read())
     if not d.get("ok"):
         raise HTTPException(status_code=502, detail="Apps Script recusou: %s" % d.get("erro", "?"))
-    return d.get("id", "")
+    return d
+
+
+def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto):
+    """Plano B da GRAVAÇÃO: o Apps Script cria as pastas e o arquivo."""
+    dados = {"acao": "salvar", "nome": nome, "conteudo": conteudo_texto, "destino": destino}
+    if destino == "organizado":
+        dados["ano"] = str(ano)
+        dados["mesPasta"] = _orc_nome_pasta_mes(ano, mes)
+    return _script_post(dados).get("id", "")
+
+
+# ---------------- gravar/renomear/mover um arquivo JÁ existente ----------------
+
+def _orc_grava_por_id(fid, corpo):
+    """Sobrescreve o conteúdo de um arquivo pelo ID. A service account PODE
+       fazer isso (o que ela não pode é CRIAR). É o que resolve a duplicação:
+       o arquivo é o mesmo, não importa se o nome mudou de data."""
+    url = DRIVE_UPLOAD + "/files/" + fid + "?uploadType=media&supportsAllDrives=true"
+    req = urllib.request.Request(url, data=corpo, method="PATCH")
+    req.add_header("Authorization", "Bearer " + _token_drive())
+    req.add_header("Content-Type", "application/octet-stream")
+    with urllib.request.urlopen(req, timeout=120) as r:
+        r.read()
+    return fid
+
+
+def _orc_renomeia(fid, novo_nome):
+    """Renomeia; se a service account não puder, o Apps Script renomeia."""
+    try:
+        meta = json.dumps({"name": novo_nome}).encode()
+        url = DRIVE_API + "/files/" + fid + "?supportsAllDrives=true"
+        req = urllib.request.Request(url, data=meta, method="PATCH")
+        req.add_header("Authorization", "Bearer " + _token_drive())
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+        return "service-account"
+    except Exception:
+        _script_post({"acao": "renomear", "id": fid, "nome": novo_nome})
+        return "apps-script"
+
+
+def _orc_move(fid, destino_id):
+    """Move um arquivo para outra pasta; com o Apps Script como plano B."""
+    try:
+        pai_atual = _pai(fid) or ""
+        url = (DRIVE_API + "/files/" + fid + "?supportsAllDrives=true"
+               + "&addParents=" + destino_id
+               + ("&removeParents=" + pai_atual if pai_atual else ""))
+        req = urllib.request.Request(url, data=b"{}", method="PATCH")
+        req.add_header("Authorization", "Bearer " + _token_drive())
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+        _orc_arvore_cache.pop(fid, None)          # a árvore mudou
+        return "service-account"
+    except Exception:
+        _script_post({"acao": "mover", "id": fid, "pastaDestino": FT_PASTA_LIXEIRA})
+        _orc_arvore_cache.pop(fid, None)
+        return "apps-script"
+
+
+# ---------------- versões (-v2, -v3 …) e rascunhos do mesmo orçamento ----------------
+
+def _orc_lista_ft(pasta_id, limite=200):
+    """Todos os .ft de uma pasta (id + nome)."""
+    r = _drive_get("/files", {
+        "q": "'%s' in parents and trashed = false" % pasta_id,
+        "orderBy": "name", "pageSize": str(limite),
+        "fields": "files(id,name,modifiedTime,size)",
+        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
+    return [f for f in r.get("files", []) if f.get("name", "").lower().endswith(".ft")]
+
+
+def _orc_base_e_versao(nome):
+    """'CLIENTE-PD004886-210726-v3.ft' -> ('CLIENTE-PD004886-210726', 3).
+       Sem sufixo, a versão é 1 (o arquivo original)."""
+    base = re.sub(r"\.ft$", "", nome, flags=re.I)
+    m = re.search(r"-v(\d+)$", base, flags=re.I)
+    if m:
+        return base[:m.start()], int(m.group(1))
+    return base, 1
+
+
+def _orc_proxima_versao(nome, pasta_id):
+    """Devolve o nome da PRÓXIMA versão dentro da pasta.
+       O arquivo sem sufixo conta como v1, então a próxima nasce -v2."""
+    base, _ = _orc_base_e_versao(nome)
+    maior = 0
+    for f in _orc_lista_ft(pasta_id):
+        b, v = _orc_base_e_versao(f["name"])
+        if b.upper() == base.upper():
+            maior = max(maior, v)
+    return "%s-v%d.ft" % (base, (maior or 1) + 1)
 
 def _orc_dentro(fid, profundidade=8):
     """O arquivo está dentro da pasta de orçamentos? (sobe pelos pais, com cache)"""
@@ -1326,21 +1421,68 @@ async def ft_salvar(request: Request):
     else:
         caminho = FT_PASTA_TRABALHO
 
+    # --------- como gravar (v175) ---------
+    # drive_id  -> sobrescreve ESTE arquivo, mesmo que o nome tenha mudado de
+    #              data. É o que acaba com as cópias duplicadas.
+    # renomear  -> junto com drive_id, atualiza o nome do arquivo no Drive.
+    # nova_versao -> ignora o drive_id e cria "-v2", "-v3"... ao lado.
+    drive_id = (corpo.get("driveId") or "").strip()
+    if drive_id and not re.fullmatch(r"[A-Za-z0-9_-]{10,}", drive_id):
+        drive_id = ""
+    renomear = bool(corpo.get("renomear"))
+    nova_versao = bool(corpo.get("novaVersao"))
+
+    def _pasta_destino():
+        if destino == "organizado":
+            pid, _cam = _orc_pasta_destino(ano, mes)
+            return pid
+        return _orc_subpasta_raiz(FT_PASTA_TRABALHO)
+
+    # 1) SOBRESCREVER um arquivo conhecido (não depende do nome nem da data).
+    #    Só vale se ele estiver NA PASTA DE DESTINO. Sem essa checagem, um
+    #    rascunho aberto da Pasta de Trabalho seria sobrescrito lá mesmo ao
+    #    "arquivar em Organizados" — e o definitivo nunca nasceria.
+    if drive_id and not nova_versao:
+        if not _orc_dentro(drive_id):
+            raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
+        try:
+            mesma_pasta = (_pai(drive_id) == _pasta_destino())
+        except Exception:
+            mesma_pasta = False
+        if not mesma_pasta:
+            drive_id = ""            # cai para o fluxo de criação, na pasta certa
+    if drive_id and not nova_versao:
+        _orc_grava_por_id(drive_id, texto.encode("utf-8"))
+        nome_final = nome
+        via_nome = ""
+        if renomear:
+            try:
+                via_nome = _orc_renomeia(drive_id, nome)
+            except Exception:
+                nome_final = ""      # não deu para renomear: o conteúdo já foi salvo
+        return {"ok": True, "id": drive_id, "pasta": caminho, "acao": "atualizado",
+                "destino": destino, "nome": nome_final, "via": "service-account",
+                "renomeado": bool(renomear and nome_final), "viaNome": via_nome}
+
+    # 2) NOVA VERSÃO: descobre o próximo -vN livre na pasta
+    if nova_versao:
+        try:
+            nome = _orc_proxima_versao(nome, _pasta_destino())
+        except Exception:
+            pass                     # sem conseguir ler a pasta, segue com o nome pedido
+
+    # 3) CRIAR/atualizar por nome (fluxo de sempre)
     # Tenta pela service account (achar/criar a pasta E subir o arquivo).
     # QUALQUER passo pode falhar por falta de cota — criar a subpasta, criar
     # ano/mês, ou criar o arquivo. Em todos esses casos delegamos ao Apps
     # Script, que roda como DONO e cria pastas + arquivo sem limite.
     def _via_service_account():
-        if destino == "organizado":
-            pasta_id, _cam = _orc_pasta_destino(ano, mes)
-        else:
-            pasta_id = _orc_subpasta_raiz(FT_PASTA_TRABALHO)
-        return _orc_sobe_arquivo(nome, pasta_id, texto.encode("utf-8"))
+        return _orc_sobe_arquivo(nome, _pasta_destino(), texto.encode("utf-8"))
 
     try:
         fid, acao = _via_service_account()
         return {"ok": True, "id": fid, "pasta": caminho, "acao": acao,
-                "destino": destino, "via": "service-account"}
+                "destino": destino, "nome": nome, "via": "service-account"}
     except urllib.error.HTTPError as e:
         erro = e.read().decode("utf-8", "ignore")[:400]
         # cota OU qualquer recusa da service account -> tenta pelo Apps Script
@@ -1348,7 +1490,7 @@ async def ft_salvar(request: Request):
             try:
                 fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
                 return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
-                        "destino": destino, "via": "apps-script"}
+                        "destino": destino, "nome": nome, "via": "apps-script"}
             except Exception as e2:
                 raise HTTPException(status_code=502,
                     detail="Drive recusou e o Apps Script também: %s" % str(e2)[:300])
@@ -1359,7 +1501,7 @@ async def ft_salvar(request: Request):
             try:
                 fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
                 return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
-                        "destino": destino, "via": "apps-script"}
+                        "destino": destino, "nome": nome, "via": "apps-script"}
             except Exception as e2:
                 raise HTTPException(status_code=502,
                     detail="Falha na service account e no Apps Script: %s" % str(e2)[:300])
@@ -1389,6 +1531,7 @@ def ft_buscar(request: Request, q: str = ""):
                       "tamanho": int(f.get("size") or 0)})
         if len(itens) >= 30:
             break
+    itens.sort(key=lambda a: a["nome"].upper())     # resultado em ordem alfabética
     return {"ok": True, "itens": itens}
 
 
@@ -1419,7 +1562,8 @@ def ft_listar(request: Request, pasta: str = ""):
                              "tamanho": int(f.get("size") or 0)})
     # pastas de ANO/MÊS: as mais recentes primeiro (nome decrescente)
     pastas.sort(key=lambda p: p["nome"], reverse=True)
-    arquivos.sort(key=lambda a: a["modificado"], reverse=True)
+    # arquivos: por NOME (A→Z), que agrupa o mesmo cliente/pedido lado a lado
+    arquivos.sort(key=lambda a: a["nome"].upper())
     return {"ok": True, "pastas": pastas, "arquivos": arquivos, "raiz": pai == FT_DRIVE_ORCAMENTOS}
 
 
@@ -1438,12 +1582,115 @@ def ft_abrir(fid: str, request: Request):
         doc = json.loads(dados.decode("utf-8"))
     except Exception:
         raise HTTPException(status_code=502, detail="O arquivo no Drive não é um .ft válido.")
-    return {"ok": True, "nome": meta.get("name", ""), "conteudo": doc}
+    # em qual pasta este arquivo mora? o editor precisa saber para decidir se
+    # "salvar por cima" grava no lugar certo (ou se tem de criar noutra pasta)
+    onde = ""
+    try:
+        pai = _pai(fid)
+        if pai and pai == _orc_subpasta_raiz(FT_PASTA_TRABALHO):
+            onde = "trabalho"
+        elif pai:
+            onde = "organizado"
+    except Exception:
+        onde = ""
+    return {"ok": True, "nome": meta.get("name", ""), "conteudo": doc, "destino": onde}
 
+
+
+@app.get("/api/ft/rascunhos")
+def ft_rascunhos(request: Request, pedido: str = "", base: str = "", exceto: str = ""):
+    """Rascunhos do MESMO orçamento que estão na Pasta de Trabalho.
+       Casamos pelo número do pedido (o mais confiável) e, na falta dele,
+       pelo começo do nome do documento. Serve para a limpeza pós-arquivamento
+       — que só acontece depois de o usuário confirmar a lista."""
+    exige_token(request)
+    exige_orcamentos()
+    pedido = (pedido or "").strip().upper()
+    base = (base or "").strip().upper()
+    if not pedido and not base:
+        return {"ok": True, "itens": []}
+    try:
+        pasta = _orc_subpasta_raiz(FT_PASTA_TRABALHO)
+    except Exception:
+        return {"ok": True, "itens": []}          # a pasta ainda nem existe
+    itens = []
+    for f in _orc_lista_ft(pasta):
+        nome = f.get("name", "")
+        alvo = nome.upper()
+        casa = (pedido and pedido in alvo) or (base and alvo.startswith(base + "-"))
+        if not casa or f["id"] == exceto:
+            continue
+        itens.append({"id": f["id"], "nome": nome,
+                      "modificado": f.get("modifiedTime", ""),
+                      "tamanho": int(f.get("size") or 0)})
+    itens.sort(key=lambda a: a["nome"].upper())
+    return {"ok": True, "itens": itens, "pasta": FT_PASTA_TRABALHO}
+
+
+@app.post("/api/ft/lixeira")
+async def ft_lixeira(request: Request):
+    """Move os rascunhos indicados para a 'Lixeira da Área de Trabalho'.
+       Nada é apagado: só muda de pasta, dá para voltar atrás pelo Drive."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON inválido.")
+    ids = [str(i).strip() for i in (corpo.get("ids") or []) if str(i).strip()]
+    ids = [i for i in ids if re.fullmatch(r"[A-Za-z0-9_-]{10,}", i)]
+    if not ids:
+        return {"ok": True, "movidos": 0, "itens": []}
+    if len(ids) > 60:
+        raise HTTPException(status_code=400, detail="Muitos arquivos de uma vez.")
+    try:
+        destino_id = _orc_subpasta_raiz(FT_PASTA_LIXEIRA)
+    except Exception:
+        destino_id = None          # a service account não cria pasta: o Apps Script cria
+
+    movidos, falhas = [], []
+    for fid in ids:
+        try:
+            if not _orc_dentro(fid):
+                falhas.append({"id": fid, "erro": "fora dos orçamentos"})
+                continue
+            if destino_id:
+                _orc_move(fid, destino_id)
+            else:
+                _script_post({"acao": "mover", "id": fid, "pastaDestino": FT_PASTA_LIXEIRA})
+                _orc_arvore_cache.pop(fid, None)
+            movidos.append(fid)
+        except Exception as e:
+            falhas.append({"id": fid, "erro": str(e)[:160]})
+    return {"ok": True, "movidos": len(movidos), "itens": movidos,
+            "falhas": falhas, "pasta": FT_PASTA_LIXEIRA}
 
 
 # ------------- PWA (offline + instalável) -------------
-_PWA_DIR = os.path.join(os.path.dirname(__file__), "pwa")
+def _acha_pwa_dir():
+    """Procura a pasta 'pwa' em locais comuns. Funciona esteja ela na raiz
+       do projeto ou dentro de subpastas como 'powerup/'. Assim o PWA não
+       depende de onde exatamente os arquivos foram enviados no repositório."""
+    base = os.path.dirname(__file__)
+    candidatos = [
+        os.path.join(base, "pwa"),
+        os.path.join(base, "powerup", "pwa"),
+    ]
+    # também varre 1 nível de subpastas atrás de uma pasta 'pwa' com manifest
+    try:
+        for nome in os.listdir(base):
+            sub = os.path.join(base, nome, "pwa")
+            if os.path.isdir(sub):
+                candidatos.append(sub)
+    except Exception:
+        pass
+    for c in candidatos:
+        if os.path.isfile(os.path.join(c, "manifest.json")):
+            return c
+    return candidatos[0]  # padrão (mesmo que ainda não exista)
+
+_PWA_DIR = _acha_pwa_dir()
 _PWA_MIME = {
     ".json": "application/manifest+json",
     ".js":   "application/javascript",
