@@ -33,7 +33,9 @@ TrelloPowerUp.initialize({
       content: {
         type: 'iframe',
         url: t.signUrl(SERVIDOR + '/powerup/secao.html'),
-        height: 40 + meus.length * 44
+        /* estimativa inicial; a seção chama t.sizeTo('body') e se reajusta.
+           58px por linha porque agora cada uma tem a data de envio embaixo. */
+        height: 40 + meus.length * 58
       }
     }];
   },
