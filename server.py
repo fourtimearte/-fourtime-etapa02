@@ -1537,7 +1537,7 @@ def ft_buscar(request: Request, q: str = ""):
                       "tamanho": int(f.get("size") or 0)})
         if len(itens) >= 30:
             break
-    itens.sort(key=lambda a: a["nome"].upper())     # resultado em ordem alfabética
+    itens.sort(key=lambda a: a["modificado"], reverse=True)   # mais recentes primeiro
     return {"ok": True, "itens": itens}
 
 
@@ -1568,8 +1568,9 @@ def ft_listar(request: Request, pasta: str = ""):
                              "tamanho": int(f.get("size") or 0)})
     # pastas de ANO/MÊS: as mais recentes primeiro (nome decrescente)
     pastas.sort(key=lambda p: p["nome"], reverse=True)
-    # arquivos: por NOME (A→Z), que agrupa o mesmo cliente/pedido lado a lado
-    arquivos.sort(key=lambda a: a["nome"].upper())
+    # arquivos: os mais recentes primeiro — procura-se um orçamento por
+    # "o que eu mexi ontem", muito mais do que pela letra inicial
+    arquivos.sort(key=lambda a: a["modificado"], reverse=True)
     return {"ok": True, "pastas": pastas, "arquivos": arquivos, "raiz": pai == FT_DRIVE_ORCAMENTOS}
 
 
@@ -1629,7 +1630,7 @@ def ft_rascunhos(request: Request, pedido: str = "", base: str = "", exceto: str
         itens.append({"id": f["id"], "nome": nome,
                       "modificado": f.get("modifiedTime", ""),
                       "tamanho": int(f.get("size") or 0)})
-    itens.sort(key=lambda a: a["nome"].upper())
+    itens.sort(key=lambda a: a["modificado"], reverse=True)
     return {"ok": True, "itens": itens, "pasta": FT_PASTA_TRABALHO}
 
 
