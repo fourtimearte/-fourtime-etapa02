@@ -1445,11 +1445,17 @@ async def ft_salvar(request: Request):
     if drive_id and not nova_versao:
         if not _orc_dentro(drive_id):
             raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
+        # Basta estar DENTRO do destino (em qualquer nível). Antes eu comparava
+        # com a pasta exata do mês — então, virado o mês, o mesmo orçamento não
+        # "batia" e nascia uma cópia na pasta nova. Agora ele é gravado onde já
+        # mora, mantendo nome e lugar. O que a checagem ainda impede é o caso
+        # certo: arquivar em Organizados um arquivo que está na Pasta de
+        # Trabalho não pode sobrescrever o rascunho — ali o definitivo nasce.
         try:
-            mesma_pasta = (_pai(drive_id) == _pasta_destino())
+            dentro = _sob_pasta(drive_id, _orc_raiz_destino(destino))
         except Exception:
-            mesma_pasta = False
-        if not mesma_pasta:
+            dentro = False
+        if not dentro:
             drive_id = ""            # cai para o fluxo de criação, na pasta certa
     if drive_id and not nova_versao:
         _orc_grava_por_id(drive_id, texto.encode("utf-8"))
@@ -1665,6 +1671,111 @@ async def ft_lixeira(request: Request):
             falhas.append({"id": fid, "erro": str(e)[:160]})
     return {"ok": True, "movidos": len(movidos), "itens": movidos,
             "falhas": falhas, "pasta": FT_PASTA_LIXEIRA}
+
+
+def _sob_pasta(fid, raiz_id, prof=8):
+    """O arquivo está DENTRO desta pasta (em qualquer nível)?"""
+    atual = fid
+    for _ in range(prof):
+        p = _pai(atual)
+        if not p:
+            return False
+        if p == raiz_id:
+            return True
+        atual = p
+    return False
+
+
+def _orc_raiz_destino(destino):
+    return _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS if destino == "organizado" else FT_PASTA_TRABALHO)
+
+
+@app.get("/api/ft/existente")
+def ft_existente(request: Request, pedido: str = "", base: str = "", destino: str = "trabalho"):
+    """Procura, DENTRO do destino, um orçamento que já seja deste mesmo pedido.
+
+       Por que pelo pedido e não pelo ID do arquivo: o vínculo por ID se perde
+       quando o navegador é reaberto, quando o .ft vem do computador ou quando
+       o mês vira (a pasta de destino muda). O número do pedido é o que
+       identifica o orçamento de verdade — e não muda com a data.
+       A busca varre a subpasta inteira, então acha mesmo que o arquivo esteja
+       num mês anterior."""
+    exige_token(request)
+    exige_orcamentos()
+    pedido = (pedido or "").strip().upper()
+    base = (base or "").strip().upper()
+    destino = "organizado" if destino == "organizado" else "trabalho"
+    chave = pedido or base
+    if not chave:
+        return {"ok": True, "itens": []}
+    try:
+        raiz = _orc_raiz_destino(destino)
+    except Exception:
+        return {"ok": True, "itens": []}
+
+    filtro = ("name contains '%s' and trashed = false and "
+              "mimeType != 'application/vnd.google-apps.folder'") % chave.replace("'", "")
+    try:
+        r = _drive_get("/files", {
+            "q": filtro, "orderBy": "modifiedTime desc", "pageSize": "40",
+            "fields": "files(id,name,modifiedTime,size,parents)",
+            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
+    except Exception:
+        return {"ok": True, "itens": []}
+
+    itens = []
+    for f in r.get("files", []):
+        nome = f.get("name", "")
+        if not nome.lower().endswith(".ft"):
+            continue
+        if pedido and pedido not in nome.upper():
+            continue
+        if not _sob_pasta(f["id"], raiz):
+            continue
+        itens.append({"id": f["id"], "nome": nome,
+                      "modificado": f.get("modifiedTime", ""),
+                      "tamanho": int(f.get("size") or 0)})
+    itens.sort(key=lambda a: a["modificado"], reverse=True)
+    return {"ok": True, "itens": itens[:10], "destino": destino}
+
+
+@app.post("/api/ft/excluir")
+async def ft_excluir(request: Request):
+    """Manda o arquivo para a LIXEIRA do Google Drive (não apaga de vez).
+       Dá para recuperar pelo próprio Drive por 30 dias — numa ação destrutiva
+       acionada por um clique, essa rede vale muito."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON inválido.")
+    fid = (corpo.get("id") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
+        raise HTTPException(status_code=400, detail="ID inválido.")
+    if not _orc_dentro(fid):
+        raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
+    nome = ""
+    try:
+        nome = _drive_get("/files/" + fid, {"fields": "name", "supportsAllDrives": "true"}).get("name", "")
+    except Exception:
+        pass
+    try:
+        meta = json.dumps({"trashed": True}).encode()
+        url = DRIVE_API + "/files/" + fid + "?supportsAllDrives=true"
+        req = urllib.request.Request(url, data=meta, method="PATCH")
+        req.add_header("Authorization", "Bearer " + _token_drive())
+        req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+        via = "service-account"
+    except Exception:
+        _script_post({"acao": "lixeira", "id": fid})
+        via = "apps-script"
+    with _cache_lock:
+        _pais_cache.pop(fid, None)
+    return {"ok": True, "id": fid, "nome": nome, "via": via}
 
 
 # ------------- PWA (offline + instalável) -------------
