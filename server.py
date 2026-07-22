@@ -999,6 +999,86 @@ def trello_anexo(request: Request, anexo: str, card: str = "", nome: str = "orca
         "X-Content-Type-Options": "nosniff",
     })
 
+# ---------------- Prova reaproveitada: JWT do quadro + cartão é daquele quadro
+# Mesma lógica que o GET /api/trello/anexo já usa. Foi extraída para as rotas
+# novas (remover e metadados) não repetirem — e para que TODAS compartilhem
+# exatamente a mesma verificação RS256 e o mesmo token de serviço.
+def _prova_cartao(request: Request, card: str) -> dict:
+    exige_trello()
+    token = request.headers.get("X-FT-JWT", "") or request.query_params.get("jwt", "")
+    if not token:
+        raise HTTPException(status_code=401, detail="Sem JWT do Trello.")
+    dados = verifica_jwt(token)
+    quadro_jwt = _do_jwt(dados, "idBoard", "board")
+    if not quadro_jwt:
+        raise HTTPException(status_code=401, detail="O JWT não diz de qual quadro veio.")
+    if not card:
+        raise HTTPException(status_code=400, detail="Faltou o cartão.")
+    if _quadro_do_cartao(card) != quadro_jwt:
+        raise HTTPException(status_code=403,
+            detail="Este cartão não pertence ao quadro de onde o pedido veio.")
+    if FT_TRELLO_QUADRO and quadro_jwt != FT_TRELLO_QUADRO:
+        raise HTTPException(status_code=403, detail="Quadro não permitido.")
+    return dados
+
+def _apaga_anexo(card: str, anexo: str) -> None:
+    """Remove o anexo no Trello com o token de serviço. A exclusão é DEFINITIVA."""
+    url = ("https://api.trello.com/1/cards/%s/attachments/%s?key=%s&token=%s"
+           % (urllib.parse.quote(card), urllib.parse.quote(anexo),
+              urllib.parse.quote(FT_TRELLO_KEY), urllib.parse.quote(FT_TRELLO_TOKEN)))
+    req = urllib.request.Request(url, method="DELETE")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            r.read()
+    except urllib.error.HTTPError as e:
+        corpo = e.read().decode("utf-8", "ignore")[:200]
+        if e.code == 404:
+            return                      # já não existe: tratamos como sucesso
+        if e.code in (401, 403):
+            raise HTTPException(status_code=502,
+                detail="O token de serviço não pode remover este anexo. " + corpo)
+        raise HTTPException(status_code=e.code, detail="Trello recusou: " + corpo)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Falha ao remover o anexo: %r" % (e,))
+
+@app.delete("/api/trello/anexo")
+def trello_anexo_remover(request: Request, anexo: str, card: str = ""):
+    """Remove UM anexo do cartão. Mesma prova do GET: o JWT diz o quadro e o
+       membro; o servidor confere que o cartão é daquele quadro antes de apagar.
+       Quem apaga de fato é o SERVIDOR, com o token de serviço — a equipe não
+       precisa autorizar nada. ATENÇÃO: anexo excluído no Trello não volta."""
+    _prova_cartao(request, card)
+    if not anexo:
+        raise HTTPException(status_code=400, detail="Faltou o anexo.")
+    _apaga_anexo(card, anexo)
+    return Response(status_code=204)
+
+def _meta_anexos(card: str):
+    """Lista os anexos do cartão com a data de envio (campo `date` do Trello)."""
+    url = ("https://api.trello.com/1/cards/%s/attachments?fields=id,name,bytes,date&key=%s&token=%s"
+           % (urllib.parse.quote(card), urllib.parse.quote(FT_TRELLO_KEY),
+              urllib.parse.quote(FT_TRELLO_TOKEN)))
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        corpo = e.read().decode("utf-8", "ignore")[:200]
+        raise HTTPException(status_code=e.code, detail="Trello recusou: " + corpo)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Falha ao ler os anexos: %r" % (e,))
+
+@app.get("/api/trello/anexos")
+def trello_anexos(request: Request, card: str = ""):
+    """Metadados dos anexos do cartão — inclui a data de envio de cada um.
+       Fallback usado pela seção quando o Trello não entrega o campo `date`
+       direto no cliente. Mesma prova de quadro do resto das rotas."""
+    _prova_cartao(request, card)
+    itens = _meta_anexos(card)
+    magro = [{"id": a.get("id"), "name": a.get("name"),
+              "bytes": a.get("bytes"), "date": a.get("date")}
+             for a in itens if isinstance(a, dict)]
+    return JSONResponse(magro)
+
 @app.get("/api/trello/diagnostico")
 def trello_diagnostico(request: Request, jwt: str = "", card: str = ""):
     """Diz exatamente o que está faltando, sem expor nenhum segredo."""
