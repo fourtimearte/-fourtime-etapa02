@@ -8,20 +8,50 @@
   *{box-sizing:border-box;}
   body{margin:0;padding:6px 2px;font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:var(--t);background:transparent;}
   .item{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--b);border-radius:8px;margin-bottom:7px;background:#fff;}
-  .item .nome{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
+  .item .info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .item .nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;}
+  /* linha secundária: data de envio, em cinza */
+  .item .data{color:var(--t2);font-size:11px;line-height:1.2;font-variant-numeric:tabular-nums;}
   .item .tam{color:var(--t2);font-size:11.5px;flex:0 0 auto;}
-  .item button{flex:0 0 auto;border:1px solid var(--vm);background:var(--vm);color:#fff;border-radius:6px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;}
-  .item button:hover{filter:brightness(1.08);}
+  .item button.abrir{flex:0 0 auto;border:1px solid var(--vm);background:var(--vm);color:#fff;border-radius:6px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;}
+  .item button.abrir:hover{filter:brightness(1.08);}
+  /* lixeira: discreta por padrão, vermelha ao passar o mouse */
+  .item button.lixo{flex:0 0 auto;width:32px;height:31px;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--b);background:#fff;color:var(--t2);border-radius:6px;padding:0;cursor:pointer;}
+  .item button.lixo:hover{border-color:var(--vm);color:var(--vm);}
+  .item button.lixo svg{width:15px;height:15px;display:block;}
+  /* toast de exclusão com Desfazer */
+  .toast{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--b);
+    border-left:3px solid var(--vm);border-radius:8px;margin-bottom:7px;background:#FCF4F4;}
+  .toast .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;}
+  .toast .txt b{font-weight:600;}
+  .toast .txt.erro{color:var(--vm);}
+  .toast .cont{flex:0 0 auto;color:var(--t2);font-size:11px;font-variant-numeric:tabular-nums;}
+  .toast button{flex:0 0 auto;border:1px solid var(--vm);background:#fff;color:var(--vm);border-radius:6px;
+    padding:5px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;}
+  .toast button:hover{background:var(--vm);color:#fff;}
   .vazio,.erro{color:var(--t2);padding:10px 4px;}
   .erro{color:var(--vm);}
 </style>
 </head>
 <body>
 <div id="lista"><div class="vazio">Carregando…</div></div>
+<div id="toasts"></div>
 <script>
+var CHAVE='5a21d827fc21ad2d68ec766dd4ba2011';   /* mesma API key pública do visualizador */
 var SERVIDOR='https://fourtime-etapa02.onrender.com';
-var t=TrelloPowerUp.iframe();
+var t=TrelloPowerUp.iframe({ appKey: CHAVE, appName: 'Fourtime Orçamentos' });
 var lista=document.getElementById('lista');
+var toasts=document.getElementById('toasts');
+var CARD='';
+
+/* ícone de lixeira — Untitled UI (trash-01), SVG inline em currentColor */
+var LIXO_SVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '+
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+
+  '<path d="M16 6V5.2c0-1.12 0-1.68-.218-2.108a2 2 0 0 0-.874-.874C14.48 2 13.92 2 12.8 2h-1.6'+
+  'c-1.12 0-1.68 0-2.108.218a2 2 0 0 0-.874.874C8 3.52 8 4.08 8 5.2V6m2 5.5v5m4-5v5M3 6h18m-2 0'+
+  'v11.2c0 1.68 0 2.52-.327 3.162a3 3 0 0 1-1.311 1.311C16.72 22 15.88 22 14.2 22H9.8'+
+  'c-1.68 0-2.52 0-3.162-.327a3 3 0 0 1-1.311-1.311C5 19.72 5 18.88 5 17.2V6"/></svg>';
 
 function kb(n){
   if(!n) return '';
@@ -29,35 +59,141 @@ function kb(n){
 }
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
+/* data de envio do Trello (ISO) -> "21/07/2026 · 09:49", no fuso de quem vê */
+function dataUpload(iso){
+  if(!iso) return '';
+  var d=new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  function p(n){return (n<10?'0':'')+n;}
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+
+         ' · '+p(d.getHours())+':'+p(d.getMinutes());
+}
+
+/* O JWT do Trello (RS256) prova o QUADRO e o MEMBRO; o servidor confere que o
+   cartão é daquele quadro. Pedimos um JWT fresco a cada operação para não
+   esbarrar em expiração. */
+function pedeJwt(){ return t.jwt({ state:'orcamento' }); }
+
 t.card('id','attachments').then(function(card){
+  CARD=card.id;
   var itens=(card.attachments||[]).filter(function(a){return /\.html?$/i.test(a.name||'');});
   if(!itens.length){ lista.innerHTML='<div class="vazio">Nenhum orçamento anexado.</div>'; t.sizeTo('body'); return; }
-  lista.innerHTML=itens.map(function(a){
-    return '<div class="item"><span class="nome">'+esc(a.name)+'</span>'+
-           '<span class="tam">'+kb(a.bytes)+'</span>'+
-           '<button data-id="'+esc(a.id)+'" data-nome="'+esc(a.name)+'">Abrir</button></div>';
-  }).join('');
-  Array.prototype.forEach.call(lista.querySelectorAll('button'),function(b){
-    b.onclick=function(){
-      /* O JWT do Trello prova o QUADRO e o MEMBRO, mas não diz o cartão.
-         Então o cartão vai aqui — e o servidor confere que ele pertence
-         mesmo ao quadro de onde o pedido veio. */
-      /* SEM 'title' e SEM 'accentColor': é o que faz o Trello desenhar aquela
-         barra vermelha em cima. Sem eles, o modal vem limpo e a NOSSA barra
-         (nome do arquivo + zoom + fechar) fica sendo a única — sem desperdício
-         de altura. */
-      t.modal({
-        url: SERVIDOR+'/powerup/visualizador.html',
-        args: { card:card.id, anexo:b.dataset.id, titulo:b.dataset.nome },
-        fullscreen: true
-      });
-    };
-  });
-  t.sizeTo('body');
+
+  /* a data vem no próprio objeto de anexo do Trello; se algum não trouxe,
+     puxa os metadados pelo servidor (mesma prova de quadro). */
+  if(itens.some(function(a){return !a.date;})){
+    return pedeJwt().then(function(jwt){
+      return fetch(SERVIDOR+'/api/trello/anexos?card='+encodeURIComponent(CARD),
+        { credentials:'omit', headers:{ 'X-FT-JWT':jwt } });
+    }).then(function(r){ return r.ok ? r.json() : []; })
+      .then(function(meta){
+        var mapa={}; meta.forEach(function(m){ mapa[m.id]=m.date; });
+        itens.forEach(function(a){ if(!a.date && mapa[a.id]) a.date=mapa[a.id]; });
+        desenha(itens);
+      })
+      .catch(function(){ desenha(itens); });   /* sem data é melhor que travar */
+  }
+  desenha(itens);
 }).catch(function(e){
   lista.innerHTML='<div class="erro">Não consegui ler os anexos: '+esc(e&&e.message||e)+'</div>';
   t.sizeTo('body');
 });
+
+function desenha(itens){
+  lista.innerHTML=itens.map(function(a,i){
+    var d=dataUpload(a.date);
+    return '<div class="item" data-idx="'+i+'">'+
+             '<div class="info">'+
+               '<span class="nome">'+esc(a.name)+'</span>'+
+               (d?'<span class="data">'+esc(d)+'</span>':'')+
+             '</div>'+
+             '<span class="tam">'+kb(a.bytes)+'</span>'+
+             '<button class="abrir" type="button">Abrir</button>'+
+             '<button class="lixo" type="button" title="Remover este orçamento" aria-label="Remover">'+LIXO_SVG+'</button>'+
+           '</div>';
+  }).join('');
+  Array.prototype.forEach.call(lista.querySelectorAll('.item'),function(item){
+    var a=itens[+item.dataset.idx];
+    item.querySelector('.abrir').onclick=function(){
+      /* SEM 'title' e SEM 'accentColor': é o que faz o Trello desenhar a barra
+         vermelha em cima. Sem eles, o modal vem limpo e a NOSSA barra fica sendo
+         a única. O cartão vai junto — o servidor confere que ele é do quadro. */
+      t.modal({
+        url: SERVIDOR+'/powerup/visualizador.html',
+        args: { card:CARD, anexo:a.id, titulo:a.name },
+        fullscreen: true
+      });
+    };
+    item.querySelector('.lixo').onclick=function(){ agendaRemocao(item,a); };
+  });
+  t.sizeTo('body');
+}
+
+/* Remoção com janela de arrependimento: a linha some na hora, o toast segura a
+   exclusão por ~6s e só então chama o servidor. Enquanto o toast está de pé,
+   "Desfazer" cancela tudo — o anexo nem chega a ser tocado no Trello (lá a
+   exclusão é definitiva). */
+function agendaRemocao(item, a){
+  item.style.display='none';
+
+  var toast=document.createElement('div');
+  toast.className='toast';
+  var seg=6;
+  toast.innerHTML='<span class="txt"><b>'+esc(a.name)+'</b> removido</span>'+
+                  '<span class="cont">'+seg+'s</span>'+
+                  '<button type="button">Desfazer</button>';
+  toasts.appendChild(toast);
+  t.sizeTo('body');
+
+  var cont=toast.querySelector('.cont');
+  var botao=toast.querySelector('button');
+  var cancelado=false, disparado=false;
+
+  var tic=setInterval(function(){
+    seg-=1;
+    cont.textContent=(seg<0?0:seg)+'s';
+  },1000);
+
+  var timer=setTimeout(function(){
+    clearInterval(tic);
+    if(cancelado) return;
+    disparado=true;
+    dispara();
+  },6000);
+
+  botao.onclick=function(){
+    if(disparado) return;              /* já foi pro Trello: não há o que desfazer */
+    cancelado=true;
+    clearTimeout(timer); clearInterval(tic);
+    toast.remove();
+    item.style.display='';             /* devolve a linha */
+    t.sizeTo('body');
+  };
+
+  function dispara(){
+    cont.remove(); botao.remove();
+    toast.querySelector('.txt').innerHTML='Removendo…';
+    pedeJwt().then(function(jwt){
+      return fetch(SERVIDOR+'/api/trello/anexo'
+          +'?card='+encodeURIComponent(CARD)
+          +'&anexo='+encodeURIComponent(a.id),
+        { method:'DELETE', credentials:'omit', headers:{ 'X-FT-JWT':jwt } });
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(txt){ throw new Error('HTTP '+r.status+' — '+txt.slice(0,160)); });
+      item.remove();
+      toast.remove();
+      if(!lista.querySelector('.item')){ lista.innerHTML='<div class="vazio">Nenhum orçamento anexado.</div>'; }
+      t.sizeTo('body');
+    }).catch(function(e){
+      /* falhou: devolve a linha e avisa (o anexo continua no Trello) */
+      item.style.display='';
+      toast.innerHTML='<span class="txt erro">Não removi <b>'+esc(a.name)+'</b>: '+esc(e&&e.message||e)+'</span>'+
+                      '<button type="button">OK</button>';
+      toast.querySelector('button').onclick=function(){ toast.remove(); t.sizeTo('body'); };
+      t.sizeTo('body');
+    });
+  }
+}
 </script>
 </body>
 </html>
