@@ -1983,6 +1983,90 @@ async def ft_organizar_dias(request: Request):
             "itens": plano, "falhas": falhas, "semData": sem_data}
 
 
+def _orc_subpastas(pai_id, limite=200):
+    """Subpastas diretas de uma pasta (id + nome)."""
+    r = _drive_get("/files", {
+        "q": ("'%s' in parents and trashed = false and "
+              "mimeType = 'application/vnd.google-apps.folder'") % pai_id,
+        "orderBy": "name desc", "pageSize": str(limite),
+        "fields": "files(id,name)",
+        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
+    return r.get("files", [])
+
+
+def _orc_dia_mais_recente_com_arquivos(voltar_meses=6):
+    """Procura a pasta de DIA mais recente que tenha orçamentos dentro.
+
+       Começa no mês de hoje e caminha para trás. Em cada mês olha as pastas
+       de dia da mais recente para a mais antiga, e devolve a primeira que
+       tiver arquivo. É assim que a lista lateral tem o que mostrar mesmo num
+       documento novo, que ainda não veio do Drive.
+
+       Anda por MÊS e não dia a dia de propósito: listar as subpastas de um
+       mês é uma consulta só, enquanto tentar 60 dias seriam 60 consultas."""
+    try:
+        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
+    except Exception:
+        return None
+    h = datetime.now(timezone.utc)
+    ano, mes = h.year, h.month
+    for _ in range(max(1, voltar_meses)):
+        nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
+        pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
+        pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
+        if pid_mes:
+            dias = [p for p in _orc_subpastas(pid_mes) if p["name"].upper().startswith("DIA ")]
+            dias.sort(key=lambda p: p["name"], reverse=True)      # do dia mais alto para o mais baixo
+            for dpasta in dias:
+                arqs = _orc_lista_ft(dpasta["id"], limite=60)
+                if arqs:
+                    return {"id": dpasta["id"],
+                            "caminho": "%s / %s / %s" % (nome_ano, nome_mes, dpasta["name"]),
+                            "itens": arqs}
+            # mês sem pasta de dia: os arquivos podem estar soltos nele
+            arqs = _orc_lista_ft(pid_mes, limite=60)
+            if arqs:
+                return {"id": pid_mes, "caminho": "%s / %s" % (nome_ano, nome_mes), "itens": arqs}
+        mes -= 1
+        if mes == 0:
+            mes, ano = 12, ano - 1
+    return None
+
+
+@app.get("/api/ft/vizinhos")
+def ft_vizinhos(request: Request, fid: str = ""):
+    """Os orçamentos que moram na MESMA pasta de um arquivo.
+
+       Com 'fid': a pasta daquele arquivo (é o caso de um documento aberto
+       do Drive). Sem 'fid': a pasta de dia mais recente que tenha arquivos —
+       assim a lista lateral serve também para um documento novo."""
+    exige_token(request)
+    exige_orcamentos()
+    fid = (fid or "").strip()
+
+    pasta_id, caminho, itens = None, "", []
+    if fid:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
+            raise HTTPException(status_code=400, detail="ID inválido.")
+        if not _orc_dentro(fid):
+            raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
+        pasta_id = _pai(fid)
+        if pasta_id:
+            caminho = _caminho_do_arquivo(fid) or _nome_pasta(pasta_id)
+            itens = _orc_lista_ft(pasta_id, limite=60)
+
+    if not itens:
+        achado = _orc_dia_mais_recente_com_arquivos()
+        if achado:
+            pasta_id, caminho, itens = achado["id"], achado["caminho"], achado["itens"]
+
+    lista = [{"id": f["id"], "nome": f["name"],
+              "modificado": f.get("modifiedTime", ""),
+              "tamanho": int(f.get("size") or 0)} for f in itens]
+    lista.sort(key=lambda a: a["modificado"], reverse=True)
+    return {"ok": True, "pasta": caminho, "pastaId": pasta_id or "", "itens": lista}
+
+
 # ------------- PWA (offline + instalável) -------------
 def _acha_pwa_dir():
     """Procura a pasta 'pwa' em locais comuns. Funciona esteja ela na raiz
