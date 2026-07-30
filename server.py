@@ -2151,20 +2151,50 @@ def _orc_base_sem_data(nome):
     return base, sufixo
 
 
+def _orc_normaliza_pedido(base):
+    """Põe o número do pedido no padrão PD00####.
+
+       Os orçamentos antigos usavam o número solto ('YASMIM-4052'); hoje o
+       editor grava 'YASMIM-PD004052'. Como a busca por um pedido já
+       arquivado é feita por esse número, um arquivo no formato velho não é
+       encontrado e acabaria duplicado.
+
+       Só mexe quando o trecho final é claramente um número de pedido: de 3 a
+       6 dígitos, sozinho depois do último hífen. Nome sem número nenhum fica
+       intacto — não há o que adivinhar."""
+    m = re.match(r"^(.*)-(\d{3,6})$", base)
+    if not m:
+        return base
+    cliente, num = m.group(1), m.group(2)
+    if len(num) == 6:
+        return base                        # já pode ser um PD sem o prefixo
+    return "%s-PD%06d" % (cliente, int(num))
+
+
+def _orc_dia_da_pasta(nome_pasta):
+    """'DIA 20' -> 20. Zero se não for uma pasta de dia."""
+    m = re.match(r"^DIA\s+(\d{1,2})$", (nome_pasta or "").strip(), flags=re.I)
+    return int(m.group(1)) if m else 0
+
+
 @app.post("/api/ft/padronizar-mes")
 async def ft_padronizar_mes(request: Request):
-    """Padroniza um mês inteiro de Orçamentos Organizados.
+    """Padroniza um mês de Orçamentos Organizados: nomes no formato certo,
+       coerentes com a pasta onde cada arquivo está.
 
-       Regra nova: o nome de um orçamento arquivado é CLIENTE-PEDIDO-DDMMAA,
-       onde a data é o dia em que ele foi para Organizados, e ele mora na
-       pasta desse dia. Os arquivos antigos foram gravados sob outras regras
-       (data de criação, ou sem pasta de dia), então aqui todos passam a
-       seguir a mesma: a data usada é a do ÚLTIMO salvamento de cada um, que
-       é a melhor informação disponível sobre quando aquilo foi arquivado.
+       A PASTA MANDA. Se um arquivo está em 'DIA 20', o nome dele passa a
+       terminar em 20 daquele mês — mesmo que hoje diga 30. Isso porque a
+       arrumação das pastas foi feita à mão e é ela que reflete a realidade;
+       o nome é que ficou para trás durante as mudanças de regra.
 
-       Varre tudo que está no mês: os arquivos soltos e os que já estão em
-       pastas de dia. Renomeia e move o que estiver fora do padrão; o que já
-       estiver certo não é tocado. Com 'simular', só devolve o plano."""
+       Também acerta o número do pedido: '4052' vira 'PD004052'. Sem isso um
+       arquivo antigo não é encontrado ao salvar por cima, e vira duplicata.
+
+       Arquivo solto no mês (fora de qualquer pasta de dia) não tem pasta em
+       que se apoiar: para esse, e só para esse, vale a data do último
+       salvamento, e ele é levado para a pasta daquele dia.
+
+       Com 'simular', devolve só o plano."""
     exige_token(request)
     exige_editor_atual(request)
     exige_orcamentos()
@@ -2191,26 +2221,36 @@ async def ft_padronizar_mes(request: Request):
         return {"ok": True, "mes": nome_mes, "aMudar": 0, "itens": [],
                 "aviso": "A pasta %s ainda não existe." % nome_mes}
 
-    # tudo que há no mês: solto nele e dentro das pastas de dia
-    alvos = [(f, "(solto no mês)") for f in _orc_lista_ft(pid_mes, limite=400)]
+    alvos = []
+    for f in _orc_lista_ft(pid_mes, limite=400):
+        alvos.append((f, "", 0))                       # solto: sem dia de apoio
     for sub in _orc_subpastas(pid_mes):
+        dia = _orc_dia_da_pasta(sub["name"])
         for f in _orc_lista_ft(sub["id"], limite=400):
-            alvos.append((f, sub["name"]))
+            alvos.append((f, sub["name"], dia))
 
     plano, parados = [], []
-    for f, onde in alvos:
-        dt = _dataDoISO_py(f.get("modifiedTime", ""))
-        if not dt:
-            parados.append(f["name"])
-            continue
+    for f, onde, dia_pasta in alvos:
+        if dia_pasta:
+            dia = dia_pasta                            # a pasta manda
+            dt = "%02d%02d%02d" % (dia, mes, ano % 100)
+            motivo = "pasta"
+        else:
+            dt = _dataDoISO_py(f.get("modifiedTime", ""))
+            if not dt:
+                parados.append(f["name"])
+                continue
+            dia = int(dt[0:2])
+            motivo = "último salvamento"
         base, sufixo = _orc_base_sem_data(f["name"])
+        base = _orc_normaliza_pedido(base)
         nome_novo = "%s-%s%s.ft" % (base, dt, sufixo)
-        pasta_nova = _orc_nome_pasta_dia(int(dt[0:2]))
+        pasta_nova = _orc_nome_pasta_dia(dia)
         if f["name"] == nome_novo and onde == pasta_nova:
-            continue                      # já está no padrão: não se mexe
+            continue
         plano.append({"id": f["id"], "de": f["name"], "para": nome_novo,
-                      "ondeEstava": onde, "pasta": pasta_nova,
-                      "dia": int(dt[0:2]),
+                      "ondeEstava": onde or "(solto no mês)",
+                      "pasta": pasta_nova, "dia": dia, "porque": motivo,
                       "renomeia": f["name"] != nome_novo,
                       "move": onde != pasta_nova})
     plano.sort(key=lambda x: (x["dia"], x["para"].upper()))
@@ -2239,7 +2279,6 @@ async def ft_padronizar_mes(request: Request):
     _orc_pastas_cache.clear()
     return {"ok": True, "mes": nome_mes, "feitos": feitos,
             "itens": plano, "falhas": falhas, "parados": parados}
-
 
 # ------------- PWA (offline + instalável) -------------
 def _acha_pwa_dir():
