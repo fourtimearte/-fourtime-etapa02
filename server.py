@@ -1724,13 +1724,16 @@ def ft_abrir(fid: str, request: Request):
         raise HTTPException(status_code=502, detail="O arquivo no Drive não é um .ft válido.")
     # em qual pasta este arquivo mora? o editor precisa saber para decidir se
     # "salvar por cima" grava no lugar certo (ou se tem de criar noutra pasta)
+    # A pergunta certa é "está DENTRO de Organizados?", e não "o pai é a Pasta
+    # de Trabalho?". Antes, qualquer coisa fora da raiz da Trabalho — uma
+    # subpasta dela, a Lixeira — era dada como organizada, e o editor então
+    # aceitava a data do nome como se fosse de arquivamento.
     onde = ""
     try:
-        pai = _pai(fid)
-        if pai and pai == _orc_subpasta_raiz(FT_PASTA_TRABALHO):
-            onde = "trabalho"
-        elif pai:
+        if _sob_pasta(fid, _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)):
             onde = "organizado"
+        elif _pai(fid):
+            onde = "trabalho"
     except Exception:
         onde = ""
     return {"ok": True, "nome": meta.get("name", ""), "conteudo": doc, "destino": onde}
