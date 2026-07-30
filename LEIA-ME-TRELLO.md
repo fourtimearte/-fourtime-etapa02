@@ -17,7 +17,7 @@ Sem Google Drive, sem hospedagem externa, sem arquivo duplicado.
 
 | Arquivo | O que é |
 |---|---|
-| `fourtime-editor-v123.html` | Editor com a exportação "HTML para Trello" |
+| `fourtime-editor-vNNN.html` | Editor (o servidor usa sempre a versão de número mais alto) |
 | `server.py` | Servidor, agora com o proxy dos anexos + as páginas do Power-Up |
 | `powerup/index.html` | Conector do Power-Up (o que o Trello carrega) |
 | `powerup/secao.html` | A lista de orçamentos dentro do cartão |
@@ -31,7 +31,7 @@ Sem Google Drive, sem hospedagem externa, sem arquivo duplicado.
 
 ### 1. Subir os arquivos no GitHub
 No repositório `fourtime-etapa02`, suba:
-- `fourtime-editor-v123.html`
+- o editor mais recente (`fourtime-editor-vNNN.html`)
 - `server.py`
 - a pasta **`powerup/`** inteira (os 5 arquivos)
 
