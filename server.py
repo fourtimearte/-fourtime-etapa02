@@ -1165,13 +1165,59 @@ def exige_orcamentos():
         raise HTTPException(status_code=503,
             detail="Orçamentos no Drive não configurados (FT_DRIVE_ORCAMENTOS no Render).")
 
-def _orc_ano_mes(nome):
-    """Extrai DDMMAA do nome do arquivo. Sem data -> hoje."""
-    m = re.search(r"(\d{2})(\d{2})(\d{2})", nome or "")
+def _orc_dia_mes_ano(nome):
+    """Dia, mês e ano do nome do arquivo. Mesma leitura de _orc_ano_mes,
+       devolvendo também o DIA — usado para a pasta de dia."""
+    nome = nome or ""
+    def _v(t):
+        dd, mm, aa = int(t[0:2]), int(t[2:4]), int(t[4:6])
+        return (dd, mm, 2000 + aa) if (1 <= mm <= 12 and 1 <= dd <= 31) else None
+    m = re.search(r"(\d{6})(?:-v\d+)?\.ft$", nome, flags=re.I)
     if m:
-        dd, mm, aa = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        r = _v(m.group(1))
+        if r:
+            return r
+    for t in reversed(re.findall(r"\d{6}", nome)):
+        r = _v(t)
+        if r:
+            return r
+    h = datetime.now(timezone.utc)
+    return h.day, h.month, h.year
+
+
+def _orc_ano_mes(nome):
+    """Extrai DDMMAA do nome do arquivo (NOME-PEDIDO-DDMMAA.ft). Sem data -> hoje.
+
+       A data fica no FIM do nome, logo antes do .ft — e é lá que procuramos.
+       Antes a busca pegava a primeira sequência de 6 dígitos que aparecesse,
+       o que quebrou quando o pedido virou PD00#### (v175): em
+       "GOIAS-PD004113-150626.ft" ela achava "004113" do pedido em vez de
+       "150626" da data, concluía que "41" não é mês e caía no mês de HOJE.
+       Resultado: todo orçamento arquivado ia para a pasta do mês corrente,
+       qualquer que fosse a data dele."""
+    nome = nome or ""
+
+    def _valida(txt):
+        dd, mm, aa = int(txt[0:2]), int(txt[2:4]), int(txt[4:6])
         if 1 <= mm <= 12 and 1 <= dd <= 31:
             return 2000 + aa, mm
+        return None
+
+    # 1) a data no fim do nome, aceitando o sufixo de versão (-v2, -v3...)
+    m = re.search(r"(\d{6})(?:-v\d+)?\.ft$", nome, flags=re.I)
+    if m:
+        r = _valida(m.group(1))
+        if r:
+            return r
+
+    # 2) sem .ft no fim (ou nome fora do padrão): tenta a ÚLTIMA sequência de
+    #    6 dígitos, que ainda é mais provável de ser a data que a primeira
+    achados = re.findall(r"\d{6}", nome)
+    for txt in reversed(achados):
+        r = _valida(txt)
+        if r:
+            return r
+
     h = datetime.now(timezone.utc)
     return h.year, h.month
 
@@ -1209,24 +1255,47 @@ def _orc_subpasta_raiz(nome):
     _orc_pastas_cache[chave] = pid
     return pid
 
-def _orc_pasta_destino(ano, mes):
-    """Acha (ou cria) 'Orçamentos Organizados' > ANO > 'ANO - MM - MÊS'.
+# Nível de pasta por DIA dentro do mês. Pode ser desligado no Render com
+# FT_PASTA_DIA=0, e aí volta a ser só ANO > MÊS.
+FT_PASTA_DIA = (os.environ.get("FT_PASTA_DIA", "1").strip().lower()
+                not in ("0", "nao", "não", "false", "off"))
+
+
+def _orc_nome_pasta_dia(dia):
+    return "DIA %02d" % dia
+
+
+def _orc_pasta_destino(ano, mes, dia=None):
+    """Acha (ou cria) 'Orçamentos Organizados' > ANO > 'ANO - MM - MÊS' > 'DIA NN'.
+       O dia vem da data de CRIAÇÃO do orçamento (a que está no nome do
+       arquivo), não do dia em que ele está sendo arquivado.
        Devolve (id, 'caminho legível')."""
     raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
     nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
-    chave = FT_PASTA_ORGANIZADOS + "/" + nome_ano + "/" + nome_mes
-    if chave in _orc_pastas_cache:
-        return _orc_pastas_cache[chave], nome_ano + "/" + nome_mes
+
     chave_ano = FT_PASTA_ORGANIZADOS + "/" + nome_ano
     pid_ano = _orc_pastas_cache.get(chave_ano) or _drive_acha_pasta(nome_ano, raiz_org)
     if not pid_ano:
         pid_ano = _drive_cria_pasta(nome_ano, raiz_org)
     _orc_pastas_cache[chave_ano] = pid_ano
-    pid_mes = _drive_acha_pasta(nome_mes, pid_ano)
+
+    chave_mes = chave_ano + "/" + nome_mes
+    pid_mes = _orc_pastas_cache.get(chave_mes) or _drive_acha_pasta(nome_mes, pid_ano)
     if not pid_mes:
         pid_mes = _drive_cria_pasta(nome_mes, pid_ano)
-    _orc_pastas_cache[chave] = pid_mes
-    return pid_mes, nome_ano + "/" + nome_mes
+    _orc_pastas_cache[chave_mes] = pid_mes
+
+    caminho = nome_ano + "/" + nome_mes
+    if not FT_PASTA_DIA or not dia:
+        return pid_mes, caminho
+
+    nome_dia = _orc_nome_pasta_dia(dia)
+    chave_dia = chave_mes + "/" + nome_dia
+    pid_dia = _orc_pastas_cache.get(chave_dia) or _drive_acha_pasta(nome_dia, pid_mes)
+    if not pid_dia:
+        pid_dia = _drive_cria_pasta(nome_dia, pid_mes)
+    _orc_pastas_cache[chave_dia] = pid_dia
+    return pid_dia, caminho + "/" + nome_dia
 
 def _orc_acha_arquivo(nome, pasta):
     q = ("'%s' in parents and name = '%s' and trashed = false"
@@ -1284,12 +1353,14 @@ def _script_post(dados, timeout=120):
     return d
 
 
-def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto):
+def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto, dia=None):
     """Plano B da GRAVAÇÃO: o Apps Script cria as pastas e o arquivo."""
     dados = {"acao": "salvar", "nome": nome, "conteudo": conteudo_texto, "destino": destino}
     if destino == "organizado":
         dados["ano"] = str(ano)
         dados["mesPasta"] = _orc_nome_pasta_mes(ano, mes)
+        if FT_PASTA_DIA and dia:
+            dados["diaPasta"] = _orc_nome_pasta_dia(dia)
     return _script_post(dados).get("id", "")
 
 
@@ -1367,8 +1438,11 @@ def _orc_base_e_versao(nome):
 
 
 def _orc_proxima_versao(nome, pasta_id):
-    """Devolve o nome da PRÓXIMA versão dentro da pasta.
-       O arquivo sem sufixo conta como v1, então a próxima nasce -v2."""
+    """Nome da PRÓXIMA versão dentro da pasta.
+
+       A cópia carrega a MESMA data do original — a data de criação nunca muda.
+       O que a distingue é só o sufixo: o arquivo sem sufixo conta como v1,
+       então a primeira cópia nasce -v2, a seguinte -v3, e assim por diante."""
     base, _ = _orc_base_e_versao(nome)
     maior = 0
     for f in _orc_lista_ft(pasta_id):
@@ -1414,10 +1488,12 @@ async def ft_salvar(request: Request):
     destino = (corpo.get("destino") or "trabalho").strip().lower()
     if destino != "organizado":
         destino = "trabalho"
-    ano = mes = None
+    ano = mes = dia = None
     if destino == "organizado":
-        ano, mes = _orc_ano_mes(nome)
+        dia, mes, ano = _orc_dia_mes_ano(nome)
         caminho = "%d/%s" % (ano, _orc_nome_pasta_mes(ano, mes))
+        if FT_PASTA_DIA:
+            caminho += "/" + _orc_nome_pasta_dia(dia)
     else:
         caminho = FT_PASTA_TRABALHO
 
@@ -1434,7 +1510,7 @@ async def ft_salvar(request: Request):
 
     def _pasta_destino():
         if destino == "organizado":
-            pid, _cam = _orc_pasta_destino(ano, mes)
+            pid, _cam = _orc_pasta_destino(ano, mes, dia)
             return pid
         return _orc_subpasta_raiz(FT_PASTA_TRABALHO)
 
@@ -1494,7 +1570,7 @@ async def ft_salvar(request: Request):
         # cota OU qualquer recusa da service account -> tenta pelo Apps Script
         if FT_SCRIPT_ORCAMENTOS:
             try:
-                fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
+                fid = _orc_salva_via_script(nome, destino, ano, mes, texto, dia)
                 return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
                         "destino": destino, "nome": nome, "via": "apps-script"}
             except Exception as e2:
@@ -1505,7 +1581,7 @@ async def ft_salvar(request: Request):
         # erro que não é HTTPError (ex.: falha ao criar a subpasta) -> Apps Script
         if FT_SCRIPT_ORCAMENTOS:
             try:
-                fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
+                fid = _orc_salva_via_script(nome, destino, ano, mes, texto, dia)
                 return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
                         "destino": destino, "nome": nome, "via": "apps-script"}
             except Exception as e2:
@@ -1834,6 +1910,77 @@ async def ft_excluir(request: Request):
     with _cache_lock:
         _pais_cache.pop(fid, None)
     return {"ok": True, "id": fid, "nome": nome, "via": via}
+
+
+@app.post("/api/ft/organizar-dias")
+async def ft_organizar_dias(request: Request):
+    """Distribui em pastas de DIA os orçamentos que estão soltos numa pasta de mês.
+
+       Serve para acertar o que já existe: até agora os arquivos ficavam todos
+       juntos dentro do mês. Cada um vai para a pasta do DIA que está no próprio
+       nome — a data de criação, a mesma regra que vale daqui para frente.
+
+       Sem 'mes' no corpo, arruma o MÊS ATUAL. Nada é apagado: os arquivos só
+       mudam de pasta, e quem não tem data legível fica onde está.
+       Com 'simular': só devolve o que faria, sem mover nada."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    simular = bool(corpo.get("simular"))
+
+    h = datetime.now(timezone.utc)
+    ano = int(corpo.get("ano") or h.year)
+    mes = int(corpo.get("mes") or h.month)
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+
+    # a pasta do mês, sem criar o nível do dia ainda
+    try:
+        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
+        nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
+        pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
+        pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Não consegui abrir a pasta do mês: %s" % str(e)[:200])
+    if not pid_mes:
+        return {"ok": True, "mes": nome_mes, "movidos": 0, "itens": [],
+                "aviso": "A pasta %s ainda não existe." % nome_mes}
+
+    plano, sem_data = [], []
+    for f in _orc_lista_ft(pid_mes, limite=400):
+        dia, m2, a2 = _orc_dia_mes_ano(f["name"])
+        # só move o que pertence a este mês; nome sem data legível fica parado
+        if (m2, a2) != (mes, ano):
+            sem_data.append(f["name"])
+            continue
+        plano.append({"id": f["id"], "nome": f["name"], "dia": dia,
+                      "pasta": _orc_nome_pasta_dia(dia)})
+    plano.sort(key=lambda x: (x["dia"], x["nome"].upper()))
+
+    if simular:
+        return {"ok": True, "mes": nome_mes, "simulacao": True,
+                "movidos": 0, "aMover": len(plano), "itens": plano,
+                "semData": sem_data}
+
+    movidos, falhas = 0, []
+    cache_dia = {}
+    for it in plano:
+        try:
+            pid_dia = cache_dia.get(it["dia"])
+            if not pid_dia:
+                pid_dia = _drive_acha_pasta(it["pasta"], pid_mes) or _drive_cria_pasta(it["pasta"], pid_mes)
+                cache_dia[it["dia"]] = pid_dia
+            _orc_move(it["id"], pid_dia)
+            movidos += 1
+        except Exception as e:
+            falhas.append({"nome": it["nome"], "erro": str(e)[:160]})
+    _orc_pastas_cache.clear()          # a árvore mudou: o cache de pastas envelheceu
+    return {"ok": True, "mes": nome_mes, "movidos": movidos,
+            "itens": plano, "falhas": falhas, "semData": sem_data}
 
 
 # ------------- PWA (offline + instalável) -------------
