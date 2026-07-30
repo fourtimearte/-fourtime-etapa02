@@ -2126,6 +2126,118 @@ def ft_vizinhos(request: Request, fid: str = "", pasta: str = ""):
             "pastas": pastas, "itens": itens}
 
 
+def _dataDoISO_py(iso):
+    """'2026-07-15T10:00:00Z' -> '150726'. Vazio se não der para ler."""
+    try:
+        d = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except Exception:
+        return ""
+    return "%02d%02d%02d" % (d.day, d.month, d.year % 100)
+
+
+def _orc_base_sem_data(nome):
+    """Tira a extensão, a data e o sufixo de versão, deixando CLIENTE-PEDIDO.
+       'SALUTE-PD004101-150726-v2.ft' -> ('SALUTE-PD004101', '-v2')"""
+    base = re.sub(r"\.ft$", "", nome or "", flags=re.I)
+    sufixo = ""
+    m = re.search(r"(-v\d+)$", base, flags=re.I)
+    if m:
+        sufixo = m.group(1)
+        base = base[:m.start()]
+    base = re.sub(r"-\d{6}$", "", base)      # a data, se houver
+    return base, sufixo
+
+
+@app.post("/api/ft/padronizar-mes")
+async def ft_padronizar_mes(request: Request):
+    """Padroniza um mês inteiro de Orçamentos Organizados.
+
+       Regra nova: o nome de um orçamento arquivado é CLIENTE-PEDIDO-DDMMAA,
+       onde a data é o dia em que ele foi para Organizados, e ele mora na
+       pasta desse dia. Os arquivos antigos foram gravados sob outras regras
+       (data de criação, ou sem pasta de dia), então aqui todos passam a
+       seguir a mesma: a data usada é a do ÚLTIMO salvamento de cada um, que
+       é a melhor informação disponível sobre quando aquilo foi arquivado.
+
+       Varre tudo que está no mês: os arquivos soltos e os que já estão em
+       pastas de dia. Renomeia e move o que estiver fora do padrão; o que já
+       estiver certo não é tocado. Com 'simular', só devolve o plano."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    simular = bool(corpo.get("simular"))
+
+    h = datetime.now(timezone.utc)
+    ano = int(corpo.get("ano") or h.year)
+    mes = int(corpo.get("mes") or h.month)
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+
+    try:
+        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
+        nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
+        pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
+        pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Não consegui abrir a pasta do mês: %s" % str(e)[:200])
+    if not pid_mes:
+        return {"ok": True, "mes": nome_mes, "aMudar": 0, "itens": [],
+                "aviso": "A pasta %s ainda não existe." % nome_mes}
+
+    # tudo que há no mês: solto nele e dentro das pastas de dia
+    alvos = [(f, "(solto no mês)") for f in _orc_lista_ft(pid_mes, limite=400)]
+    for sub in _orc_subpastas(pid_mes):
+        for f in _orc_lista_ft(sub["id"], limite=400):
+            alvos.append((f, sub["name"]))
+
+    plano, parados = [], []
+    for f, onde in alvos:
+        dt = _dataDoISO_py(f.get("modifiedTime", ""))
+        if not dt:
+            parados.append(f["name"])
+            continue
+        base, sufixo = _orc_base_sem_data(f["name"])
+        nome_novo = "%s-%s%s.ft" % (base, dt, sufixo)
+        pasta_nova = _orc_nome_pasta_dia(int(dt[0:2]))
+        if f["name"] == nome_novo and onde == pasta_nova:
+            continue                      # já está no padrão: não se mexe
+        plano.append({"id": f["id"], "de": f["name"], "para": nome_novo,
+                      "ondeEstava": onde, "pasta": pasta_nova,
+                      "dia": int(dt[0:2]),
+                      "renomeia": f["name"] != nome_novo,
+                      "move": onde != pasta_nova})
+    plano.sort(key=lambda x: (x["dia"], x["para"].upper()))
+
+    if simular:
+        return {"ok": True, "mes": nome_mes, "simulacao": True,
+                "aMudar": len(plano), "itens": plano, "parados": parados,
+                "total": len(alvos)}
+
+    feitos, falhas = 0, []
+    cache_dia = {}
+    for it in plano:
+        try:
+            if it["renomeia"]:
+                _orc_renomeia(it["id"], it["para"])
+            if it["move"]:
+                pid_dia = cache_dia.get(it["dia"])
+                if not pid_dia:
+                    pid_dia = (_drive_acha_pasta(it["pasta"], pid_mes)
+                               or _drive_cria_pasta(it["pasta"], pid_mes))
+                    cache_dia[it["dia"]] = pid_dia
+                _orc_move(it["id"], pid_dia)
+            feitos += 1
+        except Exception as e:
+            falhas.append({"nome": it["de"], "erro": str(e)[:160]})
+    _orc_pastas_cache.clear()
+    return {"ok": True, "mes": nome_mes, "feitos": feitos,
+            "itens": plano, "falhas": falhas, "parados": parados}
+
+
 # ------------- PWA (offline + instalável) -------------
 def _acha_pwa_dir():
     """Procura a pasta 'pwa' em locais comuns. Funciona esteja ela na raiz
