@@ -2302,23 +2302,35 @@ def _rel_do_conteudo(c):
     """Peças e valor de um orçamento, separados em sublimação x personalizado.
 
        Um LAYOUT inteiro cai de um lado só: se tiver a tag de sublimação no
-       Design, tudo dele é sublimação; senão, tudo é personalizado. É a regra
-       que o Henrique definiu — a técnica é do layout, não da peça."""
+       Design, tudo dele é sublimação; senão, tudo é personalizado. A técnica
+       é do layout, não da peça.
+
+       Devolve também os layouts MISTOS — os que têm a tag de sublimação junto
+       com outra (DTF, patch, silk, bordado, etiqueta). Pela regra eles entram
+       inteiros em sublimação, mas parte do trabalho ali é de outra técnica:
+       o relatório marca esses valores em vermelho para que a conta não passe
+       por exata sem ser."""
     sp = sv = pp = pv = 0.0
+    mistos = []
     for l in (c.get("layouts") or []):
-        tags = {str(t.get("tag", "")).strip().lower()
-                for t in (l.get("design") or [])}
+        tags = {str(t.get("tag", "")).strip()
+                for t in (l.get("design") or []) if str(t.get("tag", "")).strip()}
+        baixas = {t.lower() for t in tags}
         pcs = val = 0.0
         for _tam, g in (l.get("tamanhos") or {}).items():
             q = _rel_numero((g or {}).get("q"))
             u = _rel_numero((g or {}).get("u"))
             pcs += q
             val += q * u
-        if FT_TAG_SUBLI in tags:
+        if FT_TAG_SUBLI in baixas:
             sp += pcs; sv += val
+            if len(tags) > 1:
+                mistos.append({"ref": str(l.get("ref") or "").strip(),
+                               "tags": sorted(tags),
+                               "pecas": int(pcs), "valor": round(val, 2)})
         else:
             pp += pcs; pv += val
-    return sp, sv, pp, pv
+    return sp, sv, pp, pv, mistos
 
 
 def _rel_cliente_pedido(nome_arq, header):
@@ -2412,9 +2424,9 @@ async def ft_relatorio_lote(request: Request):
             continue
         header = c.get("header") or {}
         cli, ped = _rel_cliente_pedido(nome, header)
-        sp, sv, pp, pv = _rel_do_conteudo(c)
+        sp, sv, pp, pv, mistos = _rel_do_conteudo(c)
         itens.append({
-            "id": fid, "arquivo": nome,
+            "id": fid, "arquivo": nome, "mistos": mistos,
             "dia": int((a or {}).get("dia") or _orc_dia_mes_ano(nome)[0]),
             "cliente": cli, "pedido": ped,
             "vendedor": str(header.get("vendedor") or "").strip(),
@@ -2477,9 +2489,9 @@ def ft_relatorio(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
                 continue
             header = c.get("header") or {}
             cli, ped = _rel_cliente_pedido(f["name"], header)
-            sp, sv, pp, pv = _rel_do_conteudo(c)
+            sp, sv, pp, pv, mistos = _rel_do_conteudo(c)
             itens.append({
-                "id": f["id"], "arquivo": f["name"],
+                "id": f["id"], "arquivo": f["name"], "mistos": mistos,
                 "dia": d or _orc_dia_mes_ano(f["name"])[0],
                 "cliente": cli, "pedido": ped,
                 "vendedor": str(header.get("vendedor") or "").strip(),
