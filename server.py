@@ -2584,22 +2584,40 @@ async def ft_relatorio_guardar(request: Request):
            "geradoEm": h.isoformat(), "ano": ano, "mes": mes, "dia": dia,
            "itens": itens, "falhas": corpo.get("falhas") or []}
     nome = _rel_nome_arquivo(ano, mes, dia)
+    texto = json.dumps(doc, ensure_ascii=False)
+    fid, acao, via = None, "", ""
+
+    # 1) pela service account: só funciona se o arquivo JÁ existir. Ela pode
+    #    ATUALIZAR, mas não CRIAR — contas de serviço não têm cota própria de
+    #    armazenamento no Drive, e criar devolve 403.
     try:
         pid = _rel_pasta()
-        # bytes, não texto: é assim que _orc_sobe_arquivo monta o corpo do envio
-        texto = json.dumps(doc, ensure_ascii=False).encode("utf-8")
-        fid, acao = _orc_sobe_arquivo(nome, pid, texto)
-    except Exception as e:
-        # guardar é uma conveniência: se falhar, o relatório na tela continua
-        # valendo. Por isso devolve o aviso em vez de derrubar a geração.
-        detalhe = ""
+        existente = _orc_acha_arquivo(nome, pid)
+        if existente:
+            _orc_grava_por_id(existente, texto.encode("utf-8"))
+            fid, acao, via = existente, "atualizado", "service-account"
+    except Exception:
+        pass
+
+    # 2) senão, quem cria é o Apps Script: ele roda como dono da conta e tem
+    #    cota. É o mesmo plano B que os orçamentos já usam.
+    if not fid and FT_SCRIPT_ORCAMENTOS:
         try:
-            detalhe = e.read().decode("utf-8", "ignore")[:300]
-        except Exception:
-            pass
-        return {"ok": False, "aviso": "Não consegui guardar: %s" % str(e)[:160],
-                "detalhe": detalhe}
-    return {"ok": True, "id": fid, "acao": acao, "nome": nome, "geradoEm": doc["geradoEm"]}
+            r = _script_post({"acao": "salvar", "nome": nome, "conteudo": texto,
+                              "destino": "relatorio",
+                              "pastaRelatorios": FT_PASTA_RELATORIOS})
+            fid, acao, via = r.get("id"), "criado", "apps-script"
+        except Exception as e:
+            # guardar é conveniência: se falhar, o relatório na tela continua
+            # valendo. Por isso devolve o aviso em vez de derrubar a geração.
+            return {"ok": False, "aviso": "Não consegui guardar: %s" % str(e)[:160]}
+
+    if not fid:
+        return {"ok": False, "aviso": "Não consegui guardar: a conta de serviço não "
+                                      "tem cota para criar arquivos e o Apps Script "
+                                      "não está configurado."}
+    return {"ok": True, "id": fid, "acao": acao, "via": via,
+            "nome": nome, "geradoEm": doc["geradoEm"]}
 
 
 @app.get("/api/ft/relatorio-guardado")
