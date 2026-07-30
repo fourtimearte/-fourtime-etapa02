@@ -2586,7 +2586,8 @@ async def ft_relatorio_guardar(request: Request):
     nome = _rel_nome_arquivo(ano, mes, dia)
     try:
         pid = _rel_pasta()
-        texto = json.dumps(doc, ensure_ascii=False)
+        # bytes, não texto: é assim que _orc_sobe_arquivo monta o corpo do envio
+        texto = json.dumps(doc, ensure_ascii=False).encode("utf-8")
         fid, acao = _orc_sobe_arquivo(nome, pid, texto)
     except Exception as e:
         # guardar é uma conveniência: se falhar, o relatório na tela continua
