@@ -1513,6 +1513,44 @@ async def ft_salvar(request: Request):
                     detail="Falha na service account e no Apps Script: %s" % str(e2)[:300])
         raise HTTPException(status_code=500, detail="Erro ao salvar: %s" % str(e)[:300])
 
+def _nome_pasta(fid):
+    """Nome de uma pasta pelo id, com cache (a busca repete muito os mesmos)."""
+    chave = "@nome/" + fid
+    if chave in _orc_pastas_cache:
+        return _orc_pastas_cache[chave]
+    try:
+        nome = _drive_get("/files/" + fid,
+                          {"fields": "name", "supportsAllDrives": "true"}).get("name", "")
+    except Exception:
+        nome = ""
+    _orc_pastas_cache[chave] = nome
+    return nome
+
+
+def _caminho_do_arquivo(fid, prof=6):
+    """Onde este arquivo mora, em texto curto: 'Organizados › 2026 › JULHO'.
+       Sobe pelos pais até a raiz de orçamentos e devolve o trecho de dentro
+       dela — na busca é o que responde 'de que pasta é este arquivo?'."""
+    partes = []
+    atual = fid
+    for _ in range(prof):
+        p = _pai(atual)
+        if not p or p == FT_DRIVE_ORCAMENTOS:
+            break
+        partes.append(_nome_pasta(p))
+        atual = p
+    partes = [x for x in reversed(partes) if x]
+    if not partes:
+        return ""
+    # encurta o nome comprido da subpasta raiz para caber na coluna
+    partes[0] = (partes[0].replace("Orçamentos Organizados", "Organizados")
+                          .replace("Lixeira da Área de Trabalho", "Lixeira"))
+    # a pasta do mês já traz o ano no nome ("2026 - 07 - JULHO"): evita repetir
+    if len(partes) == 3 and partes[1] and partes[2].startswith(partes[1]):
+        partes = [partes[0], partes[2]]
+    return " › ".join(partes)
+
+
 @app.get("/api/ft/buscar")
 def ft_buscar(request: Request, q: str = "", pasta: str = ""):
     """Busca de orçamentos, com ESCOPO.
@@ -1552,7 +1590,8 @@ def ft_buscar(request: Request, q: str = "", pasta: str = ""):
             continue        # a service account enxerga outras pastas: só valem os orçamentos
         itens.append({"id": f["id"], "nome": f["name"],
                       "modificado": f.get("modifiedTime", ""),
-                      "tamanho": int(f.get("size") or 0)})
+                      "tamanho": int(f.get("size") or 0),
+                      "pasta": _caminho_do_arquivo(f["id"])})
         if len(itens) >= 30:
             break
     itens.sort(key=lambda a: a["modificado"], reverse=True)   # mais recentes primeiro
