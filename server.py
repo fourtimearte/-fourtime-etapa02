@@ -2033,38 +2033,97 @@ def _orc_dia_mais_recente_com_arquivos(voltar_meses=6):
     return None
 
 
-@app.get("/api/ft/vizinhos")
-def ft_vizinhos(request: Request, fid: str = ""):
-    """Os orçamentos que moram na MESMA pasta de um arquivo.
+def _caminho_da_pasta(pasta_id, prof=6):
+    """Caminho legível de uma pasta, a partir da raiz de orçamentos."""
+    if not pasta_id or pasta_id == FT_DRIVE_ORCAMENTOS:
+        return "Orçamentos"
+    partes, atual = [_nome_pasta(pasta_id)], pasta_id
+    for _ in range(prof):
+        p = _pai(atual)
+        if not p or p == FT_DRIVE_ORCAMENTOS:
+            break
+        partes.append(_nome_pasta(p))
+        atual = p
+    partes = [x for x in reversed(partes) if x]
+    if partes:
+        partes[0] = (partes[0].replace("Orçamentos Organizados", "Organizados")
+                              .replace("Lixeira da Área de Trabalho", "Lixeira"))
+    return " / ".join(partes) or "Orçamentos"
 
-       Com 'fid': a pasta daquele arquivo (é o caso de um documento aberto
-       do Drive). Sem 'fid': a pasta de dia mais recente que tenha arquivos —
-       assim a lista lateral serve também para um documento novo."""
+
+def _conteudo_da_pasta(pasta_id):
+    """Subpastas e orçamentos de uma pasta, já ordenados."""
+    r = _drive_get("/files", {
+        "q": "'%s' in parents and trashed = false" % pasta_id,
+        "orderBy": "folder,name desc", "pageSize": "200",
+        "fields": "files(id,name,mimeType,modifiedTime,size)",
+        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
+    pastas, arquivos = [], []
+    for f in r.get("files", []):
+        if f.get("mimeType") == "application/vnd.google-apps.folder":
+            pastas.append({"id": f["id"], "nome": f["name"]})
+        elif f["name"].lower().endswith(".ft"):
+            arquivos.append({"id": f["id"], "nome": f["name"],
+                             "modificado": f.get("modifiedTime", ""),
+                             "tamanho": int(f.get("size") or 0)})
+    pastas.sort(key=lambda p: p["nome"], reverse=True)      # mais recente em cima
+    arquivos.sort(key=lambda a: a["modificado"], reverse=True)
+    return pastas, arquivos
+
+
+@app.get("/api/ft/vizinhos")
+def ft_vizinhos(request: Request, fid: str = "", pasta: str = ""):
+    """O conteúdo de uma pasta de orçamentos, para a lista lateral.
+
+       'pasta': navega para essa pasta (é assim que se anda para frente e
+                para trás na caixa).
+       'fid'  : sem 'pasta', abre a pasta onde mora aquele arquivo.
+       nenhum : a pasta de dia mais recente que tenha arquivos, para que a
+                lista sirva também num documento novo.
+
+       Devolve também o 'paiId' — a pasta de cima — que é o caminho de volta.
+       Ele vem vazio na raiz, e aí a caixa esconde o botão de voltar."""
     exige_token(request)
     exige_orcamentos()
     fid = (fid or "").strip()
+    pasta = (pasta or "").strip()
+    pasta_id, caminho = None, ""
 
-    pasta_id, caminho, itens = None, "", []
-    if fid:
+    if pasta:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", pasta):
+            raise HTTPException(status_code=400, detail="ID de pasta inválido.")
+        if pasta != FT_DRIVE_ORCAMENTOS and not _orc_dentro(pasta):
+            raise HTTPException(status_code=403, detail="Pasta fora dos orçamentos.")
+        pasta_id = pasta
+    elif fid:
         if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
             raise HTTPException(status_code=400, detail="ID inválido.")
         if not _orc_dentro(fid):
             raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
         pasta_id = _pai(fid)
-        if pasta_id:
-            caminho = _caminho_do_arquivo(fid) or _nome_pasta(pasta_id)
-            itens = _orc_lista_ft(pasta_id, limite=60)
 
-    if not itens:
+    pastas, itens = [], []
+    if pasta_id:
+        pastas, itens = _conteudo_da_pasta(pasta_id)
+        caminho = _caminho_da_pasta(pasta_id)
+
+    # nada aberto (ou pasta vazia sem subpastas): cai no dia mais recente com arquivos
+    if not pasta and not pastas and not itens:
         achado = _orc_dia_mais_recente_com_arquivos()
         if achado:
-            pasta_id, caminho, itens = achado["id"], achado["caminho"], achado["itens"]
+            pasta_id = achado["id"]
+            pastas, itens = _conteudo_da_pasta(pasta_id)
+            caminho = _caminho_da_pasta(pasta_id)
 
-    lista = [{"id": f["id"], "nome": f["name"],
-              "modificado": f.get("modifiedTime", ""),
-              "tamanho": int(f.get("size") or 0)} for f in itens]
-    lista.sort(key=lambda a: a["modificado"], reverse=True)
-    return {"ok": True, "pasta": caminho, "pastaId": pasta_id or "", "itens": lista}
+    if not pasta_id:                       # nem isso: mostra a raiz
+        pasta_id = FT_DRIVE_ORCAMENTOS
+        pastas, itens = _conteudo_da_pasta(pasta_id)
+        caminho = "Orçamentos"
+
+    pai = "" if pasta_id == FT_DRIVE_ORCAMENTOS else (_pai(pasta_id) or "")
+    return {"ok": True, "pasta": caminho, "pastaId": pasta_id,
+            "paiId": pai, "raiz": pasta_id == FT_DRIVE_ORCAMENTOS,
+            "pastas": pastas, "itens": itens}
 
 
 # ------------- PWA (offline + instalável) -------------
