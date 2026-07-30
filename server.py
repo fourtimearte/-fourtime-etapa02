@@ -2280,6 +2280,159 @@ async def ft_padronizar_mes(request: Request):
     return {"ok": True, "mes": nome_mes, "feitos": feitos,
             "itens": plano, "falhas": falhas, "parados": parados}
 
+# --- Relatórios -----------------------------------------------------------
+# A tag do módulo Design que marca sublimação. Tudo o que não a tem cai em
+# "personalizado" — é a divisão que o relatório usa nas colunas.
+FT_TAG_SUBLI = "subli"
+
+
+def _rel_numero(x):
+    """'1.234,50' ou '1234.5' -> float. Campo vazio vira zero."""
+    s = str(x or "").strip()
+    if not s:
+        return 0.0
+    s = s.replace(".", "").replace(",", ".") if "," in s else s
+    try:
+        return float(s)
+    except Exception:
+        return 0.0
+
+
+def _rel_do_conteudo(c):
+    """Peças e valor de um orçamento, separados em sublimação x personalizado.
+
+       Um LAYOUT inteiro cai de um lado só: se tiver a tag de sublimação no
+       Design, tudo dele é sublimação; senão, tudo é personalizado. É a regra
+       que o Henrique definiu — a técnica é do layout, não da peça."""
+    sp = sv = pp = pv = 0.0
+    for l in (c.get("layouts") or []):
+        tags = {str(t.get("tag", "")).strip().lower()
+                for t in (l.get("design") or [])}
+        pcs = val = 0.0
+        for _tam, g in (l.get("tamanhos") or {}).items():
+            q = _rel_numero((g or {}).get("q"))
+            u = _rel_numero((g or {}).get("u"))
+            pcs += q
+            val += q * u
+        if FT_TAG_SUBLI in tags:
+            sp += pcs; sv += val
+        else:
+            pp += pcs; pv += val
+    return sp, sv, pp, pv
+
+
+def _rel_cliente_pedido(nome_arq, header):
+    """Cliente e pedido. O nome do arquivo manda (é o que foi padronizado);
+       o cabeçalho do documento entra como reserva."""
+    base = re.sub(r"\.ft$", "", nome_arq or "", flags=re.I)
+    base = re.sub(r"-v\d+$", "", base)
+    base = re.sub(r"-\d{6}$", "", base)
+    m = re.search(r"(PD\d{6})", base)
+    ped = m.group(1) if m else str((header or {}).get("pedido") or "").strip()
+    cli = base.replace("-" + ped, "").strip(" -") if m else base
+    if not cli:
+        cli = str((header or {}).get("cliente") or "").strip()
+    return cli, ped
+
+
+@app.get("/api/ft/relatorio")
+def ft_relatorio(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
+    """Os pedidos arquivados num período, já somados por técnica.
+
+       Sem 'dia', é o mês inteiro. A leitura é feita aqui e não no navegador
+       porque são dezenas de arquivos: uma resposta em vez de dezenas de
+       viagens."""
+    exige_token(request)
+    exige_editor_atual(request)          # relatório é coisa de administrador
+    exige_orcamentos()
+
+    h = datetime.now(timezone.utc)
+    ano = int(ano or h.year)
+    mes = int(mes or h.month)
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    if dia and not (1 <= dia <= 31):
+        raise HTTPException(status_code=400, detail="Dia inválido.")
+
+    try:
+        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
+        nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
+        pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
+        pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Não consegui abrir a pasta: %s" % str(e)[:200])
+    if not pid_mes:
+        return {"ok": True, "ano": ano, "mes": mes, "dia": dia,
+                "mesNome": _orc_nome_pasta_mes(ano, mes), "itens": [],
+                "aviso": "Nenhum orçamento arquivado neste mês."}
+
+    # que pastas ler: um dia só, ou o mês inteiro (mais os soltos nele)
+    fontes = []
+    for sub in _orc_subpastas(pid_mes):
+        d = _orc_dia_da_pasta(sub["name"])
+        if d and (not dia or d == dia):
+            fontes.append((d, sub["id"]))
+    if not dia:
+        fontes.append((0, pid_mes))       # o que estiver solto no mês
+
+    itens, falhas = [], []
+    for d, pid in fontes:
+        for f in _orc_lista_ft(pid, limite=400):
+            try:
+                bruto, _ = _drive_get("/files/" + f["id"],
+                                      {"alt": "media", "supportsAllDrives": "true"},
+                                      binario=True)
+                c = json.loads(bruto.decode("utf-8"))
+            except Exception as e:
+                falhas.append({"nome": f["name"], "erro": str(e)[:120]})
+                continue
+            header = c.get("header") or {}
+            cli, ped = _rel_cliente_pedido(f["name"], header)
+            sp, sv, pp, pv = _rel_do_conteudo(c)
+            itens.append({
+                "id": f["id"], "arquivo": f["name"],
+                "dia": d or _orc_dia_mes_ano(f["name"])[0],
+                "cliente": cli, "pedido": ped,
+                "vendedor": str(header.get("vendedor") or "").strip(),
+                "subPecas": int(sp), "subValor": round(sv, 2),
+                "perPecas": int(pp), "perValor": round(pv, 2),
+            })
+    itens.sort(key=lambda x: (x["dia"], x["cliente"].upper()))
+    return {"ok": True, "ano": ano, "mes": mes, "dia": dia,
+            "mesNome": _orc_nome_pasta_mes(ano, mes),
+            "itens": itens, "falhas": falhas}
+
+
+@app.get("/api/ft/relatorio-periodos")
+def ft_relatorio_periodos(request: Request, ano: int = 0, mes: int = 0):
+    """Que anos, meses e dias existem — para preencher os seletores sem chute."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
+    except Exception:
+        return {"ok": True, "anos": [], "meses": [], "dias": []}
+    anos = sorted((p["name"] for p in _orc_subpastas(raiz_org)
+                   if re.fullmatch(r"\d{4}", p["name"])), reverse=True)
+    meses, dias = [], []
+    if ano:
+        pid_ano = _drive_acha_pasta(str(ano), raiz_org)
+        if pid_ano:
+            for p in _orc_subpastas(pid_ano):
+                m = re.match(r"^\d{4}\s*-\s*(\d{2})\s*-", p["name"])
+                if m:
+                    meses.append(int(m.group(1)))
+            meses = sorted(set(meses), reverse=True)
+            if mes:
+                pid_mes = _drive_acha_pasta(_orc_nome_pasta_mes(ano, mes), pid_ano)
+                if pid_mes:
+                    dias = sorted({_orc_dia_da_pasta(p["name"])
+                                   for p in _orc_subpastas(pid_mes)
+                                   if _orc_dia_da_pasta(p["name"])}, reverse=True)
+    return {"ok": True, "anos": [int(a) for a in anos], "meses": meses, "dias": dias}
+
+
 # ------------- PWA (offline + instalável) -------------
 def _acha_pwa_dir():
     """Procura a pasta 'pwa' em locais comuns. Funciona esteja ela na raiz
