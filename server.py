@@ -1694,6 +1694,10 @@ def ft_listar(request: Request, pasta: str = ""):
     pastas, arquivos = [], []
     for f in r.get("files", []):
         if f.get("mimeType") == "application/vnd.google-apps.folder":
+            # a pasta dos relatórios é de serviço: o editor escreve nela, mas
+            # ela não aparece em Abrir nem na caixa lateral
+            if f["name"] == FT_PASTA_RELATORIOS:
+                continue
             pastas.append({"id": f["id"], "nome": f["name"]})
         elif f["name"].lower().endswith(".ft"):
             arquivos.append({"id": f["id"], "nome": f["name"],
@@ -2064,6 +2068,10 @@ def _conteudo_da_pasta(pasta_id):
     pastas, arquivos = [], []
     for f in r.get("files", []):
         if f.get("mimeType") == "application/vnd.google-apps.folder":
+            # a pasta dos relatórios é de serviço: o editor escreve nela, mas
+            # ela não aparece em Abrir nem na caixa lateral
+            if f["name"] == FT_PASTA_RELATORIOS:
+                continue
             pastas.append({"id": f["id"], "nome": f["name"]})
         elif f["name"].lower().endswith(".ft"):
             arquivos.append({"id": f["id"], "nome": f["name"],
@@ -2532,6 +2540,91 @@ def ft_relatorio_periodos(request: Request, ano: int = 0, mes: int = 0):
                                    for p in _orc_subpastas(pid_mes)
                                    if _orc_dia_da_pasta(p["name"])}, reverse=True)
     return {"ok": True, "anos": [int(a) for a in anos], "meses": meses, "dias": dias}
+
+
+# Pasta onde os relatórios gerados ficam guardados. Fica ao lado das outras
+# na raiz de orçamentos, mas NÃO aparece na navegação do editor: quem escreve
+# nela é só o próprio relatório, e abrir um .ftr como se fosse orçamento não
+# faria sentido nenhum.
+FT_PASTA_RELATORIOS = "Relatórios gerados"
+
+
+def _rel_pasta():
+    """A pasta dos relatórios, criada na primeira vez que for preciso."""
+    return _orc_subpasta_raiz(FT_PASTA_RELATORIOS)
+
+
+def _rel_nome_arquivo(ano, mes, dia=0):
+    """Um arquivo por período. Gerar de novo sobrescreve o mesmo arquivo,
+       então nunca há dois relatórios do mesmo mês para escolher."""
+    return ("%04d-%02d-%02d.ftr" % (ano, mes, dia)) if dia else ("%04d-%02d.ftr" % (ano, mes))
+
+
+@app.post("/api/ft/relatorio-guardar")
+async def ft_relatorio_guardar(request: Request):
+    """Guarda o relatório recém-gerado, para não ser preciso refazê-lo."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    h = datetime.now(timezone.utc)
+    ano = int(corpo.get("ano") or h.year)
+    mes = int(corpo.get("mes") or h.month)
+    dia = int(corpo.get("dia") or 0)
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    itens = corpo.get("itens")
+    if not isinstance(itens, list):
+        raise HTTPException(status_code=400, detail="Relatório sem itens.")
+
+    doc = {"_formato": "fourtime-relatorio", "_versao": 1,
+           "geradoEm": h.isoformat(), "ano": ano, "mes": mes, "dia": dia,
+           "itens": itens, "falhas": corpo.get("falhas") or []}
+    nome = _rel_nome_arquivo(ano, mes, dia)
+    try:
+        pid = _rel_pasta()
+        texto = json.dumps(doc, ensure_ascii=False)
+        fid, acao = _orc_sobe_arquivo(nome, pid, texto)
+    except Exception as e:
+        # guardar é uma conveniência: se falhar, o relatório na tela continua
+        # valendo. Por isso devolve o aviso em vez de derrubar a geração.
+        return {"ok": False, "aviso": "Não consegui guardar: %s" % str(e)[:160]}
+    return {"ok": True, "id": fid, "acao": acao, "nome": nome, "geradoEm": doc["geradoEm"]}
+
+
+@app.get("/api/ft/relatorio-guardado")
+def ft_relatorio_guardado(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
+    """O último relatório guardado de um período, se houver."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    h = datetime.now(timezone.utc)
+    ano = int(ano or h.year)
+    mes = int(mes or h.month)
+    dia = int(dia or 0)
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    nome = _rel_nome_arquivo(ano, mes, dia)
+    try:
+        pid = _rel_pasta()
+        achados = _drive_get("/files", {
+            "q": ("'%s' in parents and trashed = false and name = '%s'"
+                  % (pid, nome.replace("'", "\\'"))),
+            "fields": "files(id,name,modifiedTime)", "pageSize": "5",
+            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"}).get("files", [])
+        if not achados:
+            return {"ok": True, "existe": False}
+        bruto, _ = _drive_get("/files/" + achados[0]["id"],
+                              {"alt": "media", "supportsAllDrives": "true"}, binario=True)
+        doc = json.loads(bruto.decode("utf-8"))
+    except Exception as e:
+        return {"ok": True, "existe": False, "aviso": str(e)[:160]}
+    doc["existe"] = True
+    doc["ok"] = True
+    return doc
 
 
 # ------------- PWA (offline + instalável) -------------
