@@ -2592,7 +2592,13 @@ async def ft_relatorio_guardar(request: Request):
     except Exception as e:
         # guardar é uma conveniência: se falhar, o relatório na tela continua
         # valendo. Por isso devolve o aviso em vez de derrubar a geração.
-        return {"ok": False, "aviso": "Não consegui guardar: %s" % str(e)[:160]}
+        detalhe = ""
+        try:
+            detalhe = e.read().decode("utf-8", "ignore")[:300]
+        except Exception:
+            pass
+        return {"ok": False, "aviso": "Não consegui guardar: %s" % str(e)[:160],
+                "detalhe": detalhe}
     return {"ok": True, "id": fid, "acao": acao, "nome": nome, "geradoEm": doc["geradoEm"]}
 
 
