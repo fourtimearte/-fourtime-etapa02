@@ -2335,6 +2335,95 @@ def _rel_cliente_pedido(nome_arq, header):
     return cli, ped
 
 
+def _rel_fontes(ano, mes, dia):
+    """As pastas a percorrer e os arquivos que há nelas. Só listagem: não abre
+       nenhum arquivo, por isso é rápido."""
+    raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
+    nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
+    pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
+    pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
+    if not pid_mes:
+        return None, []
+    achados = []
+    for sub in _orc_subpastas(pid_mes):
+        d = _orc_dia_da_pasta(sub["name"])
+        if d and (not dia or d == dia):
+            for f in _orc_lista_ft(sub["id"], limite=400):
+                achados.append({"id": f["id"], "nome": f["name"], "dia": d})
+    if not dia:
+        for f in _orc_lista_ft(pid_mes, limite=400):
+            achados.append({"id": f["id"], "nome": f["name"],
+                            "dia": _orc_dia_mes_ano(f["name"])[0]})
+    return pid_mes, achados
+
+
+@app.get("/api/ft/relatorio-lista")
+def ft_relatorio_lista(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
+    """Só QUAIS arquivos entram no relatório, sem abrir nenhum.
+
+       É o primeiro passo do carregamento em lotes: com esta lista o editor
+       sabe quantos são e pode mostrar um progresso verdadeiro, em vez de um
+       'aguarde' sem fim."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    h = datetime.now(timezone.utc)
+    ano = int(ano or h.year); mes = int(mes or h.month)
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    try:
+        _pid, achados = _rel_fontes(ano, mes, dia)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Não consegui abrir a pasta: %s" % str(e)[:200])
+    return {"ok": True, "ano": ano, "mes": mes, "dia": dia,
+            "mesNome": _orc_nome_pasta_mes(ano, mes),
+            "total": len(achados), "arquivos": achados}
+
+
+@app.post("/api/ft/relatorio-lote")
+async def ft_relatorio_lote(request: Request):
+    """Lê um punhado de orçamentos e devolve as linhas deles.
+
+       O editor chama isto várias vezes, um lote de cada vez, e vai somando —
+       assim a barra de progresso anda de verdade a cada resposta."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    pedidos = corpo.get("arquivos") or []
+    if not isinstance(pedidos, list) or len(pedidos) > 40:
+        raise HTTPException(status_code=400, detail="Lote inválido.")
+    itens, falhas = [], []
+    for a in pedidos:
+        fid = str((a or {}).get("id") or "")
+        nome = str((a or {}).get("nome") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
+            continue
+        try:
+            bruto, _ = _drive_get("/files/" + fid,
+                                  {"alt": "media", "supportsAllDrives": "true"},
+                                  binario=True)
+            c = json.loads(bruto.decode("utf-8"))
+        except Exception as e:
+            falhas.append({"nome": nome, "erro": str(e)[:120]})
+            continue
+        header = c.get("header") or {}
+        cli, ped = _rel_cliente_pedido(nome, header)
+        sp, sv, pp, pv = _rel_do_conteudo(c)
+        itens.append({
+            "id": fid, "arquivo": nome,
+            "dia": int((a or {}).get("dia") or _orc_dia_mes_ano(nome)[0]),
+            "cliente": cli, "pedido": ped,
+            "vendedor": str(header.get("vendedor") or "").strip(),
+            "subPecas": int(sp), "subValor": round(sv, 2),
+            "perPecas": int(pp), "perValor": round(pv, 2),
+        })
+    return {"ok": True, "itens": itens, "falhas": falhas}
+
+
 @app.get("/api/ft/relatorio")
 def ft_relatorio(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
     """Os pedidos arquivados num período, já somados por técnica.
