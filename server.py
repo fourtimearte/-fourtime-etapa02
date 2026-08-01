@@ -2525,6 +2525,13 @@ def ft_relatorio_periodos(request: Request, ano: int = 0, mes: int = 0):
     anos = sorted((p["name"] for p in _orc_subpastas(raiz_org)
                    if re.fullmatch(r"\d{4}", p["name"])), reverse=True)
     meses, dias = [], []
+    # Sem ano informado, assume o mais recente que EXISTE. Antes devolvia lista
+    # de meses vazia, e o editor — que na primeira chamada ainda não tem ano
+    # escolhido — caía no mês corrente. No dia 1º de agosto isso escondia o
+    # relatório de julho: o seletor mostrava "Agosto" e não havia como chegar
+    # em julho.
+    if not ano and anos:
+        ano = int(anos[0])
     if ano:
         pid_ano = _drive_acha_pasta(str(ano), raiz_org)
         if pid_ano:
@@ -2539,7 +2546,8 @@ def ft_relatorio_periodos(request: Request, ano: int = 0, mes: int = 0):
                     dias = sorted({_orc_dia_da_pasta(p["name"])
                                    for p in _orc_subpastas(pid_mes)
                                    if _orc_dia_da_pasta(p["name"])}, reverse=True)
-    return {"ok": True, "anos": [int(a) for a in anos], "meses": meses, "dias": dias}
+    return {"ok": True, "anos": [int(a) for a in anos], "meses": meses,
+            "dias": dias, "ano": ano}
 
 
 # Pasta onde os relatórios gerados ficam guardados. Fica ao lado das outras
