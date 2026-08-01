@@ -2525,11 +2525,7 @@ def ft_relatorio_periodos(request: Request, ano: int = 0, mes: int = 0):
     anos = sorted((p["name"] for p in _orc_subpastas(raiz_org)
                    if re.fullmatch(r"\d{4}", p["name"])), reverse=True)
     meses, dias = [], []
-    # Sem ano informado, assume o mais recente que EXISTE. Antes devolvia lista
-    # de meses vazia, e o editor — que na primeira chamada ainda não tem ano
-    # escolhido — caía no mês corrente. No dia 1º de agosto isso escondia o
-    # relatório de julho: o seletor mostrava "Agosto" e não havia como chegar
-    # em julho.
+    # Sem ano informado, assume o mais recente que existe.
     if not ano and anos:
         ano = int(anos[0])
     if ano:
@@ -2546,8 +2542,17 @@ def ft_relatorio_periodos(request: Request, ano: int = 0, mes: int = 0):
                     dias = sorted({_orc_dia_da_pasta(p["name"])
                                    for p in _orc_subpastas(pid_mes)
                                    if _orc_dia_da_pasta(p["name"])}, reverse=True)
-    return {"ok": True, "anos": [int(a) for a in anos], "meses": meses,
-            "dias": dias, "ano": ano}
+    # O ANO CORRENTE entra na lista mesmo sem pasta: em 1º de janeiro ainda não
+    # há nada arquivado, e sem o ano na lista não haveria como gerar o primeiro
+    # relatório do ano.
+    lista_anos = sorted({int(a) for a in anos} | {datetime.now().year}, reverse=True)
+
+    # "meses" diz quais têm MOVIMENTO — é o que o editor usa para marcar a lista.
+    # A escolha em si não se limita a eles: um mês sem pasta é um mês sem
+    # orçamentos arquivados, e o usuário precisa poder selecioná-lo para gerar
+    # o relatório (que virá vazio, o que é a resposta correta).
+    return {"ok": True, "anos": lista_anos, "meses": meses,
+            "dias": dias, "ano": ano, "comMovimento": meses}
 
 
 # Pasta onde os relatórios gerados ficam guardados. Fica ao lado das outras
