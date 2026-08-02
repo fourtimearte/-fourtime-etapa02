@@ -16,7 +16,7 @@
 #  Se existir um arquivo editor*.html na mesma pasta, ele é
 #  servido em "/" — editor completamente online.
 # ============================================================
-import os, re, json, glob, sqlite3, threading, hashlib, uuid
+import os, re, json, glob, sqlite3, threading, hashlib, uuid, copy
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -288,6 +288,61 @@ def mescla_listas(base, novos):
 
 LAPIDES = "_removidos"   # não é categoria do banco: não aparece na tela
 
+def aplica_renomeacoes(banco, renomeacoes, lapides=None):
+    """Renomear um cadastro sem criar um sósia. (v3.262)
+
+    A identidade do cliente é o NOME (ver a decisão da v3.258), e isso tem um
+    preço que só apareceu agora: trocar o nome equivale a apagar um cadastro e
+    criar outro. Medido antes de escrever isto:
+
+        no servidor       ASSOCIACAO EDUCACIONAL MODELO LTDA
+        o editor enviou   ESCOLA MODELO
+        ficou             os DOIS, com o mesmo uuid em ambos
+
+    Ninguém tinha esbarrado nisso porque quase ninguém renomeava. A separação
+    entre Nome e Razão Social muda isso: a razão social entra pela Receita e o
+    vendedor troca pelo apelido que usa — renomear vira rotina.
+
+    A saída é a mesma das limpezas: o editor DECLARA a intenção, junto com o
+    uuid do cadastro, e o servidor renomeia quem já existe em vez de deduzir
+    pelo nome que chegou.
+
+        {"clientes": {"<uuid>": "ESCOLA MODELO"}}
+
+    Roda ANTES da mesclagem, sobre a base: assim, quando o item enviado chegar
+    com o nome novo, ele encontra o cadastro já renomeado e os dois viram um.
+
+    Se o nome novo tiver lápide (alguém apagou um cadastro com esse nome antes),
+    a lápide é removida — renomear é uma declaração explícita de que este
+    cadastro deve existir com este nome, e ela vence um enterro antigo.
+    """
+    trocados = 0
+    for cat, por_item in (renomeacoes or {}).items():
+        itens = banco.get(cat)
+        if not isinstance(itens, list) or not isinstance(por_item, dict):
+            continue
+        for it in itens:
+            if not isinstance(it, dict):
+                continue
+            novo = por_item.get(str(it.get("id", "")).strip())
+            if not isinstance(novo, str):
+                continue
+            novo = novo.strip()
+            # esvaziar o nome tornaria o cadastro inalcançável para todo
+            # orçamento que aponta para ele: não é renomeação, é destruição
+            if not novo or novo == str(it.get("n", "")).strip():
+                continue
+            it["n"] = novo
+            trocados += 1
+            if isinstance(lapides, dict):
+                enterrados = lapides.get(cat)
+                if isinstance(enterrados, dict):
+                    enterrados.pop(novo.upper(), None)
+                    if not enterrados:
+                        lapides.pop(cat, None)
+    return trocados
+
+
 def aplica_limpezas(banco, limpezas):
     """Esvazia campos que alguém apagou DE PROPÓSITO. (v3.259+, servidor da v261)
 
@@ -338,12 +393,20 @@ def aplica_limpezas(banco, limpezas):
     return contados
 
 
-def mescla_banco(base, novo, remocoes=None, admin=False, limpezas=None):
+def mescla_banco(base, novo, remocoes=None, admin=False, limpezas=None, renomeacoes=None):
     """Une base + novo. Itens com LÁPIDE não voltam — é isso que impede um
        navegador com banco velho de ressuscitar o que já foi apagado."""
     base = base or {}
     novo = novo or {}
-    lapides = dict(base.get(LAPIDES) or {})
+    lapides = {k: dict(v) for k, v in (base.get(LAPIDES) or {}).items()
+               if isinstance(v, dict)}
+
+    # ANTES de tudo: quem foi renomeado passa a se chamar assim já na base, de
+    # modo que o item que chega com o nome novo reencontre o seu cadastro em
+    # vez de virar um segundo. Ver aplica_renomeacoes.
+    if renomeacoes:
+        base = copy.deepcopy(base)
+        aplica_renomeacoes(base, renomeacoes, lapides)
 
     # o admin, ao ACRESCENTAR um item que estava enterrado, o desenterra
     if admin:
@@ -494,6 +557,8 @@ async def gravar_db(request: Request):
     # e, ao contrário de apagar um item, só chega aqui por ação explícita na
     # tela, nunca por um banco velho "achando" que o campo está vazio.
     limpezas = corpo.get("limpezas") or {}
+    # trocas de nome declaradas (ver aplica_renomeacoes)
+    renomeacoes = corpo.get("renomeacoes") or {}
     if remocoes and not eh_admin(request):
         raise HTTPException(status_code=403, detail=(
             "Só o administrador pode apagar ou renomear itens do banco. "
@@ -508,7 +573,7 @@ async def gravar_db(request: Request):
             atual = c.execute("SELECT rev,data FROM banco WHERE id=1").fetchone()
             base = json.loads(atual["data"])
             junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin,
-                                 limpezas=limpezas)
+                                 limpezas=limpezas, renomeacoes=renomeacoes)
             if not forcar:
                 cresceu = _inchou(base, junto)
                 if cresceu:
@@ -530,7 +595,7 @@ async def gravar_db(request: Request):
         # MESCLAGEM: ninguém apaga por omissão. A revisão do cliente já não
         # precisa bater — o merge resolve concorrência sem descartar trabalho.
         junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin,
-                             limpezas=limpezas)
+                             limpezas=limpezas, renomeacoes=renomeacoes)
 
         if not forcar:
             cresceu = _inchou(base, junto)
