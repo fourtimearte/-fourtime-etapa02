@@ -288,7 +288,57 @@ def mescla_listas(base, novos):
 
 LAPIDES = "_removidos"   # não é categoria do banco: não aparece na tela
 
-def mescla_banco(base, novo, remocoes=None, admin=False):
+def aplica_limpezas(banco, limpezas):
+    """Esvazia campos que alguém apagou DE PROPÓSITO. (v3.259+, servidor da v261)
+
+    A regra de mesclagem é "campo preenchido vence campo vazio", e ela tem de
+    continuar sendo — é o que impede um navegador com o banco velho de apagar
+    o trabalho dos outros por omissão. Mas ela confundia duas coisas:
+
+        "eu não tenho esse dado"             → ignorar o vazio, e ainda bem
+        "eu apaguei esse dado de propósito"  → tinha de valer, e não valia
+
+    Quem limpou um campo via a tela ficar em branco e o valor velho voltar na
+    sincronização seguinte. Sem aviso nenhum.
+
+    Agora o editor DECLARA o que esvaziou, e a declaração chega aqui:
+
+        {"clientes": {"<uuid do cliente>": ["rua", "zap", "fone"]}}
+
+    O cadastro é encontrado pelo `id` — este é o primeiro uso de verdade do
+    uuid estável: pelo nome não daria, porque quem renomeia e limpa na mesma
+    edição mandaria a limpeza para o cadastro errado.
+
+    LIMITE CONHECIDO: uma máquina que esteja há muito tempo sem sincronizar
+    ainda tem o valor antigo preenchido e vai reenviá-lo, ressuscitando o
+    campo. Os editores conferem a revisão a cada 5 segundos, então a janela é
+    curta — mas não é zero. Se isso virar problema de verdade, o conserto é
+    lápide por campo, como já existe para item apagado.
+    """
+    contados = 0
+    for cat, por_item in (limpezas or {}).items():
+        itens = banco.get(cat)
+        if not isinstance(itens, list) or not isinstance(por_item, dict):
+            continue
+        for it in itens:
+            if not isinstance(it, dict):
+                continue
+            campos = por_item.get(str(it.get("id", "")).strip())
+            if not isinstance(campos, list):
+                continue
+            for campo in campos:
+                campo = str(campo)
+                # o nome é a identidade do cadastro: esvaziá-lo o tornaria
+                # inalcançável para todo orçamento que aponta para ele
+                if campo in ("id", "n") or campo not in it:
+                    continue
+                if it.get(campo) not in (None, "", []):
+                    it[campo] = ""
+                    contados += 1
+    return contados
+
+
+def mescla_banco(base, novo, remocoes=None, admin=False, limpezas=None):
     """Une base + novo. Itens com LÁPIDE não voltam — é isso que impede um
        navegador com banco velho de ressuscitar o que já foi apagado."""
     base = base or {}
@@ -331,6 +381,10 @@ def mescla_banco(base, novo, remocoes=None, admin=False):
 
     if lapides:
         saida[LAPIDES] = lapides
+
+    # depois da união de campos, e só depois: o que foi apagado de propósito
+    # tem de vencer o que a mesclagem acabou de preservar
+    aplica_limpezas(saida, limpezas)
 
     # último passo, sempre: quem entrou sem identidade sai com uma. Fica aqui
     # (e não nas rotas) para valer em TODOS os caminhos de gravação — Drive,
@@ -435,6 +489,11 @@ async def gravar_db(request: Request):
         raise HTTPException(status_code=400, detail="Campo 'data' inválido")
 
     remocoes = corpo.get("remocoes") or {}
+    # campos esvaziados de propósito (ver aplica_limpezas). Não exige admin:
+    # limpar um campo é edição normal, que qualquer vendedor já pode fazer —
+    # e, ao contrário de apagar um item, só chega aqui por ação explícita na
+    # tela, nunca por um banco velho "achando" que o campo está vazio.
+    limpezas = corpo.get("limpezas") or {}
     if remocoes and not eh_admin(request):
         raise HTTPException(status_code=403, detail=(
             "Só o administrador pode apagar ou renomear itens do banco. "
@@ -448,7 +507,8 @@ async def gravar_db(request: Request):
         with _lock, conn() as c:
             atual = c.execute("SELECT rev,data FROM banco WHERE id=1").fetchone()
             base = json.loads(atual["data"])
-            junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin)
+            junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin,
+                                 limpezas=limpezas)
             if not forcar:
                 cresceu = _inchou(base, junto)
                 if cresceu:
@@ -469,7 +529,8 @@ async def gravar_db(request: Request):
 
         # MESCLAGEM: ninguém apaga por omissão. A revisão do cliente já não
         # precisa bater — o merge resolve concorrência sem descartar trabalho.
-        junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin)
+        junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin,
+                             limpezas=limpezas)
 
         if not forcar:
             cresceu = _inchou(base, junto)
