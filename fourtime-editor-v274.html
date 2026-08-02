@@ -2802,7 +2802,7 @@
      ================================================================ */
   .ft-status-fundo{
     position:fixed;inset:0;z-index:9800;
-    background:rgba(12,14,17,.55);
+    background:var(--ft-veu);        /* kit §15, igual aos outros modais */
     display:flex;align-items:center;justify-content:center;padding:24px;
     opacity:0;visibility:hidden;pointer-events:none;
     transition:opacity var(--mov-medio,200ms) var(--mov-suave,ease),
@@ -2812,8 +2812,8 @@
     transition:opacity var(--mov-medio,200ms) var(--mov-suave,ease);}
   .ft-status-cx{
     background:var(--ft-superficie);border:1px solid var(--ft-borda);
-    border-radius:16px;padding:26px 30px;min-width:280px;max-width:420px;
-    box-shadow:0 20px 56px rgba(12,14,17,.32);
+    border-radius:var(--ft-modal-raio);padding:26px 30px;min-width:280px;max-width:420px;
+    box-shadow:var(--ft-sh-4);                                  /* kit §15 */
     display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;
     transform:translateY(10px) scale(.985);
     transition:transform var(--mov-medio,200ms) var(--mov-mola,ease);
@@ -2826,14 +2826,27 @@
     border:3px solid var(--ft-borda);border-top-color:var(--ft-vermelho);
     animation:ft-spin .7s linear infinite;}
   .ft-status-cx.ok    .ft-status-icone svg{stroke:#17A34A;}
-  .ft-status-cx.erro  .ft-status-icone svg{stroke:var(--ft-vermelho);}
+  /* a cor do traço vinha SÓ de .erro: em pergunta() o ícone existia e era
+     desenhado sem cor nenhuma — invisível. Visto na foto, não no código. */
+  .ft-status-cx.erro     .ft-status-icone svg,
+  .ft-status-cx.pergunta .ft-status-icone svg{stroke:var(--ft-vermelho);}
   .ft-status-titulo{font-size:16px;font-weight:700;color:var(--ft-preto);line-height:1.3;}
   .ft-status-msg{font-size:13px;color:var(--ft-cinza-70);line-height:1.5;white-space:pre-line;}
-  .ft-status-ok{margin-top:6px;padding:9px 26px;border:none;border-radius:9px;
+  .ft-status-acoes{display:flex;align-items:center;gap:8px;margin-top:6px;}
+  .ft-status-ok{padding:0 26px;height:var(--ft-ctrl-h);border:none;border-radius:8px;
     background:var(--ft-vermelho);color:#fff;font:600 13px var(--ft-fonte-ui);cursor:pointer;
-    transition:filter .12s;}
-  .ft-status-ok:hover{filter:brightness(1.06);}
-  .ft-status-ok:active{transform:scale(.97);}
+    transition:background var(--mov-rapido) var(--mov-suave);}
+  .ft-status-ok:hover{background:#A81015;}          /* kit --primary-hover */
+  .ft-status-ok:active{animation:a-pressionar .28s var(--mov-suave) both;}
+  .ft-status-ok:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ft-anel);}
+  /* o "Cancelar" é secundário do kit §07 e só aparece em pergunta() */
+  .ft-status-nao{display:none;padding:0 20px;}
+  .ft-status-cx.pergunta .ft-status-nao{display:inline-flex;}
+  /* pergunta destrutiva: o OK confirma uma PERDA, então some o vermelho de
+     ação e ele vira secundário — quem fica em evidência é "Cancelar". */
+  .ft-status-cx.perigo .ft-status-ok{background:var(--ft-superficie);
+    color:var(--ft-vermelho);border:1px solid var(--ft-vermelho);}
+  .ft-status-cx.perigo .ft-status-ok:hover{background:var(--ft-vermelho-suave);}
   @media print{ .ft-status-fundo{display:none !important;} }
   /* arrastar .ft sobre o editor (v171) */
   .ft-drop-ft{position:fixed;inset:0;z-index:9750;display:none;align-items:center;justify-content:center;
@@ -4697,7 +4710,13 @@
     <div class="ft-status-icone" id="ftStatusIcone"></div>
     <div class="ft-status-titulo" id="ftStatusTitulo"></div>
     <div class="ft-status-msg" id="ftStatusMsg"></div>
-    <button class="ft-status-ok" id="ftStatusOk">OK</button>
+    <!-- v3.274: a linha de botões atende os três casos — só OK (erro),
+         OK + Cancelar (pergunta). O #ftStatusOk continua com o mesmo id
+         porque ftStatus.erro() o usa desde a v170. -->
+    <div class="ft-status-acoes">
+      <button class="ft-btn ft-btn-secundario ft-status-nao" id="ftStatusNao">Cancelar</button>
+      <button class="ft-status-ok" id="ftStatusOk">OK</button>
+    </div>
   </div>
 </div>
 
@@ -6056,11 +6075,15 @@ function ftVersaoMaior(a,b){
 (function ligaBotaoRecarregar(){
   const b=document.getElementById('ftAvisoRecarregar');
   if(!b)return;
-  b.onclick=()=>{
+  b.onclick=async()=>{
     if(FT_DOC_SUJO){
-      if(!confirm('ATENÇÃO: você tem um orçamento aberto com alterações.\n\n'
-                 +'Recarregar vai FECHAR o documento e o trabalho não salvo se perde.\n\n'
-                 +'Salve o .ft antes. Quer recarregar mesmo assim?'))return;
+      /* era confirm() nativo (v3.274) */
+      const ok=await ftStatus.pergunta('Recarregar sem salvar?',
+        'Você tem um orçamento aberto com alterações.\n'
+       +'Recarregar vai FECHAR o documento e o trabalho não salvo se perde.\n\n'
+       +'Salve o .ft antes.',
+        {ok:'Recarregar mesmo assim'});
+      if(!ok)return;
     }
     ftRecarregaPagina();
   };
@@ -7698,6 +7721,10 @@ window.toast=toast;
    ================================================================ */
 const _IC_STATUS_OK='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12.5l2.5 2.5L16 9"/></svg>';
 const _IC_STATUS_ERRO='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>';
+/* pergunta e aviso NÃO usam o X: um X vermelho quer dizer "deu errado", e
+   "quer fechar mesmo assim?" não é um erro — é um alerta. Triângulo do
+   Lucide (o mesmo ícone `alert` do kit). */
+const _IC_STATUS_ALERTA='<svg viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>';
 /* ================================================================
    TOAST — aviso discreto de mudança (v3.263)
 
@@ -7775,7 +7802,11 @@ const ftToast=(function(){
 window.ftToast=ftToast;
 
 const ftStatus=(function(){
-  let fundo,cx,icone,titulo,msg,btnOk,fechaT=null;
+  let fundo,cx,icone,titulo,msg,btnOk,btnNao,fechaT=null;
+  /* resposta pendente de pergunta(): resolve(true/false). Fica aqui fora
+     porque quem responde pode ser o botão, o Esc ou o clique no véu. */
+  let responde=null;
+  function decide(v){ const r=responde; responde=null; if(r)r(v); }
   function els(){
     if(fundo)return;
     fundo=document.getElementById('ftStatusFundo');
@@ -7784,10 +7815,20 @@ const ftStatus=(function(){
     titulo=document.getElementById('ftStatusTitulo');
     msg=document.getElementById('ftStatusMsg');
     btnOk=document.getElementById('ftStatusOk');
-    btnOk.addEventListener('click',fecha);
-    fundo.addEventListener('mousedown',e=>{ if(e.target===fundo && cx.classList.contains('erro'))fecha(); });
+    btnNao=document.getElementById('ftStatusNao');
+    btnOk .addEventListener('click',()=>{ decide(true);  fecha(); });
+    btnNao.addEventListener('click',()=>{ decide(false); fecha(); });
+    /* fechar sem escolher = NÃO. Numa pergunta destrutiva o silêncio nunca
+       pode valer como "sim" — é a mesma regra do confirm() nativo. */
+    fundo.addEventListener('mousedown',e=>{
+      if(e.target!==fundo)return;
+      if(cx.classList.contains('pergunta')){ decide(false); fecha(); return; }
+      if(cx.classList.contains('erro'))fecha();
+    });
     document.addEventListener('keydown',e=>{
-      if(e.key==='Escape' && fundo.classList.contains('on') && cx.classList.contains('erro'))fecha();
+      if(e.key!=='Escape' || !fundo.classList.contains('on'))return;
+      if(cx.classList.contains('pergunta')){ decide(false); fecha(); return; }
+      if(cx.classList.contains('erro'))fecha();
     });
   }
   function base(estado,tit,texto){
@@ -7811,13 +7852,70 @@ const ftStatus=(function(){
   function erro(tit,texto){
     base('erro',tit||'Algo deu errado',texto);
     icone.innerHTML=_IC_STATUS_ERRO;
-    btnOk.style.display='';
+    btnOk.style.display=''; btnOk.textContent='OK';
     btnOk.focus();
   }
-  function fecha(){ els(); clearTimeout(fechaT); fundo.classList.remove('on'); }
-  return {carregando,sucesso,erro,fecha};
+  /* ---- PERGUNTA (v3.274) — o confirm() do navegador, em modal do kit ----
+
+     O confirm() nativo é SÍNCRONO e devolve boolean; este devolve uma
+     Promise<boolean>. Quem chamava `if(!confirm(...))return;` passa a
+     precisar de await — os três pontos foram convertidos um a um.
+
+     O foco começa em "Cancelar" de propósito: as três perguntas do editor
+     são todas sobre PERDER trabalho, e num diálogo desses o Enter
+     desatento não pode ser o que apaga. */
+  function pergunta(tit,texto,op){
+    const o=op||{};
+    base('pergunta'+(o.perigo===false?'':' perigo'),tit||'Tem certeza?',texto);
+    icone.innerHTML=_IC_STATUS_ALERTA;
+    btnOk.style.display=''; btnOk.textContent=o.ok||'Sim';
+    btnNao.textContent=o.cancelar||'Cancelar';
+    btnNao.focus();
+    return new Promise(res=>{ decide(false); responde=res; });
+  }
+  /* aviso: um recado sem pergunta. Substitui os alert() de informação —
+     é o erro() sem a moldura de "algo deu errado". */
+  function aviso(tit,texto){
+    base('erro aviso',tit||'Atenção',texto);
+    icone.innerHTML=_IC_STATUS_ALERTA;
+    btnOk.style.display=''; btnOk.textContent='OK';
+    btnOk.focus();
+  }
+  function fecha(){ els(); clearTimeout(fechaT); fundo.classList.remove('on'); decide(false); }
+  return {carregando,sucesso,erro,aviso,pergunta,fecha};
 })();
 window.ftStatus=ftStatus;
+
+/* ================================================================
+   O alert() DO NAVEGADOR NÃO APARECE MAIS  (v3.274)
+
+   Sobravam 22 alert() espalhados — a caixa cinza do Chrome, com o
+   endereço do site no título, no meio de um editor inteiro desenhado.
+   Em vez de reescrever 22 chamadas e correr o risco de esquecer uma (e
+   de a próxima nascer nativa de novo), o alert é REDIRECIONADO aqui,
+   num lugar só, para o modal de status.
+
+   O contrato muda num ponto e isso é proposital: o alert() nativo
+   BLOQUEIA a execução até o OK; este não bloqueia. Nenhuma das 22
+   chamadas usa isso — todas são "avisa e segue" ou "avisa e return" —,
+   e é justamente o bloqueio que trava a página inteira.
+
+   O confirm() e o prompt() continuam intactos: confirm devolve boolean
+   de forma síncrona e não há como imitar isso sem quebrar quem chama.
+   Os três confirm() do editor foram convertidos à mão, com await.
+   ================================================================ */
+(function trocaAlertPorModal(){
+  const nativo=window.alert;
+  window.ftAlertNativo=nativo;         /* guardado para depuração */
+  window.alert=function(txt){
+    const t=String(txt==null?'':txt);
+    /* a 1ª linha vira título quando a mensagem tem parágrafos, como nos
+       avisos de "EDITOR DESATUALIZADO\n\n..." */
+    const p=t.split('\n\n');
+    if(p.length>1 && p[0].length<=60) ftStatus.aviso(p[0].trim(), p.slice(1).join('\n\n').trim());
+    else ftStatus.aviso('Atenção', t);
+  };
+})();
 
 
 /* ---- o L-NN faz tudo: copiar → colar → cancelar ---- */
@@ -11463,8 +11561,11 @@ function docEmBranco(){
     ajustes:[]
   };
 }
-function novoDoc(){
-  if(!confirm('Você tem certeza que deseja começar um novo arquivo sem salvar o que está aberto?'))return;
+async function novoDoc(){
+  /* era confirm() nativo (v3.274) */
+  const ok=await ftStatus.pergunta('Começar um arquivo novo?',
+    'O que está aberto não foi salvo e será perdido.',{ok:'Começar novo'});
+  if(!ok)return;
   aplicaEstado(docEmBranco());   /* documento em branco, uma única página */
 }
 document.getElementById('miNovo').addEventListener('click',novoDoc);
@@ -14513,12 +14614,33 @@ function novaAba(estado,nomeDoc,silencioso){
   else renderAbas();
   return a;
 }
+/* A pergunta saiu do meio da função (v3.274): era um confirm() nativo, que
+   é SÍNCRONO, e o modal do kit devolve Promise. Separar a decisão do
+   trabalho mantém fechaAba() com a mesma assinatura de sempre — os
+   quatro pontos que a chamam (×, botão do meio, Ctrl+W e o envelope da
+   persistência) continuam iguais e nenhum deles usa o retorno. */
 function fechaAba(i){
   const a=ABAS[i]; if(!a)return;
   const sujo=(i===ABA_ATUAL)?FT_DOC_SUJO:a.sujo;
-  if(sujo && !confirm('A aba "'+abaRotulo(i===ABA_ATUAL?{nomeDoc:abaNomeAtualDoDOM(),pedido:abaPedidoAtualDoDOM(),num:a.num}:a,i+1)
-      +'" tem alterações não salvas.\n\nFechar mesmo assim?'))return;
+  if(!sujo){ _fechaAbaAgora(i); return; }
+  const nome=abaRotulo(i===ABA_ATUAL
+    ?{nomeDoc:abaNomeAtualDoDOM(),pedido:abaPedidoAtualDoDOM(),num:a.num}:a, i+1);
+  ftStatus.pergunta('Fechar sem salvar?',
+    'A aba "'+nome+'" tem alterações não salvas.',{ok:'Fechar mesmo assim'})
+    .then(ok=>{
+      if(!ok)return;
+      /* o índice pode ter mudado enquanto o modal estava aberto (outra aba
+         fechada, sessão restaurada): reencontra a aba pelo id */
+      const j=ABAS.indexOf(a);
+      if(j>=0)_fechaAbaAgora(j);
+    });
+}
+function _fechaAbaAgora(i){
   ABAS.splice(i,1);
+  /* o envelope de ligaPersistencia() grava a sessão logo depois de
+     fechaAba() retornar — o que, na aba suja, é ANTES da resposta. Por
+     isso a gravação é pedida aqui também: esta é a que vale. */
+  try{ persisteSessao(200); }catch(_){}
   if(!ABAS.length){                     /* nunca fica sem aba: nasce uma em branco */
     ABAS.push({id:++ABA_SEQ,num:ABA_SEQ,estado:docEmBranco(),hist:[],hpos:-1,sujo:false,nomeDoc:''});
     ABA_ATUAL=0; ativaAba(0,true); return;
