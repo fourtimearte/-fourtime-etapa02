@@ -16,7 +16,7 @@
 #  Se existir um arquivo editor*.html na mesma pasta, ele é
 #  servido em "/" — editor completamente online.
 # ============================================================
-import os, re, json, glob, sqlite3, threading
+import os, re, json, glob, sqlite3, threading, hashlib
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -114,9 +114,33 @@ def exige_editor_atual(request: Request):
             "já apagados." % (v, FT_EDITOR_MINIMO)))
 
 def _chave(item):
-    """Como saber se dois itens são 'o mesmo'."""
+    """Como saber se dois itens são 'o mesmo'.
+
+    A identidade era SEMPRE o campo `n` (o nome). Isso quebrou em dois
+    lugares na v3.256:
+
+      · Bugs viraram objetos sem `n`. A chave saía vazia, e o laço de
+        mesclagem descarta o que não tem chave — todos os relatos eram
+        jogados fora ao sincronizar, sem aviso.
+
+      · Clientes ganharam `id` próprio. Sem usá-lo, dois cadastros recém-
+        criados (ambos "NOVO CLIENTE") viravam o mesmo item, e renomear um
+        cliente o transformava num item novo, duplicando.
+
+    Agora a ordem é: `id` estável primeiro; nome depois; e, para quem não
+    tem nenhum dos dois, uma impressão do próprio conteúdo — melhor um item
+    repetido que um item perdido.
+    """
     if isinstance(item, dict):
-        return str(item.get("n", "")).strip().upper()
+        ident = str(item.get("id", "")).strip()
+        if ident:
+            return "id:" + ident
+        nome = str(item.get("n", "")).strip().upper()
+        if nome:
+            return nome
+        # sem id nem nome (bug antigo, por exemplo): o conteúdo é a identidade
+        bruto = json.dumps(item, sort_keys=True, ensure_ascii=False)
+        return "h:" + hashlib.sha1(bruto.encode("utf-8")).hexdigest()[:16]
     return str(item).strip().upper()
 
 def mescla_listas(base, novos):
@@ -243,6 +267,7 @@ def _guarda_cache(rev, dados):
 @app.put("/api/db")
 async def gravar_db(request: Request):
     exige_token(request)
+    _backup_se_for_a_hora()   # o primeiro salvamento do dia guarda o banco
     exige_editor_atual(request)          # editor velho não grava (ressuscitaria itens)
     corpo = await request.json()
     dados = corpo.get("data")
@@ -1143,6 +1168,8 @@ def api_versao(request: Request):
 #                       da conta e pode criar o que quiser)
 # ============================================================
 FT_DRIVE_ORCAMENTOS = os.environ.get("FT_DRIVE_ORCAMENTOS", "").strip()
+# a pasta dos backups diários; fica de fora da navegação do "Abrir"
+PASTA_BACKUP = "Backup do Database"
 FT_SCRIPT_ORCAMENTOS = os.environ.get("FT_SCRIPT_ORCAMENTOS", "").strip()
 
 # Dentro da pasta raiz de orçamentos existem DUAS subpastas:
@@ -1151,8 +1178,6 @@ FT_SCRIPT_ORCAMENTOS = os.environ.get("FT_SCRIPT_ORCAMENTOS", "").strip()
 # Os nomes podem ser trocados por env, mas o padrão já casa com o combinado.
 FT_PASTA_TRABALHO  = os.environ.get("FT_PASTA_TRABALHO",  "Pasta de Trabalho").strip()
 FT_PASTA_ORGANIZADOS = os.environ.get("FT_PASTA_ORGANIZADOS", "Orçamentos Organizados").strip()
-# Para onde vão os rascunhos depois que a versão final é arquivada em Organizados.
-FT_PASTA_LIXEIRA = os.environ.get("FT_PASTA_LIXEIRA", "Lixeira da Área de Trabalho").strip()
 
 MESES_FT = ["JANEIRO", "FEVEREIRO", "MARCO", "ABRIL", "MAIO", "JUNHO",
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"]
@@ -1165,59 +1190,13 @@ def exige_orcamentos():
         raise HTTPException(status_code=503,
             detail="Orçamentos no Drive não configurados (FT_DRIVE_ORCAMENTOS no Render).")
 
-def _orc_dia_mes_ano(nome):
-    """Dia, mês e ano do nome do arquivo. Mesma leitura de _orc_ano_mes,
-       devolvendo também o DIA — usado para a pasta de dia."""
-    nome = nome or ""
-    def _v(t):
-        dd, mm, aa = int(t[0:2]), int(t[2:4]), int(t[4:6])
-        return (dd, mm, 2000 + aa) if (1 <= mm <= 12 and 1 <= dd <= 31) else None
-    m = re.search(r"(\d{6})(?:-v\d+)?\.ft$", nome, flags=re.I)
-    if m:
-        r = _v(m.group(1))
-        if r:
-            return r
-    for t in reversed(re.findall(r"\d{6}", nome)):
-        r = _v(t)
-        if r:
-            return r
-    h = datetime.now(timezone.utc)
-    return h.day, h.month, h.year
-
-
 def _orc_ano_mes(nome):
-    """Extrai DDMMAA do nome do arquivo (NOME-PEDIDO-DDMMAA.ft). Sem data -> hoje.
-
-       A data fica no FIM do nome, logo antes do .ft — e é lá que procuramos.
-       Antes a busca pegava a primeira sequência de 6 dígitos que aparecesse,
-       o que quebrou quando o pedido virou PD00#### (v175): em
-       "GOIAS-PD004113-150626.ft" ela achava "004113" do pedido em vez de
-       "150626" da data, concluía que "41" não é mês e caía no mês de HOJE.
-       Resultado: todo orçamento arquivado ia para a pasta do mês corrente,
-       qualquer que fosse a data dele."""
-    nome = nome or ""
-
-    def _valida(txt):
-        dd, mm, aa = int(txt[0:2]), int(txt[2:4]), int(txt[4:6])
+    """Extrai DDMMAA do nome do arquivo. Sem data -> hoje."""
+    m = re.search(r"(\d{2})(\d{2})(\d{2})", nome or "")
+    if m:
+        dd, mm, aa = int(m.group(1)), int(m.group(2)), int(m.group(3))
         if 1 <= mm <= 12 and 1 <= dd <= 31:
             return 2000 + aa, mm
-        return None
-
-    # 1) a data no fim do nome, aceitando o sufixo de versão (-v2, -v3...)
-    m = re.search(r"(\d{6})(?:-v\d+)?\.ft$", nome, flags=re.I)
-    if m:
-        r = _valida(m.group(1))
-        if r:
-            return r
-
-    # 2) sem .ft no fim (ou nome fora do padrão): tenta a ÚLTIMA sequência de
-    #    6 dígitos, que ainda é mais provável de ser a data que a primeira
-    achados = re.findall(r"\d{6}", nome)
-    for txt in reversed(achados):
-        r = _valida(txt)
-        if r:
-            return r
-
     h = datetime.now(timezone.utc)
     return h.year, h.month
 
@@ -1255,47 +1234,24 @@ def _orc_subpasta_raiz(nome):
     _orc_pastas_cache[chave] = pid
     return pid
 
-# Nível de pasta por DIA dentro do mês. Pode ser desligado no Render com
-# FT_PASTA_DIA=0, e aí volta a ser só ANO > MÊS.
-FT_PASTA_DIA = (os.environ.get("FT_PASTA_DIA", "1").strip().lower()
-                not in ("0", "nao", "não", "false", "off"))
-
-
-def _orc_nome_pasta_dia(dia):
-    return "DIA %02d" % dia
-
-
-def _orc_pasta_destino(ano, mes, dia=None):
-    """Acha (ou cria) 'Orçamentos Organizados' > ANO > 'ANO - MM - MÊS' > 'DIA NN'.
-       O dia vem da data de CRIAÇÃO do orçamento (a que está no nome do
-       arquivo), não do dia em que ele está sendo arquivado.
+def _orc_pasta_destino(ano, mes):
+    """Acha (ou cria) 'Orçamentos Organizados' > ANO > 'ANO - MM - MÊS'.
        Devolve (id, 'caminho legível')."""
     raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
     nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
-
+    chave = FT_PASTA_ORGANIZADOS + "/" + nome_ano + "/" + nome_mes
+    if chave in _orc_pastas_cache:
+        return _orc_pastas_cache[chave], nome_ano + "/" + nome_mes
     chave_ano = FT_PASTA_ORGANIZADOS + "/" + nome_ano
     pid_ano = _orc_pastas_cache.get(chave_ano) or _drive_acha_pasta(nome_ano, raiz_org)
     if not pid_ano:
         pid_ano = _drive_cria_pasta(nome_ano, raiz_org)
     _orc_pastas_cache[chave_ano] = pid_ano
-
-    chave_mes = chave_ano + "/" + nome_mes
-    pid_mes = _orc_pastas_cache.get(chave_mes) or _drive_acha_pasta(nome_mes, pid_ano)
+    pid_mes = _drive_acha_pasta(nome_mes, pid_ano)
     if not pid_mes:
         pid_mes = _drive_cria_pasta(nome_mes, pid_ano)
-    _orc_pastas_cache[chave_mes] = pid_mes
-
-    caminho = nome_ano + "/" + nome_mes
-    if not FT_PASTA_DIA or not dia:
-        return pid_mes, caminho
-
-    nome_dia = _orc_nome_pasta_dia(dia)
-    chave_dia = chave_mes + "/" + nome_dia
-    pid_dia = _orc_pastas_cache.get(chave_dia) or _drive_acha_pasta(nome_dia, pid_mes)
-    if not pid_dia:
-        pid_dia = _drive_cria_pasta(nome_dia, pid_mes)
-    _orc_pastas_cache[chave_dia] = pid_dia
-    return pid_dia, caminho + "/" + nome_dia
+    _orc_pastas_cache[chave] = pid_mes
+    return pid_mes, nome_ano + "/" + nome_mes
 
 def _orc_acha_arquivo(nome, pasta):
     q = ("'%s' in parents and name = '%s' and trashed = false"
@@ -1331,125 +1287,27 @@ def _orc_sobe_arquivo(nome, pasta_id, corpo):
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read())["id"], "criado"
 
-def _script_post(dados, timeout=120):
-    """Fala com o Apps Script, que roda COMO DONO da conta (a service account
-       não tem cota: não cria arquivo nem pasta, e às vezes não move/renomeia).
-       Todo pedido leva o token e os nomes das pastas."""
-    if not FT_SCRIPT_ORCAMENTOS:
-        raise HTTPException(status_code=502, detail=(
-            "Falta configurar FT_SCRIPT_ORCAMENTOS no Render (URL do Apps Script)."))
-    dados = dict(dados)
-    dados.setdefault("token", FT_TOKEN)
-    dados.setdefault("pastaTrabalho", FT_PASTA_TRABALHO)
-    dados.setdefault("pastaOrganizados", FT_PASTA_ORGANIZADOS)
-    dados.setdefault("pastaLixeira", FT_PASTA_LIXEIRA)
-    corpo = json.dumps(dados).encode("utf-8")
-    req = urllib.request.Request(FT_SCRIPT_ORCAMENTOS, data=corpo, method="POST")
-    req.add_header("Content-Type", "text/plain; charset=utf-8")   # evita preflight do Apps Script
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        d = json.loads(r.read())
-    if not d.get("ok"):
-        raise HTTPException(status_code=502, detail="Apps Script recusou: %s" % d.get("erro", "?"))
-    return d
-
-
-def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto, dia=None):
-    """Plano B da GRAVAÇÃO: o Apps Script cria as pastas e o arquivo."""
-    dados = {"acao": "salvar", "nome": nome, "conteudo": conteudo_texto, "destino": destino}
+def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto):
+    """Plano B: o Apps Script cria as pastas e o arquivo COMO DONO da conta.
+       destino='trabalho' -> grava direto na subpasta de trabalho (sem ano/mês).
+       destino='organizado' -> cria 'Organizados' > ANO > MÊS."""
+    dados = {
+        "token": FT_TOKEN, "nome": nome, "conteudo": conteudo_texto,
+        "destino": destino,
+        "pastaTrabalho": FT_PASTA_TRABALHO,
+        "pastaOrganizados": FT_PASTA_ORGANIZADOS,
+    }
     if destino == "organizado":
         dados["ano"] = str(ano)
         dados["mesPasta"] = _orc_nome_pasta_mes(ano, mes)
-        if FT_PASTA_DIA and dia:
-            dados["diaPasta"] = _orc_nome_pasta_dia(dia)
-    return _script_post(dados).get("id", "")
-
-
-# ---------------- gravar/renomear/mover um arquivo JÁ existente ----------------
-
-def _orc_grava_por_id(fid, corpo):
-    """Sobrescreve o conteúdo de um arquivo pelo ID. A service account PODE
-       fazer isso (o que ela não pode é CRIAR). É o que resolve a duplicação:
-       o arquivo é o mesmo, não importa se o nome mudou de data."""
-    url = DRIVE_UPLOAD + "/files/" + fid + "?uploadType=media&supportsAllDrives=true"
-    req = urllib.request.Request(url, data=corpo, method="PATCH")
-    req.add_header("Authorization", "Bearer " + _token_drive())
-    req.add_header("Content-Type", "application/octet-stream")
+    corpo = json.dumps(dados).encode("utf-8")
+    req = urllib.request.Request(FT_SCRIPT_ORCAMENTOS, data=corpo, method="POST")
+    req.add_header("Content-Type", "text/plain; charset=utf-8")   # evita preflight do Apps Script
     with urllib.request.urlopen(req, timeout=120) as r:
-        r.read()
-    return fid
-
-
-def _orc_renomeia(fid, novo_nome):
-    """Renomeia; se a service account não puder, o Apps Script renomeia."""
-    try:
-        meta = json.dumps({"name": novo_nome}).encode()
-        url = DRIVE_API + "/files/" + fid + "?supportsAllDrives=true"
-        req = urllib.request.Request(url, data=meta, method="PATCH")
-        req.add_header("Authorization", "Bearer " + _token_drive())
-        req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=30) as r:
-            r.read()
-        return "service-account"
-    except Exception:
-        _script_post({"acao": "renomear", "id": fid, "nome": novo_nome})
-        return "apps-script"
-
-
-def _orc_move(fid, destino_id):
-    """Move um arquivo para outra pasta; com o Apps Script como plano B."""
-    try:
-        pai_atual = _pai(fid) or ""
-        url = (DRIVE_API + "/files/" + fid + "?supportsAllDrives=true"
-               + "&addParents=" + destino_id
-               + ("&removeParents=" + pai_atual if pai_atual else ""))
-        req = urllib.request.Request(url, data=b"{}", method="PATCH")
-        req.add_header("Authorization", "Bearer " + _token_drive())
-        req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=30) as r:
-            r.read()
-        _orc_arvore_cache.pop(fid, None)          # a árvore mudou
-        return "service-account"
-    except Exception:
-        _script_post({"acao": "mover", "id": fid, "pastaDestino": FT_PASTA_LIXEIRA})
-        _orc_arvore_cache.pop(fid, None)
-        return "apps-script"
-
-
-# ---------------- versões (-v2, -v3 …) e rascunhos do mesmo orçamento ----------------
-
-def _orc_lista_ft(pasta_id, limite=200):
-    """Todos os .ft de uma pasta (id + nome)."""
-    r = _drive_get("/files", {
-        "q": "'%s' in parents and trashed = false" % pasta_id,
-        "orderBy": "name", "pageSize": str(limite),
-        "fields": "files(id,name,modifiedTime,size)",
-        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
-    return [f for f in r.get("files", []) if f.get("name", "").lower().endswith(".ft")]
-
-
-def _orc_base_e_versao(nome):
-    """'CLIENTE-PD004886-210726-v3.ft' -> ('CLIENTE-PD004886-210726', 3).
-       Sem sufixo, a versão é 1 (o arquivo original)."""
-    base = re.sub(r"\.ft$", "", nome, flags=re.I)
-    m = re.search(r"-v(\d+)$", base, flags=re.I)
-    if m:
-        return base[:m.start()], int(m.group(1))
-    return base, 1
-
-
-def _orc_proxima_versao(nome, pasta_id):
-    """Nome da PRÓXIMA versão dentro da pasta.
-
-       A cópia carrega a MESMA data do original — a data de criação nunca muda.
-       O que a distingue é só o sufixo: o arquivo sem sufixo conta como v1,
-       então a primeira cópia nasce -v2, a seguinte -v3, e assim por diante."""
-    base, _ = _orc_base_e_versao(nome)
-    maior = 0
-    for f in _orc_lista_ft(pasta_id):
-        b, v = _orc_base_e_versao(f["name"])
-        if b.upper() == base.upper():
-            maior = max(maior, v)
-    return "%s-v%d.ft" % (base, (maior or 1) + 1)
+        d = json.loads(r.read())
+    if not d.get("ok"):
+        raise HTTPException(status_code=502, detail="Apps Script recusou: %s" % d.get("erro", "?"))
+    return d.get("id", "")
 
 def _orc_dentro(fid, profundidade=8):
     """O arquivo está dentro da pasta de orçamentos? (sobe pelos pais, com cache)"""
@@ -1488,91 +1346,36 @@ async def ft_salvar(request: Request):
     destino = (corpo.get("destino") or "trabalho").strip().lower()
     if destino != "organizado":
         destino = "trabalho"
-    ano = mes = dia = None
+    ano = mes = None
     if destino == "organizado":
-        dia, mes, ano = _orc_dia_mes_ano(nome)
+        ano, mes = _orc_ano_mes(nome)
         caminho = "%d/%s" % (ano, _orc_nome_pasta_mes(ano, mes))
-        if FT_PASTA_DIA:
-            caminho += "/" + _orc_nome_pasta_dia(dia)
     else:
         caminho = FT_PASTA_TRABALHO
 
-    # --------- como gravar (v175) ---------
-    # drive_id  -> sobrescreve ESTE arquivo, mesmo que o nome tenha mudado de
-    #              data. É o que acaba com as cópias duplicadas.
-    # renomear  -> junto com drive_id, atualiza o nome do arquivo no Drive.
-    # nova_versao -> ignora o drive_id e cria "-v2", "-v3"... ao lado.
-    drive_id = (corpo.get("driveId") or "").strip()
-    if drive_id and not re.fullmatch(r"[A-Za-z0-9_-]{10,}", drive_id):
-        drive_id = ""
-    renomear = bool(corpo.get("renomear"))
-    nova_versao = bool(corpo.get("novaVersao"))
-
-    def _pasta_destino():
-        if destino == "organizado":
-            pid, _cam = _orc_pasta_destino(ano, mes, dia)
-            return pid
-        return _orc_subpasta_raiz(FT_PASTA_TRABALHO)
-
-    # 1) SOBRESCREVER um arquivo conhecido (não depende do nome nem da data).
-    #    Só vale se ele estiver NA PASTA DE DESTINO. Sem essa checagem, um
-    #    rascunho aberto da Pasta de Trabalho seria sobrescrito lá mesmo ao
-    #    "arquivar em Organizados" — e o definitivo nunca nasceria.
-    if drive_id and not nova_versao:
-        if not _orc_dentro(drive_id):
-            raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
-        # Basta estar DENTRO do destino (em qualquer nível). Antes eu comparava
-        # com a pasta exata do mês — então, virado o mês, o mesmo orçamento não
-        # "batia" e nascia uma cópia na pasta nova. Agora ele é gravado onde já
-        # mora, mantendo nome e lugar. O que a checagem ainda impede é o caso
-        # certo: arquivar em Organizados um arquivo que está na Pasta de
-        # Trabalho não pode sobrescrever o rascunho — ali o definitivo nasce.
-        try:
-            dentro = _sob_pasta(drive_id, _orc_raiz_destino(destino))
-        except Exception:
-            dentro = False
-        if not dentro:
-            drive_id = ""            # cai para o fluxo de criação, na pasta certa
-    if drive_id and not nova_versao:
-        _orc_grava_por_id(drive_id, texto.encode("utf-8"))
-        nome_final = nome
-        via_nome = ""
-        if renomear:
-            try:
-                via_nome = _orc_renomeia(drive_id, nome)
-            except Exception:
-                nome_final = ""      # não deu para renomear: o conteúdo já foi salvo
-        return {"ok": True, "id": drive_id, "pasta": caminho, "acao": "atualizado",
-                "destino": destino, "nome": nome_final, "via": "service-account",
-                "renomeado": bool(renomear and nome_final), "viaNome": via_nome}
-
-    # 2) NOVA VERSÃO: descobre o próximo -vN livre na pasta
-    if nova_versao:
-        try:
-            nome = _orc_proxima_versao(nome, _pasta_destino())
-        except Exception:
-            pass                     # sem conseguir ler a pasta, segue com o nome pedido
-
-    # 3) CRIAR/atualizar por nome (fluxo de sempre)
     # Tenta pela service account (achar/criar a pasta E subir o arquivo).
     # QUALQUER passo pode falhar por falta de cota — criar a subpasta, criar
     # ano/mês, ou criar o arquivo. Em todos esses casos delegamos ao Apps
     # Script, que roda como DONO e cria pastas + arquivo sem limite.
     def _via_service_account():
-        return _orc_sobe_arquivo(nome, _pasta_destino(), texto.encode("utf-8"))
+        if destino == "organizado":
+            pasta_id, _cam = _orc_pasta_destino(ano, mes)
+        else:
+            pasta_id = _orc_subpasta_raiz(FT_PASTA_TRABALHO)
+        return _orc_sobe_arquivo(nome, pasta_id, texto.encode("utf-8"))
 
     try:
         fid, acao = _via_service_account()
         return {"ok": True, "id": fid, "pasta": caminho, "acao": acao,
-                "destino": destino, "nome": nome, "via": "service-account"}
+                "destino": destino, "via": "service-account"}
     except urllib.error.HTTPError as e:
         erro = e.read().decode("utf-8", "ignore")[:400]
         # cota OU qualquer recusa da service account -> tenta pelo Apps Script
         if FT_SCRIPT_ORCAMENTOS:
             try:
-                fid = _orc_salva_via_script(nome, destino, ano, mes, texto, dia)
+                fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
                 return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
-                        "destino": destino, "nome": nome, "via": "apps-script"}
+                        "destino": destino, "via": "apps-script"}
             except Exception as e2:
                 raise HTTPException(status_code=502,
                     detail="Drive recusou e o Apps Script também: %s" % str(e2)[:300])
@@ -1581,97 +1384,39 @@ async def ft_salvar(request: Request):
         # erro que não é HTTPError (ex.: falha ao criar a subpasta) -> Apps Script
         if FT_SCRIPT_ORCAMENTOS:
             try:
-                fid = _orc_salva_via_script(nome, destino, ano, mes, texto, dia)
+                fid = _orc_salva_via_script(nome, destino, ano, mes, texto)
                 return {"ok": True, "id": fid, "pasta": caminho, "acao": "criado",
-                        "destino": destino, "nome": nome, "via": "apps-script"}
+                        "destino": destino, "via": "apps-script"}
             except Exception as e2:
                 raise HTTPException(status_code=502,
                     detail="Falha na service account e no Apps Script: %s" % str(e2)[:300])
         raise HTTPException(status_code=500, detail="Erro ao salvar: %s" % str(e)[:300])
 
-def _nome_pasta(fid):
-    """Nome de uma pasta pelo id, com cache (a busca repete muito os mesmos)."""
-    chave = "@nome/" + fid
-    if chave in _orc_pastas_cache:
-        return _orc_pastas_cache[chave]
-    try:
-        nome = _drive_get("/files/" + fid,
-                          {"fields": "name", "supportsAllDrives": "true"}).get("name", "")
-    except Exception:
-        nome = ""
-    _orc_pastas_cache[chave] = nome
-    return nome
-
-
-def _caminho_do_arquivo(fid, prof=6):
-    """Onde este arquivo mora, em texto curto: 'Organizados › 2026 › JULHO'.
-       Sobe pelos pais até a raiz de orçamentos e devolve o trecho de dentro
-       dela — na busca é o que responde 'de que pasta é este arquivo?'."""
-    partes = []
-    atual = fid
-    for _ in range(prof):
-        p = _pai(atual)
-        if not p or p == FT_DRIVE_ORCAMENTOS:
-            break
-        partes.append(_nome_pasta(p))
-        atual = p
-    partes = [x for x in reversed(partes) if x]
-    if not partes:
-        return ""
-    # encurta o nome comprido da subpasta raiz para caber na coluna
-    partes[0] = (partes[0].replace("Orçamentos Organizados", "Organizados")
-                          .replace("Lixeira da Área de Trabalho", "Lixeira"))
-    # a pasta do mês já traz o ano no nome ("2026 - 07 - JULHO"): evita repetir
-    if len(partes) == 3 and partes[1] and partes[2].startswith(partes[1]):
-        partes = [partes[0], partes[2]]
-    return " › ".join(partes)
-
-
 @app.get("/api/ft/buscar")
-def ft_buscar(request: Request, q: str = "", pasta: str = ""):
-    """Busca de orçamentos, com ESCOPO.
-
-       Sem 'pasta' -> procura em toda a raiz de orçamentos.
-       Com 'pasta' -> só dentro dela (em qualquer nível abaixo).
-
-       Isso importa porque as três subpastas convivem na mesma raiz: buscando
-       dentro de "Orçamentos Organizados", vinham junto arquivos da Pasta de
-       Trabalho e até da Lixeira. Agora quem está numa pasta busca ali dentro."""
+def ft_buscar(request: Request, q: str = ""):
     exige_token(request)
     exige_orcamentos()
     q = (q or "").strip()
-    pasta = (pasta or "").strip()
-    if pasta and not re.fullmatch(r"[A-Za-z0-9_-]{10,}", pasta):
-        raise HTTPException(status_code=400, detail="ID de pasta inválido.")
-
     filtro = ("trashed = false and mimeType != 'application/vnd.google-apps.folder'"
               " and name contains '.ft'")
     if q:
         filtro += " and name contains '%s'" % q.replace("'", "\\'")
-    # a consulta traz mais do que o necessário porque o recorte por pasta é
-    # feito aqui embaixo (o Drive só filtra pelo pai DIRETO, e as pastas de
-    # orçamentos têm níveis: Organizados > ANO > MÊS)
     r = _drive_get("/files", {
-        "q": filtro, "orderBy": "modifiedTime desc", "pageSize": "120",
+        "q": filtro, "orderBy": "modifiedTime desc", "pageSize": "60",
         "fields": "files(id,name,modifiedTime,size,parents)",
         "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
     itens = []
     for f in r.get("files", []):
         if not f["name"].lower().endswith(".ft"):
             continue
-        if pasta:
-            if not _sob_pasta(f["id"], pasta):
-                continue    # está fora da pasta em que o usuário está navegando
-        elif not _orc_dentro(f["id"]):
+        if not _orc_dentro(f["id"]):
             continue        # a service account enxerga outras pastas: só valem os orçamentos
         itens.append({"id": f["id"], "nome": f["name"],
                       "modificado": f.get("modifiedTime", ""),
-                      "tamanho": int(f.get("size") or 0),
-                      "pasta": _caminho_do_arquivo(f["id"])})
+                      "tamanho": int(f.get("size") or 0)})
         if len(itens) >= 30:
             break
-    itens.sort(key=lambda a: a["modificado"], reverse=True)   # mais recentes primeiro
-    return {"ok": True, "itens": itens, "escopo": pasta or "raiz"}
+    return {"ok": True, "itens": itens}
 
 
 @app.get("/api/ft/listar")
@@ -1693,11 +1438,11 @@ def ft_listar(request: Request, pasta: str = ""):
         "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
     pastas, arquivos = [], []
     for f in r.get("files", []):
+        # a pasta de backup não guarda orçamentos: listá-la aqui só atrapalha
+        # quem está procurando um pedido
+        if f.get("name") == PASTA_BACKUP:
+            continue
         if f.get("mimeType") == "application/vnd.google-apps.folder":
-            # a pasta dos relatórios é de serviço: o editor escreve nela, mas
-            # ela não aparece em Abrir nem na caixa lateral
-            if f["name"] == FT_PASTA_RELATORIOS:
-                continue
             pastas.append({"id": f["id"], "nome": f["name"]})
         elif f["name"].lower().endswith(".ft"):
             arquivos.append({"id": f["id"], "nome": f["name"],
@@ -1705,8 +1450,6 @@ def ft_listar(request: Request, pasta: str = ""):
                              "tamanho": int(f.get("size") or 0)})
     # pastas de ANO/MÊS: as mais recentes primeiro (nome decrescente)
     pastas.sort(key=lambda p: p["nome"], reverse=True)
-    # arquivos: os mais recentes primeiro — procura-se um orçamento por
-    # "o que eu mexi ontem", muito mais do que pela letra inicial
     arquivos.sort(key=lambda a: a["modificado"], reverse=True)
     return {"ok": True, "pastas": pastas, "arquivos": arquivos, "raiz": pai == FT_DRIVE_ORCAMENTOS}
 
@@ -1726,969 +1469,12 @@ def ft_abrir(fid: str, request: Request):
         doc = json.loads(dados.decode("utf-8"))
     except Exception:
         raise HTTPException(status_code=502, detail="O arquivo no Drive não é um .ft válido.")
-    # em qual pasta este arquivo mora? o editor precisa saber para decidir se
-    # "salvar por cima" grava no lugar certo (ou se tem de criar noutra pasta)
-    # A pergunta certa é "está DENTRO de Organizados?", e não "o pai é a Pasta
-    # de Trabalho?". Antes, qualquer coisa fora da raiz da Trabalho — uma
-    # subpasta dela, a Lixeira — era dada como organizada, e o editor então
-    # aceitava a data do nome como se fosse de arquivamento.
-    onde = ""
-    try:
-        if _sob_pasta(fid, _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)):
-            onde = "organizado"
-        elif _pai(fid):
-            onde = "trabalho"
-    except Exception:
-        onde = ""
-    return {"ok": True, "nome": meta.get("name", ""), "conteudo": doc, "destino": onde}
+    return {"ok": True, "nome": meta.get("name", ""), "conteudo": doc}
 
-
-
-@app.get("/api/ft/rascunhos")
-def ft_rascunhos(request: Request, pedido: str = "", base: str = "", exceto: str = ""):
-    """Rascunhos do MESMO orçamento que estão na Pasta de Trabalho.
-       Casamos pelo número do pedido (o mais confiável) e, na falta dele,
-       pelo começo do nome do documento. Serve para a limpeza pós-arquivamento
-       — que só acontece depois de o usuário confirmar a lista."""
-    exige_token(request)
-    exige_orcamentos()
-    pedido = (pedido or "").strip().upper()
-    base = (base or "").strip().upper()
-    if not pedido and not base:
-        return {"ok": True, "itens": []}
-    try:
-        pasta = _orc_subpasta_raiz(FT_PASTA_TRABALHO)
-    except Exception:
-        return {"ok": True, "itens": []}          # a pasta ainda nem existe
-    itens = []
-    for f in _orc_lista_ft(pasta):
-        nome = f.get("name", "")
-        alvo = nome.upper()
-        casa = (pedido and pedido in alvo) or (base and alvo.startswith(base + "-"))
-        if not casa or f["id"] == exceto:
-            continue
-        itens.append({"id": f["id"], "nome": nome,
-                      "modificado": f.get("modifiedTime", ""),
-                      "tamanho": int(f.get("size") or 0)})
-    itens.sort(key=lambda a: a["modificado"], reverse=True)
-    return {"ok": True, "itens": itens, "pasta": FT_PASTA_TRABALHO}
-
-
-@app.post("/api/ft/lixeira")
-async def ft_lixeira(request: Request):
-    """Move os rascunhos indicados para a 'Lixeira da Área de Trabalho'.
-       Nada é apagado: só muda de pasta, dá para voltar atrás pelo Drive."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    try:
-        corpo = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="JSON inválido.")
-    ids = [str(i).strip() for i in (corpo.get("ids") or []) if str(i).strip()]
-    ids = [i for i in ids if re.fullmatch(r"[A-Za-z0-9_-]{10,}", i)]
-    if not ids:
-        return {"ok": True, "movidos": 0, "itens": []}
-    if len(ids) > 60:
-        raise HTTPException(status_code=400, detail="Muitos arquivos de uma vez.")
-    try:
-        destino_id = _orc_subpasta_raiz(FT_PASTA_LIXEIRA)
-    except Exception:
-        destino_id = None          # a service account não cria pasta: o Apps Script cria
-
-    movidos, falhas = [], []
-    for fid in ids:
-        try:
-            if not _orc_dentro(fid):
-                falhas.append({"id": fid, "erro": "fora dos orçamentos"})
-                continue
-            if destino_id:
-                _orc_move(fid, destino_id)
-            else:
-                _script_post({"acao": "mover", "id": fid, "pastaDestino": FT_PASTA_LIXEIRA})
-                _orc_arvore_cache.pop(fid, None)
-            movidos.append(fid)
-        except Exception as e:
-            falhas.append({"id": fid, "erro": str(e)[:160]})
-    return {"ok": True, "movidos": len(movidos), "itens": movidos,
-            "falhas": falhas, "pasta": FT_PASTA_LIXEIRA}
-
-
-def _sob_pasta(fid, raiz_id, prof=8):
-    """O arquivo está DENTRO desta pasta (em qualquer nível)?"""
-    atual = fid
-    for _ in range(prof):
-        p = _pai(atual)
-        if not p:
-            return False
-        if p == raiz_id:
-            return True
-        atual = p
-    return False
-
-
-def _orc_raiz_destino(destino):
-    return _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS if destino == "organizado" else FT_PASTA_TRABALHO)
-
-
-@app.get("/api/ft/existente")
-def ft_existente(request: Request, pedido: str = "", base: str = "", destino: str = "trabalho"):
-    """Procura, DENTRO do destino, um orçamento que já seja deste mesmo pedido.
-
-       Por que pelo pedido e não pelo ID do arquivo: o vínculo por ID se perde
-       quando o navegador é reaberto, quando o .ft vem do computador ou quando
-       o mês vira (a pasta de destino muda). O número do pedido é o que
-       identifica o orçamento de verdade — e não muda com a data.
-       A busca varre a subpasta inteira, então acha mesmo que o arquivo esteja
-       num mês anterior."""
-    exige_token(request)
-    exige_orcamentos()
-    pedido = (pedido or "").strip().upper()
-    base = (base or "").strip().upper()
-    destino = "organizado" if destino == "organizado" else "trabalho"
-    chave = pedido or base
-    if not chave:
-        return {"ok": True, "itens": []}
-    try:
-        raiz = _orc_raiz_destino(destino)
-    except Exception:
-        return {"ok": True, "itens": []}
-
-    filtro = ("name contains '%s' and trashed = false and "
-              "mimeType != 'application/vnd.google-apps.folder'") % chave.replace("'", "")
-    try:
-        r = _drive_get("/files", {
-            "q": filtro, "orderBy": "modifiedTime desc", "pageSize": "40",
-            "fields": "files(id,name,modifiedTime,size,parents)",
-            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
-    except Exception:
-        return {"ok": True, "itens": []}
-
-    itens = []
-    for f in r.get("files", []):
-        nome = f.get("name", "")
-        if not nome.lower().endswith(".ft"):
-            continue
-        if pedido and pedido not in nome.upper():
-            continue
-        if not _sob_pasta(f["id"], raiz):
-            continue
-        itens.append({"id": f["id"], "nome": nome,
-                      "modificado": f.get("modifiedTime", ""),
-                      "tamanho": int(f.get("size") or 0)})
-    itens.sort(key=lambda a: a["modificado"], reverse=True)
-    return {"ok": True, "itens": itens[:10], "destino": destino}
-
-
-@app.post("/api/ft/excluir")
-async def ft_excluir(request: Request):
-    """Manda o arquivo para a LIXEIRA do Google Drive (não apaga de vez).
-       Dá para recuperar pelo próprio Drive por 30 dias — numa ação destrutiva
-       acionada por um clique, essa rede vale muito."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    try:
-        corpo = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="JSON inválido.")
-    fid = (corpo.get("id") or "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
-        raise HTTPException(status_code=400, detail="ID inválido.")
-    if not _orc_dentro(fid):
-        raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
-    nome = ""
-    try:
-        nome = _drive_get("/files/" + fid, {"fields": "name", "supportsAllDrives": "true"}).get("name", "")
-    except Exception:
-        pass
-    try:
-        meta = json.dumps({"trashed": True}).encode()
-        url = DRIVE_API + "/files/" + fid + "?supportsAllDrives=true"
-        req = urllib.request.Request(url, data=meta, method="PATCH")
-        req.add_header("Authorization", "Bearer " + _token_drive())
-        req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=30) as r:
-            r.read()
-        via = "service-account"
-    except Exception:
-        _script_post({"acao": "lixeira", "id": fid})
-        via = "apps-script"
-    with _cache_lock:
-        _pais_cache.pop(fid, None)
-    return {"ok": True, "id": fid, "nome": nome, "via": via}
-
-
-@app.post("/api/ft/organizar-dias")
-async def ft_organizar_dias(request: Request):
-    """Distribui em pastas de DIA os orçamentos que estão soltos numa pasta de mês.
-
-       Serve para acertar o que já existe: até agora os arquivos ficavam todos
-       juntos dentro do mês. Cada um vai para a pasta do DIA que está no próprio
-       nome — a data de criação, a mesma regra que vale daqui para frente.
-
-       Sem 'mes' no corpo, arruma o MÊS ATUAL. Nada é apagado: os arquivos só
-       mudam de pasta, e quem não tem data legível fica onde está.
-       Com 'simular': só devolve o que faria, sem mover nada."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    try:
-        corpo = await request.json()
-    except Exception:
-        corpo = {}
-    simular = bool(corpo.get("simular"))
-
-    h = datetime.now(timezone.utc)
-    ano = int(corpo.get("ano") or h.year)
-    mes = int(corpo.get("mes") or h.month)
-    if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="Mês inválido.")
-
-    # a pasta do mês, sem criar o nível do dia ainda
-    try:
-        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
-        nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
-        pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
-        pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
-    except Exception as e:
-        raise HTTPException(status_code=502, detail="Não consegui abrir a pasta do mês: %s" % str(e)[:200])
-    if not pid_mes:
-        return {"ok": True, "mes": nome_mes, "movidos": 0, "itens": [],
-                "aviso": "A pasta %s ainda não existe." % nome_mes}
-
-    plano, sem_data = [], []
-    for f in _orc_lista_ft(pid_mes, limite=400):
-        dia, m2, a2 = _orc_dia_mes_ano(f["name"])
-        # só move o que pertence a este mês; nome sem data legível fica parado
-        if (m2, a2) != (mes, ano):
-            sem_data.append(f["name"])
-            continue
-        plano.append({"id": f["id"], "nome": f["name"], "dia": dia,
-                      "pasta": _orc_nome_pasta_dia(dia)})
-    plano.sort(key=lambda x: (x["dia"], x["nome"].upper()))
-
-    if simular:
-        return {"ok": True, "mes": nome_mes, "simulacao": True,
-                "movidos": 0, "aMover": len(plano), "itens": plano,
-                "semData": sem_data}
-
-    movidos, falhas = 0, []
-    cache_dia = {}
-    for it in plano:
-        try:
-            pid_dia = cache_dia.get(it["dia"])
-            if not pid_dia:
-                pid_dia = _drive_acha_pasta(it["pasta"], pid_mes) or _drive_cria_pasta(it["pasta"], pid_mes)
-                cache_dia[it["dia"]] = pid_dia
-            _orc_move(it["id"], pid_dia)
-            movidos += 1
-        except Exception as e:
-            falhas.append({"nome": it["nome"], "erro": str(e)[:160]})
-    _orc_pastas_cache.clear()          # a árvore mudou: o cache de pastas envelheceu
-    return {"ok": True, "mes": nome_mes, "movidos": movidos,
-            "itens": plano, "falhas": falhas, "semData": sem_data}
-
-
-def _orc_subpastas(pai_id, limite=200):
-    """Subpastas diretas de uma pasta (id + nome)."""
-    r = _drive_get("/files", {
-        "q": ("'%s' in parents and trashed = false and "
-              "mimeType = 'application/vnd.google-apps.folder'") % pai_id,
-        "orderBy": "name desc", "pageSize": str(limite),
-        "fields": "files(id,name)",
-        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
-    return r.get("files", [])
-
-
-def _orc_dia_mais_recente_com_arquivos(voltar_meses=6):
-    """Procura a pasta de DIA mais recente que tenha orçamentos dentro.
-
-       Começa no mês de hoje e caminha para trás. Em cada mês olha as pastas
-       de dia da mais recente para a mais antiga, e devolve a primeira que
-       tiver arquivo. É assim que a lista lateral tem o que mostrar mesmo num
-       documento novo, que ainda não veio do Drive.
-
-       Anda por MÊS e não dia a dia de propósito: listar as subpastas de um
-       mês é uma consulta só, enquanto tentar 60 dias seriam 60 consultas."""
-    try:
-        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
-    except Exception:
-        return None
-    h = datetime.now(timezone.utc)
-    ano, mes = h.year, h.month
-    for _ in range(max(1, voltar_meses)):
-        nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
-        pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
-        pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
-        if pid_mes:
-            dias = [p for p in _orc_subpastas(pid_mes) if p["name"].upper().startswith("DIA ")]
-            dias.sort(key=lambda p: p["name"], reverse=True)      # do dia mais alto para o mais baixo
-            for dpasta in dias:
-                arqs = _orc_lista_ft(dpasta["id"], limite=60)
-                if arqs:
-                    return {"id": dpasta["id"],
-                            "caminho": "%s / %s / %s" % (nome_ano, nome_mes, dpasta["name"]),
-                            "itens": arqs}
-            # mês sem pasta de dia: os arquivos podem estar soltos nele
-            arqs = _orc_lista_ft(pid_mes, limite=60)
-            if arqs:
-                return {"id": pid_mes, "caminho": "%s / %s" % (nome_ano, nome_mes), "itens": arqs}
-        mes -= 1
-        if mes == 0:
-            mes, ano = 12, ano - 1
-    return None
-
-
-def _caminho_da_pasta(pasta_id, prof=6):
-    """Caminho legível de uma pasta, a partir da raiz de orçamentos."""
-    if not pasta_id or pasta_id == FT_DRIVE_ORCAMENTOS:
-        return "Orçamentos"
-    partes, atual = [_nome_pasta(pasta_id)], pasta_id
-    for _ in range(prof):
-        p = _pai(atual)
-        if not p or p == FT_DRIVE_ORCAMENTOS:
-            break
-        partes.append(_nome_pasta(p))
-        atual = p
-    partes = [x for x in reversed(partes) if x]
-    if partes:
-        partes[0] = (partes[0].replace("Orçamentos Organizados", "Organizados")
-                              .replace("Lixeira da Área de Trabalho", "Lixeira"))
-    return " / ".join(partes) or "Orçamentos"
-
-
-def _conteudo_da_pasta(pasta_id):
-    """Subpastas e orçamentos de uma pasta, já ordenados."""
-    r = _drive_get("/files", {
-        "q": "'%s' in parents and trashed = false" % pasta_id,
-        "orderBy": "folder,name desc", "pageSize": "200",
-        "fields": "files(id,name,mimeType,modifiedTime,size)",
-        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"})
-    pastas, arquivos = [], []
-    for f in r.get("files", []):
-        if f.get("mimeType") == "application/vnd.google-apps.folder":
-            # a pasta dos relatórios é de serviço: o editor escreve nela, mas
-            # ela não aparece em Abrir nem na caixa lateral
-            if f["name"] == FT_PASTA_RELATORIOS:
-                continue
-            pastas.append({"id": f["id"], "nome": f["name"]})
-        elif f["name"].lower().endswith(".ft"):
-            arquivos.append({"id": f["id"], "nome": f["name"],
-                             "modificado": f.get("modifiedTime", ""),
-                             "tamanho": int(f.get("size") or 0)})
-    pastas.sort(key=lambda p: p["nome"], reverse=True)      # mais recente em cima
-    arquivos.sort(key=lambda a: a["modificado"], reverse=True)
-    return pastas, arquivos
-
-
-@app.get("/api/ft/vizinhos")
-def ft_vizinhos(request: Request, fid: str = "", pasta: str = ""):
-    """O conteúdo de uma pasta de orçamentos, para a lista lateral.
-
-       'pasta': navega para essa pasta (é assim que se anda para frente e
-                para trás na caixa).
-       'fid'  : sem 'pasta', abre a pasta onde mora aquele arquivo.
-       nenhum : a pasta de dia mais recente que tenha arquivos, para que a
-                lista sirva também num documento novo.
-
-       Devolve também o 'paiId' — a pasta de cima — que é o caminho de volta.
-       Ele vem vazio na raiz, e aí a caixa esconde o botão de voltar."""
-    exige_token(request)
-    exige_orcamentos()
-    fid = (fid or "").strip()
-    pasta = (pasta or "").strip()
-    pasta_id, caminho = None, ""
-
-    if pasta:
-        if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", pasta):
-            raise HTTPException(status_code=400, detail="ID de pasta inválido.")
-        if pasta != FT_DRIVE_ORCAMENTOS and not _orc_dentro(pasta):
-            raise HTTPException(status_code=403, detail="Pasta fora dos orçamentos.")
-        pasta_id = pasta
-    elif fid:
-        if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
-            raise HTTPException(status_code=400, detail="ID inválido.")
-        if not _orc_dentro(fid):
-            raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
-        pasta_id = _pai(fid)
-
-    pastas, itens = [], []
-    if pasta_id:
-        pastas, itens = _conteudo_da_pasta(pasta_id)
-        caminho = _caminho_da_pasta(pasta_id)
-
-    # nada aberto (ou pasta vazia sem subpastas): cai no dia mais recente com arquivos
-    if not pasta and not pastas and not itens:
-        achado = _orc_dia_mais_recente_com_arquivos()
-        if achado:
-            pasta_id = achado["id"]
-            pastas, itens = _conteudo_da_pasta(pasta_id)
-            caminho = _caminho_da_pasta(pasta_id)
-
-    if not pasta_id:                       # nem isso: mostra a raiz
-        pasta_id = FT_DRIVE_ORCAMENTOS
-        pastas, itens = _conteudo_da_pasta(pasta_id)
-        caminho = "Orçamentos"
-
-    pai = "" if pasta_id == FT_DRIVE_ORCAMENTOS else (_pai(pasta_id) or "")
-    return {"ok": True, "pasta": caminho, "pastaId": pasta_id,
-            "paiId": pai, "raiz": pasta_id == FT_DRIVE_ORCAMENTOS,
-            "pastas": pastas, "itens": itens}
-
-
-def _dataDoISO_py(iso):
-    """'2026-07-15T10:00:00Z' -> '150726'. Vazio se não der para ler."""
-    try:
-        d = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
-    except Exception:
-        return ""
-    return "%02d%02d%02d" % (d.day, d.month, d.year % 100)
-
-
-def _orc_base_sem_data(nome):
-    """Tira a extensão, a data e o sufixo de versão, deixando CLIENTE-PEDIDO.
-       'SALUTE-PD004101-150726-v2.ft' -> ('SALUTE-PD004101', '-v2')"""
-    base = re.sub(r"\.ft$", "", nome or "", flags=re.I)
-    sufixo = ""
-    m = re.search(r"(-v\d+)$", base, flags=re.I)
-    if m:
-        sufixo = m.group(1)
-        base = base[:m.start()]
-    base = re.sub(r"-\d{6}$", "", base)      # a data, se houver
-    return base, sufixo
-
-
-def _orc_normaliza_pedido(base):
-    """Põe o número do pedido no padrão PD00####.
-
-       Os orçamentos antigos usavam o número solto ('YASMIM-4052'); hoje o
-       editor grava 'YASMIM-PD004052'. Como a busca por um pedido já
-       arquivado é feita por esse número, um arquivo no formato velho não é
-       encontrado e acabaria duplicado.
-
-       Só mexe quando o trecho final é claramente um número de pedido: de 3 a
-       6 dígitos, sozinho depois do último hífen. Nome sem número nenhum fica
-       intacto — não há o que adivinhar."""
-    m = re.match(r"^(.*)-(\d{3,6})$", base)
-    if not m:
-        return base
-    cliente, num = m.group(1), m.group(2)
-    if len(num) == 6:
-        return base                        # já pode ser um PD sem o prefixo
-    return "%s-PD%06d" % (cliente, int(num))
-
-
-def _orc_dia_da_pasta(nome_pasta):
-    """'DIA 20' -> 20. Zero se não for uma pasta de dia."""
-    m = re.match(r"^DIA\s+(\d{1,2})$", (nome_pasta or "").strip(), flags=re.I)
-    return int(m.group(1)) if m else 0
-
-
-@app.post("/api/ft/padronizar-mes")
-async def ft_padronizar_mes(request: Request):
-    """Padroniza um mês de Orçamentos Organizados: nomes no formato certo,
-       coerentes com a pasta onde cada arquivo está.
-
-       A PASTA MANDA. Se um arquivo está em 'DIA 20', o nome dele passa a
-       terminar em 20 daquele mês — mesmo que hoje diga 30. Isso porque a
-       arrumação das pastas foi feita à mão e é ela que reflete a realidade;
-       o nome é que ficou para trás durante as mudanças de regra.
-
-       Também acerta o número do pedido: '4052' vira 'PD004052'. Sem isso um
-       arquivo antigo não é encontrado ao salvar por cima, e vira duplicata.
-
-       Arquivo solto no mês (fora de qualquer pasta de dia) não tem pasta em
-       que se apoiar: para esse, e só para esse, vale a data do último
-       salvamento, e ele é levado para a pasta daquele dia.
-
-       Com 'simular', devolve só o plano."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    try:
-        corpo = await request.json()
-    except Exception:
-        corpo = {}
-    simular = bool(corpo.get("simular"))
-
-    h = datetime.now(timezone.utc)
-    ano = int(corpo.get("ano") or h.year)
-    mes = int(corpo.get("mes") or h.month)
-    if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="Mês inválido.")
-
-    try:
-        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
-        nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
-        pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
-        pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
-    except Exception as e:
-        raise HTTPException(status_code=502, detail="Não consegui abrir a pasta do mês: %s" % str(e)[:200])
-    if not pid_mes:
-        return {"ok": True, "mes": nome_mes, "aMudar": 0, "itens": [],
-                "aviso": "A pasta %s ainda não existe." % nome_mes}
-
-    alvos = []
-    for f in _orc_lista_ft(pid_mes, limite=400):
-        alvos.append((f, "", 0))                       # solto: sem dia de apoio
-    for sub in _orc_subpastas(pid_mes):
-        dia = _orc_dia_da_pasta(sub["name"])
-        for f in _orc_lista_ft(sub["id"], limite=400):
-            alvos.append((f, sub["name"], dia))
-
-    plano, parados = [], []
-    for f, onde, dia_pasta in alvos:
-        if dia_pasta:
-            dia = dia_pasta                            # a pasta manda
-            dt = "%02d%02d%02d" % (dia, mes, ano % 100)
-            motivo = "pasta"
-        else:
-            dt = _dataDoISO_py(f.get("modifiedTime", ""))
-            if not dt:
-                parados.append(f["name"])
-                continue
-            dia = int(dt[0:2])
-            motivo = "último salvamento"
-        base, sufixo = _orc_base_sem_data(f["name"])
-        base = _orc_normaliza_pedido(base)
-        nome_novo = "%s-%s%s.ft" % (base, dt, sufixo)
-        pasta_nova = _orc_nome_pasta_dia(dia)
-        if f["name"] == nome_novo and onde == pasta_nova:
-            continue
-        plano.append({"id": f["id"], "de": f["name"], "para": nome_novo,
-                      "ondeEstava": onde or "(solto no mês)",
-                      "pasta": pasta_nova, "dia": dia, "porque": motivo,
-                      "renomeia": f["name"] != nome_novo,
-                      "move": onde != pasta_nova})
-    plano.sort(key=lambda x: (x["dia"], x["para"].upper()))
-
-    if simular:
-        return {"ok": True, "mes": nome_mes, "simulacao": True,
-                "aMudar": len(plano), "itens": plano, "parados": parados,
-                "total": len(alvos)}
-
-    feitos, falhas = 0, []
-    cache_dia = {}
-    for it in plano:
-        try:
-            if it["renomeia"]:
-                _orc_renomeia(it["id"], it["para"])
-            if it["move"]:
-                pid_dia = cache_dia.get(it["dia"])
-                if not pid_dia:
-                    pid_dia = (_drive_acha_pasta(it["pasta"], pid_mes)
-                               or _drive_cria_pasta(it["pasta"], pid_mes))
-                    cache_dia[it["dia"]] = pid_dia
-                _orc_move(it["id"], pid_dia)
-            feitos += 1
-        except Exception as e:
-            falhas.append({"nome": it["de"], "erro": str(e)[:160]})
-    _orc_pastas_cache.clear()
-    return {"ok": True, "mes": nome_mes, "feitos": feitos,
-            "itens": plano, "falhas": falhas, "parados": parados}
-
-# --- Relatórios -----------------------------------------------------------
-# A tag do módulo Design que marca sublimação. Tudo o que não a tem cai em
-# "personalizado" — é a divisão que o relatório usa nas colunas.
-FT_TAG_SUBLI = "subli"
-
-
-def _rel_numero(x):
-    """'1.234,50' ou '1234.5' -> float. Campo vazio vira zero."""
-    s = str(x or "").strip()
-    if not s:
-        return 0.0
-    s = s.replace(".", "").replace(",", ".") if "," in s else s
-    try:
-        return float(s)
-    except Exception:
-        return 0.0
-
-
-def _rel_do_conteudo(c):
-    """Peças e valor de um orçamento, separados em sublimação x personalizado.
-
-       Um LAYOUT inteiro cai de um lado só: se tiver a tag de sublimação no
-       Design, tudo dele é sublimação; senão, tudo é personalizado. A técnica
-       é do layout, não da peça.
-
-       Devolve também os layouts MISTOS — os que têm a tag de sublimação junto
-       com outra (DTF, patch, silk, bordado, etiqueta). Pela regra eles entram
-       inteiros em sublimação, mas parte do trabalho ali é de outra técnica:
-       o relatório marca esses valores em vermelho para que a conta não passe
-       por exata sem ser."""
-    sp = sv = pp = pv = 0.0
-    mistos = []
-    for l in (c.get("layouts") or []):
-        tags = {str(t.get("tag", "")).strip()
-                for t in (l.get("design") or []) if str(t.get("tag", "")).strip()}
-        baixas = {t.lower() for t in tags}
-        pcs = val = 0.0
-        for _tam, g in (l.get("tamanhos") or {}).items():
-            q = _rel_numero((g or {}).get("q"))
-            u = _rel_numero((g or {}).get("u"))
-            pcs += q
-            val += q * u
-        if FT_TAG_SUBLI in baixas:
-            sp += pcs; sv += val
-            if len(tags) > 1:
-                mistos.append({"ref": str(l.get("ref") or "").strip(),
-                               "tags": sorted(tags),
-                               "pecas": int(pcs), "valor": round(val, 2)})
-        else:
-            pp += pcs; pv += val
-    return sp, sv, pp, pv, mistos
-
-
-def _rel_cliente_pedido(nome_arq, header):
-    """Cliente e pedido. O nome do arquivo manda (é o que foi padronizado);
-       o cabeçalho do documento entra como reserva."""
-    base = re.sub(r"\.ft$", "", nome_arq or "", flags=re.I)
-    base = re.sub(r"-v\d+$", "", base)
-    base = re.sub(r"-\d{6}$", "", base)
-    m = re.search(r"(PD\d{6})", base)
-    ped = m.group(1) if m else str((header or {}).get("pedido") or "").strip()
-    cli = base.replace("-" + ped, "").strip(" -") if m else base
-    if not cli:
-        cli = str((header or {}).get("cliente") or "").strip()
-    return cli, ped
-
-
-def _rel_fontes(ano, mes, dia):
-    """As pastas a percorrer e os arquivos que há nelas. Só listagem: não abre
-       nenhum arquivo, por isso é rápido."""
-    raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
-    nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
-    pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
-    pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
-    if not pid_mes:
-        return None, []
-    achados = []
-    for sub in _orc_subpastas(pid_mes):
-        d = _orc_dia_da_pasta(sub["name"])
-        if d and (not dia or d == dia):
-            for f in _orc_lista_ft(sub["id"], limite=400):
-                achados.append({"id": f["id"], "nome": f["name"], "dia": d})
-    if not dia:
-        for f in _orc_lista_ft(pid_mes, limite=400):
-            achados.append({"id": f["id"], "nome": f["name"],
-                            "dia": _orc_dia_mes_ano(f["name"])[0]})
-    return pid_mes, achados
-
-
-@app.get("/api/ft/relatorio-lista")
-def ft_relatorio_lista(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
-    """Só QUAIS arquivos entram no relatório, sem abrir nenhum.
-
-       É o primeiro passo do carregamento em lotes: com esta lista o editor
-       sabe quantos são e pode mostrar um progresso verdadeiro, em vez de um
-       'aguarde' sem fim."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    h = datetime.now(timezone.utc)
-    ano = int(ano or h.year); mes = int(mes or h.month)
-    if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="Mês inválido.")
-    try:
-        _pid, achados = _rel_fontes(ano, mes, dia)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail="Não consegui abrir a pasta: %s" % str(e)[:200])
-    return {"ok": True, "ano": ano, "mes": mes, "dia": dia,
-            "mesNome": _orc_nome_pasta_mes(ano, mes),
-            "total": len(achados), "arquivos": achados}
-
-
-@app.post("/api/ft/relatorio-lote")
-async def ft_relatorio_lote(request: Request):
-    """Lê um punhado de orçamentos e devolve as linhas deles.
-
-       O editor chama isto várias vezes, um lote de cada vez, e vai somando —
-       assim a barra de progresso anda de verdade a cada resposta."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    try:
-        corpo = await request.json()
-    except Exception:
-        corpo = {}
-    pedidos = corpo.get("arquivos") or []
-    if not isinstance(pedidos, list) or len(pedidos) > 40:
-        raise HTTPException(status_code=400, detail="Lote inválido.")
-    itens, falhas = [], []
-    for a in pedidos:
-        fid = str((a or {}).get("id") or "")
-        nome = str((a or {}).get("nome") or "")
-        if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
-            continue
-        try:
-            bruto, _ = _drive_get("/files/" + fid,
-                                  {"alt": "media", "supportsAllDrives": "true"},
-                                  binario=True)
-            c = json.loads(bruto.decode("utf-8"))
-        except Exception as e:
-            falhas.append({"nome": nome, "erro": str(e)[:120]})
-            continue
-        header = c.get("header") or {}
-        cli, ped = _rel_cliente_pedido(nome, header)
-        sp, sv, pp, pv, mistos = _rel_do_conteudo(c)
-        itens.append({
-            "id": fid, "arquivo": nome, "mistos": mistos,
-            "dia": int((a or {}).get("dia") or _orc_dia_mes_ano(nome)[0]),
-            "cliente": cli, "pedido": ped,
-            "vendedor": str(header.get("vendedor") or "").strip(),
-            "subPecas": int(sp), "subValor": round(sv, 2),
-            "perPecas": int(pp), "perValor": round(pv, 2),
-        })
-    return {"ok": True, "itens": itens, "falhas": falhas}
-
-
-@app.get("/api/ft/relatorio")
-def ft_relatorio(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
-    """Os pedidos arquivados num período, já somados por técnica.
-
-       Sem 'dia', é o mês inteiro. A leitura é feita aqui e não no navegador
-       porque são dezenas de arquivos: uma resposta em vez de dezenas de
-       viagens."""
-    exige_token(request)
-    exige_editor_atual(request)          # relatório é coisa de administrador
-    exige_orcamentos()
-
-    h = datetime.now(timezone.utc)
-    ano = int(ano or h.year)
-    mes = int(mes or h.month)
-    if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="Mês inválido.")
-    if dia and not (1 <= dia <= 31):
-        raise HTTPException(status_code=400, detail="Dia inválido.")
-
-    try:
-        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
-        nome_ano, nome_mes = str(ano), _orc_nome_pasta_mes(ano, mes)
-        pid_ano = _drive_acha_pasta(nome_ano, raiz_org)
-        pid_mes = _drive_acha_pasta(nome_mes, pid_ano) if pid_ano else None
-    except Exception as e:
-        raise HTTPException(status_code=502, detail="Não consegui abrir a pasta: %s" % str(e)[:200])
-    if not pid_mes:
-        return {"ok": True, "ano": ano, "mes": mes, "dia": dia,
-                "mesNome": _orc_nome_pasta_mes(ano, mes), "itens": [],
-                "aviso": "Nenhum orçamento arquivado neste mês."}
-
-    # que pastas ler: um dia só, ou o mês inteiro (mais os soltos nele)
-    fontes = []
-    for sub in _orc_subpastas(pid_mes):
-        d = _orc_dia_da_pasta(sub["name"])
-        if d and (not dia or d == dia):
-            fontes.append((d, sub["id"]))
-    if not dia:
-        fontes.append((0, pid_mes))       # o que estiver solto no mês
-
-    itens, falhas = [], []
-    for d, pid in fontes:
-        for f in _orc_lista_ft(pid, limite=400):
-            try:
-                bruto, _ = _drive_get("/files/" + f["id"],
-                                      {"alt": "media", "supportsAllDrives": "true"},
-                                      binario=True)
-                c = json.loads(bruto.decode("utf-8"))
-            except Exception as e:
-                falhas.append({"nome": f["name"], "erro": str(e)[:120]})
-                continue
-            header = c.get("header") or {}
-            cli, ped = _rel_cliente_pedido(f["name"], header)
-            sp, sv, pp, pv, mistos = _rel_do_conteudo(c)
-            itens.append({
-                "id": f["id"], "arquivo": f["name"], "mistos": mistos,
-                "dia": d or _orc_dia_mes_ano(f["name"])[0],
-                "cliente": cli, "pedido": ped,
-                "vendedor": str(header.get("vendedor") or "").strip(),
-                "subPecas": int(sp), "subValor": round(sv, 2),
-                "perPecas": int(pp), "perValor": round(pv, 2),
-            })
-    itens.sort(key=lambda x: (x["dia"], x["cliente"].upper()))
-    return {"ok": True, "ano": ano, "mes": mes, "dia": dia,
-            "mesNome": _orc_nome_pasta_mes(ano, mes),
-            "itens": itens, "falhas": falhas}
-
-
-@app.get("/api/ft/relatorio-periodos")
-def ft_relatorio_periodos(request: Request, ano: int = 0, mes: int = 0):
-    """Que anos, meses e dias existem — para preencher os seletores sem chute."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    try:
-        raiz_org = _orc_subpasta_raiz(FT_PASTA_ORGANIZADOS)
-    except Exception:
-        return {"ok": True, "anos": [], "meses": [], "dias": []}
-    anos = sorted((p["name"] for p in _orc_subpastas(raiz_org)
-                   if re.fullmatch(r"\d{4}", p["name"])), reverse=True)
-    meses, dias = [], []
-    # Sem ano informado, assume o mais recente que existe.
-    if not ano and anos:
-        ano = int(anos[0])
-    if ano:
-        pid_ano = _drive_acha_pasta(str(ano), raiz_org)
-        if pid_ano:
-            for p in _orc_subpastas(pid_ano):
-                m = re.match(r"^\d{4}\s*-\s*(\d{2})\s*-", p["name"])
-                if m:
-                    meses.append(int(m.group(1)))
-            meses = sorted(set(meses), reverse=True)
-            if mes:
-                pid_mes = _drive_acha_pasta(_orc_nome_pasta_mes(ano, mes), pid_ano)
-                if pid_mes:
-                    dias = sorted({_orc_dia_da_pasta(p["name"])
-                                   for p in _orc_subpastas(pid_mes)
-                                   if _orc_dia_da_pasta(p["name"])}, reverse=True)
-    # O ANO CORRENTE entra na lista mesmo sem pasta: em 1º de janeiro ainda não
-    # há nada arquivado, e sem o ano na lista não haveria como gerar o primeiro
-    # relatório do ano.
-    lista_anos = sorted({int(a) for a in anos} | {datetime.now().year}, reverse=True)
-
-    # "meses" diz quais têm MOVIMENTO — é o que o editor usa para marcar a lista.
-    # A escolha em si não se limita a eles: um mês sem pasta é um mês sem
-    # orçamentos arquivados, e o usuário precisa poder selecioná-lo para gerar
-    # o relatório (que virá vazio, o que é a resposta correta).
-    return {"ok": True, "anos": lista_anos, "meses": meses,
-            "dias": dias, "ano": ano, "comMovimento": meses}
-
-
-# Pasta onde os relatórios gerados ficam guardados. Fica ao lado das outras
-# na raiz de orçamentos, mas NÃO aparece na navegação do editor: quem escreve
-# nela é só o próprio relatório, e abrir um .ftr como se fosse orçamento não
-# faria sentido nenhum.
-FT_PASTA_RELATORIOS = "Relatórios gerados"
-
-
-def _rel_pasta():
-    """A pasta dos relatórios, criada na primeira vez que for preciso."""
-    return _orc_subpasta_raiz(FT_PASTA_RELATORIOS)
-
-
-def _rel_nome_arquivo(ano, mes, dia=0):
-    """Um arquivo por período. Gerar de novo sobrescreve o mesmo arquivo,
-       então nunca há dois relatórios do mesmo mês para escolher."""
-    return ("%04d-%02d-%02d.ftr" % (ano, mes, dia)) if dia else ("%04d-%02d.ftr" % (ano, mes))
-
-
-@app.post("/api/ft/relatorio-guardar")
-async def ft_relatorio_guardar(request: Request):
-    """Guarda o relatório recém-gerado, para não ser preciso refazê-lo."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    try:
-        corpo = await request.json()
-    except Exception:
-        corpo = {}
-    h = datetime.now(timezone.utc)
-    ano = int(corpo.get("ano") or h.year)
-    mes = int(corpo.get("mes") or h.month)
-    dia = int(corpo.get("dia") or 0)
-    if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="Mês inválido.")
-    itens = corpo.get("itens")
-    if not isinstance(itens, list):
-        raise HTTPException(status_code=400, detail="Relatório sem itens.")
-
-    doc = {"_formato": "fourtime-relatorio", "_versao": 1,
-           "geradoEm": h.isoformat(), "ano": ano, "mes": mes, "dia": dia,
-           "itens": itens, "falhas": corpo.get("falhas") or []}
-    nome = _rel_nome_arquivo(ano, mes, dia)
-    texto = json.dumps(doc, ensure_ascii=False)
-    fid, acao, via = None, "", ""
-
-    # 1) pela service account: só funciona se o arquivo JÁ existir. Ela pode
-    #    ATUALIZAR, mas não CRIAR — contas de serviço não têm cota própria de
-    #    armazenamento no Drive, e criar devolve 403.
-    try:
-        pid = _rel_pasta()
-        existente = _orc_acha_arquivo(nome, pid)
-        if existente:
-            _orc_grava_por_id(existente, texto.encode("utf-8"))
-            fid, acao, via = existente, "atualizado", "service-account"
-    except Exception:
-        pass
-
-    # 2) senão, quem cria é o Apps Script: ele roda como dono da conta e tem
-    #    cota. É o mesmo plano B que os orçamentos já usam.
-    if not fid and FT_SCRIPT_ORCAMENTOS:
-        try:
-            r = _script_post({"acao": "salvar", "nome": nome, "conteudo": texto,
-                              "destino": "relatorio",
-                              "pastaRelatorios": FT_PASTA_RELATORIOS})
-            fid, acao, via = r.get("id"), "criado", "apps-script"
-        except Exception as e:
-            # guardar é conveniência: se falhar, o relatório na tela continua
-            # valendo. Por isso devolve o aviso em vez de derrubar a geração.
-            return {"ok": False, "aviso": "Não consegui guardar: %s" % str(e)[:160]}
-
-    if not fid:
-        return {"ok": False, "aviso": "Não consegui guardar: a conta de serviço não "
-                                      "tem cota para criar arquivos e o Apps Script "
-                                      "não está configurado."}
-    return {"ok": True, "id": fid, "acao": acao, "via": via,
-            "nome": nome, "geradoEm": doc["geradoEm"]}
-
-
-@app.get("/api/ft/relatorio-guardado")
-def ft_relatorio_guardado(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
-    """O último relatório guardado de um período, se houver."""
-    exige_token(request)
-    exige_editor_atual(request)
-    exige_orcamentos()
-    h = datetime.now(timezone.utc)
-    ano = int(ano or h.year)
-    mes = int(mes or h.month)
-    dia = int(dia or 0)
-    if not (1 <= mes <= 12):
-        raise HTTPException(status_code=400, detail="Mês inválido.")
-    nome = _rel_nome_arquivo(ano, mes, dia)
-    try:
-        pid = _rel_pasta()
-        achados = _drive_get("/files", {
-            "q": ("'%s' in parents and trashed = false and name = '%s'"
-                  % (pid, nome.replace("'", "\\'"))),
-            "fields": "files(id,name,modifiedTime)", "pageSize": "5",
-            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"}).get("files", [])
-        if not achados:
-            return {"ok": True, "existe": False}
-        bruto, _ = _drive_get("/files/" + achados[0]["id"],
-                              {"alt": "media", "supportsAllDrives": "true"}, binario=True)
-        doc = json.loads(bruto.decode("utf-8"))
-    except Exception as e:
-        return {"ok": True, "existe": False, "aviso": str(e)[:160]}
-    doc["existe"] = True
-    doc["ok"] = True
-    return doc
 
 
 # ------------- PWA (offline + instalável) -------------
-def _acha_pwa_dir():
-    """Procura a pasta 'pwa' em locais comuns. Funciona esteja ela na raiz
-       do projeto ou dentro de subpastas como 'powerup/'. Assim o PWA não
-       depende de onde exatamente os arquivos foram enviados no repositório."""
-    base = os.path.dirname(__file__)
-    candidatos = [
-        os.path.join(base, "pwa"),
-        os.path.join(base, "powerup", "pwa"),
-    ]
-    # também varre 1 nível de subpastas atrás de uma pasta 'pwa' com manifest
-    try:
-        for nome in os.listdir(base):
-            sub = os.path.join(base, nome, "pwa")
-            if os.path.isdir(sub):
-                candidatos.append(sub)
-    except Exception:
-        pass
-    for c in candidatos:
-        if os.path.isfile(os.path.join(c, "manifest.json")):
-            return c
-    return candidatos[0]  # padrão (mesmo que ainda não exista)
-
-_PWA_DIR = _acha_pwa_dir()
+_PWA_DIR = os.path.join(os.path.dirname(__file__), "pwa")
 _PWA_MIME = {
     ".json": "application/manifest+json",
     ".js":   "application/javascript",
@@ -2731,3 +1517,86 @@ def raiz():
             "Expires": "0",
         })
     return {"servidor": "Fourtime Etapa 02", "editor": "nenhum editor*.html na pasta"}
+
+# =====================================================================
+#  BACKUP DIÁRIO DO BANCO (v3.257)
+#
+#  Um arquivo por dia numa pasta própria do Drive. Nasceu de um susto
+#  real: a v3.256 mudou o formato de clientes e bugs, e uma mesclagem mal
+#  resolvida no servidor descartava relatos em silêncio. Um backup manual
+#  cobre o dia em que alguém lembra de fazer; este cobre todos.
+#
+#  O arquivo do dia é SOBRESCRITO — não se acumulam dezenas por dia. E a
+#  pasta fica de fora do "Abrir": ela não guarda orçamentos, e listá-la
+#  ali só confundiria quem procura um pedido.
+# =====================================================================
+
+def _backup_pasta_id():
+    """A pasta na raiz dos orçamentos. Criada na primeira vez."""
+    pid = _drive_acha_pasta(PASTA_BACKUP, FT_DRIVE_ORCAMENTOS)
+    if not pid:
+        pid = _drive_cria_pasta(PASTA_BACKUP, FT_DRIVE_ORCAMENTOS)
+    return pid
+
+def _backup_grava(forcado=False):
+    """Grava o banco de hoje. Devolve (nome, situação) ou (None, motivo)."""
+    if not FT_DRIVE_CREDENCIAIS or not FT_DRIVE_ORCAMENTOS:
+        return None, "Drive não configurado"
+    hoje = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    nome = "backup-%s.ftdb" % hoje
+    try:
+        pid = _backup_pasta_id()
+        if not forcado and _orc_acha_arquivo(nome, pid):
+            return nome, "já existe"      # o do dia já foi feito
+        db = le_banco_drive() if drive_ligado() else {}
+        corpo = json.dumps(db, ensure_ascii=False, indent=1).encode("utf-8")
+        _orc_sobe_arquivo(nome, pid, corpo)
+        return nome, "gravado"
+    except Exception as e:
+        return None, str(e)[:200]
+
+_backup_ultimo = {"dia": ""}
+
+def _backup_se_for_a_hora():
+    """Chamado de graça nas rotas do banco: se o dia virou, grava.
+
+    Sem agendador: o Render free hiberna, e um cron que nunca acorda não
+    faz backup nenhum. Assim, o primeiro acesso do dia dispara — e é
+    exatamente quando há alguém trabalhando e dados novos para guardar.
+    """
+    hoje = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _backup_ultimo["dia"] == hoje:
+        return
+    _backup_ultimo["dia"] = hoje          # marca ANTES, para não repetir se falhar
+    try:
+        threading.Thread(target=_backup_grava, daemon=True).start()
+    except Exception:
+        pass
+
+@app.post("/api/db/backup-agora")
+def db_backup_agora(request: Request):
+    """Backup sob demanda — para conferir que está funcionando."""
+    exige_token(request)
+    if not eh_admin(request):
+        raise HTTPException(status_code=403, detail="Só administradores.")
+    nome, situacao = _backup_grava(forcado=True)
+    if not nome:
+        raise HTTPException(status_code=500, detail="Backup falhou: " + situacao)
+    return {"ok": True, "arquivo": nome, "situacao": situacao}
+
+@app.get("/api/db/backups")
+def db_backups(request: Request):
+    """Lista o que já foi guardado, do mais novo para o mais antigo."""
+    exige_token(request)
+    if not eh_admin(request):
+        raise HTTPException(status_code=403, detail="Só administradores.")
+    try:
+        pid = _backup_pasta_id()
+        q = ("'%s' in parents and trashed = false" % pid)
+        r = _drive_get("/files", {"q": q, "fields": "files(id,name,size,modifiedTime)",
+                                  "orderBy": "name desc", "pageSize": "60",
+                                  "includeItemsFromAllDrives": "true",
+                                  "supportsAllDrives": "true"})
+        return {"ok": True, "arquivos": r.get("files", [])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
