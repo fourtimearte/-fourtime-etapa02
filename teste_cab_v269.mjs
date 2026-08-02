@@ -7,7 +7,7 @@ import { pathToFileURL } from 'url';
    e não só de /home/claude/ft */
 const DIR = import.meta.dirname + '/';
 
-const ARQ = DIR+'fourtime-editor-v275.html';
+const ARQ = DIR+'fourtime-editor-v276.html';
 const falhas = [];
 function checa(r, o, e) {
   const ok = JSON.stringify(o) === JSON.stringify(e);
@@ -29,7 +29,7 @@ await esperaPronto(page);
 await page.evaluate(() => { window.CC_ESC_FOLHA = 1; aplicaZoom(); });
 
 console.log('\n=== 0. CARREGOU ===');
-checa('versão', await page.evaluate(() => FT_EDITOR), '3.275');
+checa('versão', await page.evaluate(() => FT_EDITOR), '3.276');
 checa('sem erro de página', erros.length, 0);
 if (erros.length) erros.slice(0, 4).forEach(e => console.log('     ! ' + e));
 

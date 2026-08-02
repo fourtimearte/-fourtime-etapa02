@@ -13,7 +13,7 @@ import { pathToFileURL } from 'url';
    e não só de /home/claude/ft */
 const DIR = import.meta.dirname + '/';
 
-const ARQ = DIR+'fourtime-editor-v275.html';
+const ARQ = DIR+'fourtime-editor-v276.html';
 const URL = pathToFileURL(ARQ).href;
 const falhas = [];
 function checa(r, o, e) {
@@ -63,7 +63,7 @@ const RAIO_X = `(() => {
 
 console.log('\n=== 0. CARREGOU ===');
 let page = await abre(3072, 3072, 1400);
-checa('versão', await page.evaluate(() => FT_EDITOR), '3.275');
+checa('versão', await page.evaluate(() => FT_EDITOR), '3.276');
 checa('sem erro de página', erros.length, 0);
 if (erros.length) erros.slice(0, 4).forEach(e => console.log('     ! ' + e));
 

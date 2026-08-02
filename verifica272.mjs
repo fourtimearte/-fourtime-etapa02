@@ -6,7 +6,7 @@ const DIR = import.meta.dirname + '/';
 const b = await abreNavegador();
 const p = await b.newPage({viewport:{width:1600,height:1000},deviceScaleFactor:2});
 const err=[]; p.on('pageerror',e=>err.push(String(e).slice(0,200)));
-await p.goto(pathToFileURL(DIR+'fourtime-editor-v275.html').href);
+await p.goto(pathToFileURL(DIR+'fourtime-editor-v276.html').href);
 await esperaPronto(p);
 
 console.log('AVISO sem valores:', await p.evaluate(async ()=>{

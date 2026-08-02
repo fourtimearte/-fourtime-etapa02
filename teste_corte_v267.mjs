@@ -11,7 +11,7 @@ function checa(r,o,e){const ok=JSON.stringify(o)===JSON.stringify(e);
 const browser = await abreNavegador();
 const page=await browser.newPage({viewport:{width:1920,height:1080}});
 const erros=[]; page.on('pageerror',e=>erros.push(String(e).slice(0,200)));
-await page.goto(pathToFileURL(DIR+'fourtime-editor-v275.html').href);
+await page.goto(pathToFileURL(DIR+'fourtime-editor-v276.html').href);
 await esperaPronto(page);
 
 /* "cortada" = a folha passa da borda direita da área que a contém */

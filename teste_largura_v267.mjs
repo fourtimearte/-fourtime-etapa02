@@ -11,7 +11,7 @@ function checa(r,o,e){const ok=JSON.stringify(o)===JSON.stringify(e);
 const browser = await abreNavegador();
 const page=await browser.newPage({viewport:{width:1920,height:1080}});
 const erros=[]; page.on('pageerror',e=>erros.push(String(e).slice(0,200)));
-await page.goto(pathToFileURL(DIR+'fourtime-editor-v275.html').href);
+await page.goto(pathToFileURL(DIR+'fourtime-editor-v276.html').href);
 await esperaPronto(page);
 
 const estado=()=>page.evaluate(()=>({
@@ -23,7 +23,7 @@ const estado=()=>page.evaluate(()=>({
 }));
 
 console.log('\n=== 0. CARREGOU ===');
-checa('versão', await page.evaluate(()=>FT_EDITOR), '3.275');
+checa('versão', await page.evaluate(()=>FT_EDITOR), '3.276');
 checa('sem erro de página', erros.length, 0);
 if(erros.length)erros.slice(0,4).forEach(e=>console.log('     ! '+e));
 

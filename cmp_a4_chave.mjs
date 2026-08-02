@@ -29,7 +29,7 @@ async function foto(arq){
   await p.close(); return r;
 }
 const A = await foto('fourtime-editor-v269.html');
-const B = await foto('fourtime-editor-v275.html');
+const B = await foto('fourtime-editor-v276.html');
 await b.close();
 const chaves = new Set([...Object.keys(A),...Object.keys(B)]);
 const dif = [];
