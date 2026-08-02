@@ -16,7 +16,7 @@
 #  Se existir um arquivo editor*.html na mesma pasta, ele é
 #  servido em "/" — editor completamente online.
 # ============================================================
-import os, re, json, glob, sqlite3, threading, hashlib
+import os, re, json, glob, sqlite3, threading, hashlib, uuid
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -29,7 +29,12 @@ FT_ADMIN_TOKEN = os.environ.get("FT_ADMIN_TOKEN", "").strip()
 # Versão MÍNIMA do editor aceita para GRAVAR. Editores antigos têm um banco
 # local possivelmente velho — e a mesclagem ressuscitaria itens já apagados.
 # Ler, qualquer versão pode; gravar, só quem está em dia.
-FT_EDITOR_MINIMO = os.environ.get("FT_EDITOR_MINIMO", "3.131").strip()
+# v3.258: subiu de 3.131 para 3.258. Não é capricho de versão — as v3.256/257
+# inventavam o id do cliente NO NAVEGADOR, e cada máquina que sincronizava
+# somava um conjunto inteiro de cadastros ao banco (225 viraram 675). Um editor
+# antigo aberto numa aba esquecida basta para refazer o estrago. Aqui a porta
+# fecha: quem não está em dia LÊ, mas não GRAVA.
+FT_EDITOR_MINIMO = os.environ.get("FT_EDITOR_MINIMO", "3.258").strip()
 DB_PATH  = os.environ.get("FT_DB_PATH", os.path.join(os.path.dirname(__file__), "fourtime.db"))
 
 app = FastAPI(title="Fourtime Etapa 02", docs_url=None, redoc_url=None)
@@ -116,32 +121,88 @@ def exige_editor_atual(request: Request):
 def _chave(item):
     """Como saber se dois itens são 'o mesmo'.
 
-    A identidade era SEMPRE o campo `n` (o nome). Isso quebrou em dois
-    lugares na v3.256:
+    ORDEM: nome  ->  id  ->  impressão do conteúdo.
 
-      · Bugs viraram objetos sem `n`. A chave saía vazia, e o laço de
-        mesclagem descarta o que não tem chave — todos os relatos eram
-        jogados fora ao sincronizar, sem aviso.
+    A v3.257 pôs o `id` na frente do nome, e foi um erro caro: 225 clientes
+    viraram 675. O motivo é que o id não vinha de lugar nenhum confiável —
+    cada navegador inventava o seu com Date.now(). Duas máquinas olhando os
+    MESMOS 225 cadastros produziam 450 chaves diferentes, e a mesclagem,
+    obediente, guardava as 450.
 
-      · Clientes ganharam `id` próprio. Sem usá-lo, dois cadastros recém-
-        criados (ambos "NOVO CLIENTE") viravam o mesmo item, e renomear um
-        cliente o transformava num item novo, duplicando.
+    O nome volta à frente por três razões concretas, não por gosto:
 
-    Agora a ordem é: `id` estável primeiro; nome depois; e, para quem não
-    tem nenhum dos dois, uma impressão do próprio conteúdo — melhor um item
+      1. É o que o `.ft` guarda. O cabeçalho do orçamento tem
+         `header.cliente` como TEXTO — nunca um id. Todo orçamento já
+         salvo no Drive aponta para o cliente pelo nome, e isso não se
+         reescreve retroativamente. Quando o CRM migrar para o Postgres,
+         o `pedido.cliente_id` só poderá ser resolvido casando pelo nome.
+         Logo, o nome já É a chave de junção — assumir isso é honestidade.
+
+      2. É o que as lápides usam. O editor grava a remoção como o NOME em
+         maiúsculas; com o id na frente, apagar um cliente parava de
+         funcionar em silêncio e ele voltava na sincronização seguinte.
+
+      3. Sobrevive a um banco velho. Um navegador com cópia antiga (sem
+         id nenhum) casa pelo nome com o cadastro do servidor em vez de
+         criar um clone.
+
+    O `id` continua existindo e importa muito — mas quem o carimba agora é
+    o SERVIDOR (ver `_carimba_ids`), e ele serve para o futuro: é o uuid que
+    vira a chave primária no Supabase. Ele fica em segundo lugar para dar
+    identidade a quem não tem nome — os relatos de bug, que são objetos sem
+    `n` e cujo conteúdo muda quando alguém marca "concertado".
+
+    Quem não tem nome nem id cai na impressão do conteúdo: melhor um item
     repetido que um item perdido.
     """
     if isinstance(item, dict):
-        ident = str(item.get("id", "")).strip()
-        if ident:
-            return "id:" + ident
         nome = str(item.get("n", "")).strip().upper()
         if nome:
             return nome
-        # sem id nem nome (bug antigo, por exemplo): o conteúdo é a identidade
+        ident = str(item.get("id", "")).strip()
+        if ident:
+            return "id:" + ident
+        # sem nome nem id (bug antigo, por exemplo): o conteúdo é a identidade
         bruto = json.dumps(item, sort_keys=True, ensure_ascii=False)
         return "h:" + hashlib.sha1(bruto.encode("utf-8")).hexdigest()[:16]
     return str(item).strip().upper()
+
+
+# Categorias que viram TABELA no Postgres/Supabase e portanto precisam de uma
+# chave primária estável desde já. Referências, tecidos e cores são listas de
+# nomes: o nome basta e acrescentar id só faria barulho.
+CATEGORIAS_COM_ID = ("clientes", "bugs")
+
+
+def _carimba_ids(banco):
+    """Dá identidade permanente a quem ainda não tem — e quem dá é o SERVIDOR.
+
+    Este é o conserto de fundo da v3.258. O id não some: ele passa a nascer
+    numa AUTORIDADE ÚNICA em vez de em cada navegador. Um uuid4 carimbado
+    aqui é o mesmo valor que vira `cliente.id uuid PRIMARY KEY` quando o CRM
+    migrar para o Supabase — a migração deixa de precisar inventar ids novos
+    e perder o rastro do que é quem.
+
+    Também recolhe os ids provisórios: o editor precisa de alguma coisa para
+    saber qual ficha está aberta antes do primeiro sync, e usa um `tmp_...`.
+    Esse prefixo é a marca de "isto ainda não é identidade" — o servidor o
+    substitui pelo uuid de verdade na primeira gravação.
+
+    Devolve quantos itens ganharam id (0 = nada a fazer).
+    """
+    carimbados = 0
+    for cat in CATEGORIAS_COM_ID:
+        itens = banco.get(cat)
+        if not isinstance(itens, list):
+            continue
+        for it in itens:
+            if not isinstance(it, dict):
+                continue
+            ident = str(it.get("id", "")).strip()
+            if not ident or ident.startswith("tmp_"):
+                it["id"] = str(uuid.uuid4())
+                carimbados += 1
+    return carimbados
 
 def mescla_listas(base, novos):
     """União preservando a ordem: primeiro o que já existia, depois o que é novo.
@@ -216,7 +277,52 @@ def mescla_banco(base, novo, remocoes=None, admin=False):
 
     if lapides:
         saida[LAPIDES] = lapides
+
+    # último passo, sempre: quem entrou sem identidade sai com uma. Fica aqui
+    # (e não nas rotas) para valer em TODOS os caminhos de gravação — Drive,
+    # SQLite efêmero e qualquer rota futura.
+    _carimba_ids(saida)
     return saida
+
+
+def _inchou(base, junto, pct=50, minimo=25):
+    """Freio de mão: uma gravação que INCHA uma categoria é quase sempre bug.
+
+    Existe o freio contrário desde a v3.2xx (o banco não pode ENCOLHER de
+    repente, para um navegador vazio não apagar o trabalho dos outros). Faltava
+    este. A duplicação dos clientes cresceu 225 → 450 → 675 sem nada reclamar:
+    três gravações, cada uma somando um conjunto inteiro, todas aceitas em
+    silêncio. Foi preciso um humano CONTAR as linhas na tela para descobrir.
+
+    Uma sincronização honesta acrescenta alguns cadastros. Nenhuma triplica uma
+    lista. Se triplicar, é acidente — e o certo é recusar e explicar, não gravar
+    e esperar que alguém perceba.
+
+    Os dois limites juntos (percentual E quantidade) evitam falso alarme em
+    lista pequena: sair de 3 para 6 embalagens é crescer 100%, mas são 3 itens.
+    """
+    for cat, depois in (junto or {}).items():
+        if cat == LAPIDES or not isinstance(depois, list):
+            continue
+        antes_l = (base or {}).get(cat)
+        antes = len(antes_l) if isinstance(antes_l, list) else 0
+        if not antes:
+            continue                      # categoria nova ou vazia: não há o que comparar
+        somou = len(depois) - antes
+        if somou > minimo and somou > antes * pct / 100.0:
+            return {"categoria": cat, "antes": antes, "depois": len(depois),
+                    "somou": somou}
+    return None
+
+def _recado_inchou(c):
+    """A mensagem que a pessoa lê. Sem jargão, e dizendo o que fazer."""
+    return ("Não gravei: esta sincronização faria a lista de %s saltar de %d para "
+            "%d itens (%d a mais de uma vez só). Isso quase sempre é duplicação, "
+            "não cadastro novo. O banco do servidor foi trazido para esta máquina "
+            "— confira a lista. Se a intenção era mesmo importar um banco inteiro, "
+            "use o botão Importar DB conectado como administrador."
+            % (c["categoria"], c["antes"], c["depois"], c["somou"]))
+
 
 def eh_admin(request: Request) -> bool:
     if not FT_ADMIN_TOKEN:
@@ -280,12 +386,21 @@ async def gravar_db(request: Request):
             "Só o administrador pode apagar ou renomear itens do banco. "
             "Suas ADIÇÕES foram preservadas; as exclusões, não."))
     admin = eh_admin(request)
+    # "Importar DB" cresce de propósito — é a única gravação que pode inchar.
+    # Vem marcada no corpo e é privilégio do admin.
+    forcar = bool(corpo.get("forcar")) and admin
 
     if not drive_ligado():
         with _lock, conn() as c:
             atual = c.execute("SELECT rev,data FROM banco WHERE id=1").fetchone()
             base = json.loads(atual["data"])
             junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin)
+            if not forcar:
+                cresceu = _inchou(base, junto)
+                if cresceu:
+                    return JSONResponse(status_code=409, content={
+                        "inchou": cresceu, "rev": atual["rev"], "data": base,
+                        "detail": _recado_inchou(cresceu)})
             nova = atual["rev"] + 1
             c.execute("UPDATE banco SET rev=?,data=?,atualizado=? WHERE id=1",
                       (nova, json.dumps(junto, ensure_ascii=False), agora()))
@@ -301,6 +416,14 @@ async def gravar_db(request: Request):
         # MESCLAGEM: ninguém apaga por omissão. A revisão do cliente já não
         # precisa bater — o merge resolve concorrência sem descartar trabalho.
         junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin)
+
+        if not forcar:
+            cresceu = _inchou(base, junto)
+            if cresceu:
+                # não grava NADA e devolve o banco bom, para o editor adotá-lo
+                return JSONResponse(status_code=409, content={
+                    "inchou": cresceu, "rev": rev_atual, "data": base,
+                    "detail": _recado_inchou(cresceu)})
 
         nova = rev_atual + 1
         grava_banco_drive(nova, junto)
@@ -366,10 +489,38 @@ def db_diagnostico(request: Request):
                     "enxerga_a_pasta": False, "erro": str(e.detail),
                     "aviso": "A service account NÃO enxerga essa pasta. Confira o ID e o "
                              "compartilhamento (precisa ser Editor)."}
-    itens = {k: len(v) for k, v in (d.get("data") or {}).items() if isinstance(v, list)}
+    dados = d.get("data") or {}
+    itens = {k: len(v) for k, v in dados.items() if isinstance(v, list)}
+
+    # Saúde da identidade (v3.258). Um cliente sem id, ou com id provisório do
+    # navegador, é exatamente o que triplicou o banco — e é o que impediria a
+    # migração para o Supabase de casar os pedidos com os cadastros. Isto tem
+    # que ser 0/0 num banco saudável, e dá para conferir sem abrir o editor.
+    identidade = {}
+    for cat in CATEGORIAS_COM_ID:
+        lista = dados.get(cat)
+        if not isinstance(lista, list):
+            continue
+        sem, tmp, nomes = 0, 0, []
+        for it in lista:
+            if not isinstance(it, dict):
+                continue
+            ident = str(it.get("id", "")).strip()
+            if not ident:
+                sem += 1
+            elif ident.startswith("tmp_"):
+                tmp += 1
+            n = str(it.get("n", "")).strip().upper()
+            if n:
+                nomes.append(n)
+        identidade[cat] = {"total": len(lista), "sem_id": sem, "id_provisorio": tmp,
+                           "nomes_repetidos": len(nomes) - len(set(nomes))}
+
     return {"onde": "drive", "persistente": True, "arquivo": DB_NOME,
             "pasta": _pasta_do_banco(), "existe": True,
-            "rev": d.get("rev"), "atualizado": d.get("atualizado"), "itens": itens}
+            "rev": d.get("rev"), "atualizado": d.get("atualizado"), "itens": itens,
+            "identidade": identidade, "backup": _backup_estado,
+            "editor_minimo": FT_EDITOR_MINIMO}
 
 @app.get("/api/orcamentos")
 def listar_orc(request: Request):
@@ -1287,14 +1438,19 @@ def _orc_sobe_arquivo(nome, pasta_id, corpo):
     with urllib.request.urlopen(req, timeout=120) as r:
         return json.loads(r.read())["id"], "criado"
 
-def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto):
+def _orc_salva_via_script(nome, destino, ano, mes, conteudo_texto, pasta_trabalho=None):
     """Plano B: o Apps Script cria as pastas e o arquivo COMO DONO da conta.
        destino='trabalho' -> grava direto na subpasta de trabalho (sem ano/mês).
-       destino='organizado' -> cria 'Organizados' > ANO > MÊS."""
+       destino='organizado' -> cria 'Organizados' > ANO > MÊS.
+
+       `pasta_trabalho` troca o NOME da subpasta de destino sem tocar no Apps
+       Script (que resolve a pasta pelo nome, igual ao lado Python faz em
+       `_orc_subpasta_raiz`). É assim que o backup diário reaproveita este
+       caminho: mesma mecânica, outra pasta."""
     dados = {
         "token": FT_TOKEN, "nome": nome, "conteudo": conteudo_texto,
         "destino": destino,
-        "pastaTrabalho": FT_PASTA_TRABALHO,
+        "pastaTrabalho": pasta_trabalho or FT_PASTA_TRABALHO,
         "pastaOrganizados": FT_PASTA_ORGANIZADOS,
     }
     if destino == "organizado":
@@ -1539,7 +1695,21 @@ def _backup_pasta_id():
     return pid
 
 def _backup_grava(forcado=False):
-    """Grava o banco de hoje. Devolve (nome, situação) ou (None, motivo)."""
+    """Grava o banco de hoje. Devolve (nome, situação) ou (None, motivo).
+
+    v3.258 — POR QUE ISTO NUNCA FUNCIONOU: a v257 chamava `_orc_sobe_arquivo`
+    direto. Essa função ATUALIZA um arquivo existente sem problema, mas CRIAR
+    um arquivo novo pela service account devolve 403 (storageQuotaExceeded):
+    service account não tem cota de armazenamento e o Google recusa que ela
+    crie arquivos no "Meu Drive" de uma conta Gmail. É a mesma limitação que
+    já obrigou o Apps Script a existir para salvar orçamentos.
+
+    Como o backup do dia é sempre um arquivo NOVO, ele caía exatamente no caso
+    proibido — todo dia, para sempre. E como rodava numa thread solta com o
+    erro engolido, falhava sem deixar rastro. Agora: mesma escada do salvamento
+    de orçamento (service account -> Apps Script) e o resultado fica registrado
+    em `_backup_estado`, visível no diagnóstico.
+    """
     if not FT_DRIVE_CREDENCIAIS or not FT_DRIVE_ORCAMENTOS:
         return None, "Drive não configurado"
     hoje = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1549,11 +1719,31 @@ def _backup_grava(forcado=False):
         if not forcado and _orc_acha_arquivo(nome, pid):
             return nome, "já existe"      # o do dia já foi feito
         db = le_banco_drive() if drive_ligado() else {}
-        corpo = json.dumps(db, ensure_ascii=False, indent=1).encode("utf-8")
-        _orc_sobe_arquivo(nome, pid, corpo)
-        return nome, "gravado"
+        texto = json.dumps(db, ensure_ascii=False, indent=1)
+        try:
+            _orc_sobe_arquivo(nome, pid, texto.encode("utf-8"))
+            return nome, "gravado"
+        except Exception as e1:
+            # a service account recusou (quase sempre cota ao CRIAR): plano B
+            if not FT_SCRIPT_ORCAMENTOS:
+                return None, ("service account recusou (%s) e não há Apps Script "
+                              "configurado" % str(e1)[:120])
+            _orc_salva_via_script(nome, "trabalho", 0, 0, texto,
+                                  pasta_trabalho=PASTA_BACKUP)
+            return nome, "gravado pelo Apps Script"
     except Exception as e:
         return None, str(e)[:200]
+
+
+# O que aconteceu na última tentativa. Existe porque o backup roda numa thread
+# de fundo: sem isto, uma falha some no ar — foi o que aconteceu na v257.
+_backup_estado = {"quando": "", "arquivo": "", "situacao": "nunca tentado"}
+
+
+def _backup_registra(nome, situacao):
+    _backup_estado.update({"quando": agora(), "arquivo": nome or "",
+                           "situacao": situacao})
+
 
 _backup_ultimo = {"dia": ""}
 
@@ -1568,8 +1758,13 @@ def _backup_se_for_a_hora():
     if _backup_ultimo["dia"] == hoje:
         return
     _backup_ultimo["dia"] = hoje          # marca ANTES, para não repetir se falhar
+
+    def _tenta():
+        nome, situacao = _backup_grava()
+        _backup_registra(nome, situacao if nome else ("FALHOU: " + situacao))
+
     try:
-        threading.Thread(target=_backup_grava, daemon=True).start()
+        threading.Thread(target=_tenta, daemon=True).start()
     except Exception:
         pass
 
@@ -1580,6 +1775,7 @@ def db_backup_agora(request: Request):
     if not eh_admin(request):
         raise HTTPException(status_code=403, detail="Só administradores.")
     nome, situacao = _backup_grava(forcado=True)
+    _backup_registra(nome, situacao if nome else ("FALHOU: " + situacao))
     if not nome:
         raise HTTPException(status_code=500, detail="Backup falhou: " + situacao)
     return {"ok": True, "arquivo": nome, "situacao": situacao}
@@ -1597,6 +1793,6 @@ def db_backups(request: Request):
                                   "orderBy": "name desc", "pageSize": "60",
                                   "includeItemsFromAllDrives": "true",
                                   "supportsAllDrives": "true"})
-        return {"ok": True, "arquivos": r.get("files", [])}
+        return {"ok": True, "arquivos": r.get("files", []), "ultimo": _backup_estado}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)[:200])
