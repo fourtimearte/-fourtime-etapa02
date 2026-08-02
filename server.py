@@ -29,12 +29,20 @@ FT_ADMIN_TOKEN = os.environ.get("FT_ADMIN_TOKEN", "").strip()
 # Versão MÍNIMA do editor aceita para GRAVAR. Editores antigos têm um banco
 # local possivelmente velho — e a mesclagem ressuscitaria itens já apagados.
 # Ler, qualquer versão pode; gravar, só quem está em dia.
-# v3.258: subiu de 3.131 para 3.258. Não é capricho de versão — as v3.256/257
-# inventavam o id do cliente NO NAVEGADOR, e cada máquina que sincronizava
-# somava um conjunto inteiro de cadastros ao banco (225 viraram 675). Um editor
-# antigo aberto numa aba esquecida basta para refazer o estrago. Aqui a porta
-# fecha: quem não está em dia LÊ, mas não GRAVA.
-FT_EDITOR_MINIMO = os.environ.get("FT_EDITOR_MINIMO", "3.258").strip()
+# v3.258/259: subiu de 3.131 para 3.258. Não é capricho de versão — as
+# v3.256/257 inventavam o id do cliente NO NAVEGADOR, e cada máquina que
+# sincronizava somava um conjunto inteiro de cadastros (225 viraram 900). Um
+# editor antigo numa aba esquecida basta para bagunçar a identidade de novo.
+# Quem não está em dia LÊ, mas não GRAVA.
+#
+# O PISO existe porque mudar o padrão do código não bastou: o Render tinha
+# FT_EDITOR_MINIMO=3.131 na configuração, e a variável de ambiente vence o
+# padrão — o servidor subiu a v258 ainda aceitando gravação da v257. Uma trava
+# de segurança que depende de alguém lembrar de editar um painel não é trava.
+# Agora o código impõe o piso, e a variável só pode ser usada para SUBIR.
+FT_EDITOR_PISO = "3.258"
+# o piso é aplicado logo depois de _versao_num() existir (ver abaixo)
+FT_EDITOR_MINIMO = os.environ.get("FT_EDITOR_MINIMO", FT_EDITOR_PISO).strip() or FT_EDITOR_PISO
 DB_PATH  = os.environ.get("FT_DB_PATH", os.path.join(os.path.dirname(__file__), "fourtime.db"))
 
 app = FastAPI(title="Fourtime Etapa 02", docs_url=None, redoc_url=None)
@@ -106,6 +114,13 @@ def _versao_num(v):
     except Exception:
         return (0,)
 
+
+# A variável de ambiente só pode SUBIR o mínimo, nunca baixá-lo. Ver o comentário
+# do FT_EDITOR_PISO lá em cima: o painel do Render tinha 3.131 e derrubou a trava
+# de uma versão inteira sem ninguém perceber.
+if _versao_num(FT_EDITOR_MINIMO) < _versao_num(FT_EDITOR_PISO):
+    FT_EDITOR_MINIMO = FT_EDITOR_PISO
+
 def exige_editor_atual(request: Request):
     v = request.headers.get("X-FT-Editor", "").strip()
     if not v:
@@ -173,6 +188,32 @@ def _chave(item):
 # nomes: o nome basta e acrescentar id só faria barulho.
 CATEGORIAS_COM_ID = ("clientes", "bugs")
 
+# Como é um uuid do servidor. Serve para reconhecer, no meio do banco, o que é
+# identidade de verdade e o que é sobra de navegador (`cmsb3ge8h1`, `tmp_...`).
+_RE_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def _id_serve(cat, ident):
+    """Este id pode ser mantido, ou precisa ser trocado por um do servidor?
+
+    CLIENTES viram tabela no Postgres e a chave primária tem que ser um uuid
+    nascido aqui. Qualquer outra coisa — vazio, `tmp_` do editor, ou os
+    `c<base36>` que as v3.256/257 espalharam — é substituída. Uma troca só,
+    agora, enquanto nada ainda aponta para esses ids; depois disso a regra do
+    `mescla_listas` congela o valor para sempre.
+
+    BUGS são diferentes de propósito: o id deles é `b...` (sorteado no ato do
+    relato) ou `bh...` (derivado do conteúdo imutável, para que duas máquinas
+    cheguem ao mesmo id sem combinar). Esses são identidade legítima e não
+    podem virar uuid — só o vazio e o provisório são trocados.
+    """
+    ident = str(ident or "").strip()
+    if not ident or ident.startswith("tmp_"):
+        return False
+    if cat == "clientes":
+        return bool(_RE_UUID.match(ident))
+    return True
+
 
 def _carimba_ids(banco):
     """Dá identidade permanente a quem ainda não tem — e quem dá é o SERVIDOR.
@@ -198,8 +239,7 @@ def _carimba_ids(banco):
         for it in itens:
             if not isinstance(it, dict):
                 continue
-            ident = str(it.get("id", "")).strip()
-            if not ident or ident.startswith("tmp_"):
+            if not _id_serve(cat, it.get("id")):
                 it["id"] = str(uuid.uuid4())
                 carimbados += 1
     return carimbados
@@ -224,6 +264,20 @@ def mescla_listas(base, novos):
             if isinstance(antigo, dict) and isinstance(it, dict):
                 junto = dict(antigo)
                 for campo, valor in it.items():
+                    # v3.259 — O `id` É A ÚNICA EXCEÇÃO À REGRA "PREENCHIDO VENCE".
+                    #
+                    # Um id que qualquer máquina pode reescrever não é chave
+                    # primária, é sugestão. E era isso que acontecia: um
+                    # navegador com cópia velha no IndexedDB mandava o id que
+                    # ELE tinha, "preenchido vence vazio" aceitava, e o uuid do
+                    # servidor era substituído. A cada sincronização de uma
+                    # máquina atrasada, a identidade do cliente mudava.
+                    #
+                    # Depois de atribuído, o id não se altera. Ponto. É esse
+                    # compromisso que permite prometer que o uuid de hoje é a
+                    # chave primária do Supabase amanhã.
+                    if campo == "id" and str(antigo.get("id", "")).strip():
+                        continue
                     if valor not in (None, "", []):
                         junto[campo] = valor
                 saida[indice[k]] = junto
