@@ -565,8 +565,13 @@
     display:grid;
     grid-template-columns:repeat(4,1fr);
     grid-auto-rows:1fr;
-    border-top:1px solid var(--ft-borda);
-    border-left:1px solid var(--ft-borda);
+    border:1px solid var(--ft-borda);
+    border-right:none;border-bottom:none;   /* as células fecham a direita e embaixo */
+    border-radius:8px;
+    /* O RAIO PRECISA DE overflow:hidden. As bordas do cabeçalho são das
+       CÉLULAS, não do container: sem o recorte, os cantos quadrados delas
+       aparecem por cima do arredondado e o efeito não existe. */
+    overflow:hidden;
   }
   /* a logo ocupa as DUAS primeiras células da coluna 1 */
   .logo-box{
@@ -620,6 +625,32 @@
      classe .hd-abrir/.ft-combo-abrir é usada nos módulos de layout, que
      ainda não foram convertidos. */
   .doc-header .hd-abrir{width:4mm;height:4mm;}
+  /* O CHIP DO STATUS era CORTADO. O .design-tag tem 20 px (5,3 mm) de altura
+     por causa do padding de 1,1 mm; a célula, depois que a fileira apertou,
+     tem 4 mm úteis — e a .hd-campo tem overflow:hidden, então a tag entrava
+     no DOM e sumia pela metade. Nada de errado no JS: era altura.
+     No cabeçalho o chip fica com 4 mm; a fonte de 9 px continua igual, só o
+     respiro vertical encolhe. Escopo no .doc-header: o mesmo .design-tag é
+     usado nos módulos de layout, que ainda não foram convertidos. */
+  /* E o VISUAL da tag também muda. URGENTE e ATRASADO são ALERTAS, e o kit
+     v5 §01 reserva o preenchimento para AÇÃO: alerta usa contorno. Uma
+     etiqueta vermelha sólida no cabeçalho competia com o Pedido Nº e o
+     Total, que são os dois vermelhos que a pessoa procura primeiro — e
+     agora competiria também com a barra de aviso logo abaixo.
+     Vazada, ela avisa sem gritar mais alto que o número do pedido.
+     As tags de TÉCNICA (Silk/DTF/Subli, nos módulos) continuam sólidas com
+     a cor do setor: lá a cor é identidade, não alerta. */
+  /* 1,7 mm de respiro, não 2: com 2 mm as DUAS tags somavam 154,5 px numa
+     caixa de 154 e a segunda quebrava para uma linha que a célula não tem.
+     Só existem duas tags (URGENTE e ATRASADO), então caber as duas resolve
+     o caso inteiro, não só o caso comum. */
+  .doc-header .design-tag{
+    padding:0 1.7mm;height:4mm;line-height:1;border-radius:999px;
+    background:transparent;color:var(--tag-c,var(--ft-vermelho));
+    border:1.2px solid var(--tag-c,var(--ft-vermelho));
+    letter-spacing:.05em;
+  }
+  .doc-header .design-tag:hover{opacity:1;background:var(--tag-c,var(--ft-vermelho));color:#fff;}
   /* o mesmo vale para o Status: a caixa das tags e o botão "+" ficavam
      0,6 mm acima do resto e puxavam a 3ª fileira sozinhos */
   .doc-header .hd-tags-caixa,
@@ -1030,11 +1061,11 @@
   }
   .hd-obs .hd-editor:empty::before{content:attr(data-ph);color:var(--ft-cinza-40);}
   /* Obs. do cabeçalho: campo de TAGS (mesma lógica do Design) */
-  .hd-tags-caixa{position:relative;width:100%;min-width:0;display:flex;align-items:center;padding-right:6mm;min-height:4.6mm;}
+  .hd-tags-caixa{position:relative;width:100%;min-width:0;display:flex;align-items:center;padding-right:5.2mm;min-height:4.6mm;}
   .hd-tags-wrap{
     flex:1;display:flex;flex-wrap:wrap;
     align-items:center;justify-content:flex-start;
-    gap:1.2mm;min-height:4.6mm;
+    gap:1mm;min-height:4.6mm;
   }
   .hd-tags-ph{font-size:var(--ft-tam-cabecalho,11px);color:var(--ft-cinza-40);user-select:none;}
   .hd-tags-wrap.com-tags .hd-tags-ph{display:none;}
