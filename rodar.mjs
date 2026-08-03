@@ -27,7 +27,7 @@ const SUITES = [
   'teste_faixa_v268', 'teste_botoes_v271', 'teste_abas_v270', 'teste_cab_v269',
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
   /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
-  'teste_v282_ajustes', 'teste_compat_v282', 'teste_impressao_escura', 'teste_painel_v282',
+  'teste_v283_ajustes', 'teste_compat_v283', 'teste_impressao_escura', 'teste_painel_v283',
   'teste_arquivar_data',
   'teste_aviso_versao', 'teste_versao_servidor',
 ];
@@ -52,10 +52,10 @@ const ANTIGAS = [
    compatibilidade (que é onde a versão anterior entra) e o painel. Uns 45s
    em vez de 90s. A bateria inteira é para quando o CÓDIGO muda. */
 const SUBIDA = [
-  'teste_v282_ajustes',      /* o que a versão trouxe                        */
+  'teste_v283_ajustes',      /* o que a versão trouxe                        */
   'teste_arquivar_data',     /* a data de arquivamento: modal, máscara, pasta */
-  'teste_compat_v282',       /* aqui a versão anterior entra como origem     */
-  'teste_painel_v282',       /* nenhum token do painel pode ter morrido      */
+  'teste_compat_v283',       /* aqui a versão anterior entra como origem     */
+  'teste_painel_v283',       /* nenhum token do painel pode ter morrido      */
   'teste_impressao_escura',  /* o documento do cliente e o papel             */
   'teste_aviso_versao', 'teste_versao_servidor',      /* sem isto, ninguém fica sabendo da publicação */
 ];

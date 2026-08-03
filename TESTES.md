@@ -75,10 +75,10 @@ animações assentarem.
 | `teste_largura_v267` · `teste_corte_v267` · `teste_faixa_v268` | **resolução**: faixas de zoom, folha pelo monitor, menu pela janela, nunca cortar |
 | `verifica_trello` | export do Trello, layout de celular, impressão, PDF |
 | `cmp_a4_chave` | compara elemento a elemento o A4 de duas versões |
-| `teste_v282_ajustes` | módulo de layout, tabela, rodapé, cabeçalho das páginas 2+, compressão e caso extremo |
-| `teste_compat_v282` | salva um `.ft` nas versões v274…v281 e abre na v282: cabeçalho, layouts, ajustes e totais campo a campo |
-| `teste_arquivar_data` | modal de arquivamento: opção automática/manual, máscara e validação da data, pasta e nome do arquivo |
-| `teste_painel_v282` | todo token do painel dev ainda chega ao documento |
+| `teste_v283_ajustes` | módulo de layout, tabela, rodapé, cabeçalho das páginas 2+, compressão e caso extremo |
+| `teste_compat_v283` | salva um `.ft` nas versões v274…v282 e abre na v283: cabeçalho, layouts, ajustes e totais campo a campo |
+| `teste_arquivar_data` | modal de arquivamento: opção automática/manual, calendário no ícone, máscara e validação da data, pasta e nome do arquivo |
+| `teste_painel_v283` | todo token do painel dev ainda chega ao documento |
 
 As três de **resolução** podem ser puladas quando a alteração não mexe em
 responsividade — foi o combinado com o usuário.

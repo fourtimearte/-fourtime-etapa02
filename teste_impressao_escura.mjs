@@ -4,7 +4,7 @@
 import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v282.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v283.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(50)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -154,6 +154,39 @@ checa('sem erro de página no arquivo exportado', errCel.length, 0);
 await cel.close();
 
 await p.emulateMedia({media:'screen'});
+console.log('\n=== A TARJA DE GÊNERO EXISTE NO TEMA ESCURO ===');
+/* Reclamação real do chão de fábrica: "só a letra fica colorida". A causa
+   era a tinta de gênero escura demais — 1.01:1 contra a folha do tema
+   escuro. Contraste, não hex fixo: a paleta pode mudar, a tarja não pode
+   sumir. */
+const tarjas=await p.evaluate(async ()=>{
+  document.body.dataset.tema='escuro';
+  await new Promise(s=>setTimeout(s,300));
+  const c=document.querySelector('.combo-ref'), cx=c.querySelector('.ft-combo-caixa');
+  const out=[];
+  for(const g of ['masculino','feminino','infantil']){
+    c.dataset.genero=g;
+    await new Promise(s=>setTimeout(s,80));
+    const e=getComputedStyle(cx);
+    let pai=cx.parentElement, atras='rgb(255, 255, 255)';
+    while(pai){ const bg=getComputedStyle(pai).backgroundColor;
+      if(bg&&!/rgba\(0, 0, 0, 0\)|transparent/.test(bg)){atras=bg;break;} pai=pai.parentElement; }
+    out.push({g, fundo:e.backgroundColor, borda:e.borderTopColor, atras});
+  }
+  c.removeAttribute('data-genero');
+  return out;
+});
+const lum=c=>{const v=c.map(x=>{x/=255;return x<=.03928?x/12.92:((x+.055)/1.055)**2.4});
+  return .2126*v[0]+.7152*v[1]+.0722*v[2];};
+const razao=(a,b)=>{const[l1,l2]=[lum(a),lum(b)].sort((x,y)=>y-x);return +((l1+.05)/(l2+.05)).toFixed(2);};
+const rgb=s=>(s.match(/\d+/g)||[0,0,0]).slice(0,3).map(Number);
+for(const t of tarjas){
+  const cT=razao(rgb(t.fundo),rgb(t.atras));
+  const cB=razao(rgb(t.borda),rgb(t.atras));
+  console.log(`     ${t.g.padEnd(10)} fundo=${t.fundo.padEnd(19)} tarja/folha=${cT}:1  borda/folha=${cB}:1`);
+  checa(`${t.g}: a tarja se destaca da folha escura`, cT>=1.25, true);
+  checa(`  e a borda dela também`, cB>=2, true);
+}
 await p.evaluate(()=>{document.body.dataset.tema='claro';});
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro de página', erros.length, 0);

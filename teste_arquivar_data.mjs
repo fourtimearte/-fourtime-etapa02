@@ -12,7 +12,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v282.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v283.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O MODAL ABRE E MOSTRA O CAMINHO ===');
@@ -77,7 +77,75 @@ checa('  data incompleta trava o botão', r.incompleta.travado, true);
 checa('31/02 não passa', r.impossivel.travado, true);
 checa('data futura avisa mas NÃO trava', [r.futuro.alerta,r.futuro.travado], [true,false]);
 
-console.log('\n=== 4. JÁ ARQUIVADO NÃO PERGUNTA DE NOVO ===');
+console.log('\n=== 4. O CALENDÁRIO DO ÍCONE ===');
+r=await p.evaluate(async ()=>{
+  const pr=perguntaDataArquivo();
+  await new Promise(s=>setTimeout(s,150));
+  const campo=document.getElementById('arqCampoData');
+  campo.value=''; for(const c of '15082026'){campo.value+=c;campo.dispatchEvent(new Event('input',{bubbles:true}));}
+  const bt=document.getElementById('arqBtCal');
+  const rb=bt.getBoundingClientRect();
+  bt.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+  bt.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,200));
+  const menu=document.getElementById('calMenu');
+  const em=getComputedStyle(menu), rm=menu.getBoundingClientRect();
+  const veu=getComputedStyle(document.getElementById('ftArqFundo')).zIndex;
+  const aberto={ visivel:em.display==='block',
+                 acimaDoVeu:+em.zIndex > +veu,
+                 dentroDaTela:rm.left>=0&&rm.top>=0&&rm.right<=innerWidth&&rm.bottom<=innerHeight,
+                 perto:Math.abs(rm.top-rb.bottom)<400,
+                 mes:document.getElementById('calMes').textContent.trim(),
+                 marcado:(menu.querySelector('.cal-dia.sel')||{}).textContent,
+                 temLimpar:getComputedStyle(document.getElementById('calLimpar')).display!=='none',
+                 manualLigou:document.getElementById('arqOpManual').classList.contains('on') };
+  /* escolhe o dia 3 do mesmo mês */
+  const dia=[...menu.querySelectorAll('.cal-dia:not(.fora)')].find(d=>d.textContent.trim()==='3');
+  dia.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,200));
+  const depois={ campo:campo.value, fechou:getComputedStyle(menu).display==='none',
+                 caminho:document.getElementById('arqCaminho').textContent,
+                 modalAberto:document.getElementById('ftArqFundo').classList.contains('on') };
+  document.getElementById('arqConfirmar').click();
+  return { aberto, depois, carimbo:await pr };
+});
+console.log('     '+JSON.stringify(r.aberto)+'\n     '+r.depois.caminho);
+checa('o ícone abre o calendário', r.aberto.visivel, true);
+checa('  ele fica ACIMA do véu do modal', r.aberto.acimaDoVeu, true);
+checa('  e dentro da tela, perto do ícone', [r.aberto.dentroDaTela,r.aberto.perto], [true,true]);
+checa('  já abre no mês da data digitada', r.aberto.mes, 'agosto 2026');
+checa('  com o dia 15 marcado', r.aberto.marcado, '15');
+checa('  sem "Limpar" (a data aqui é obrigatória)', r.aberto.temLimpar, false);
+checa('  e marca a opção manual sozinho', r.aberto.manualLigou, true);
+checa('clicar num dia preenche o campo', r.depois.campo, '03/08/2026');
+checa('  fecha o calendário e mantém o modal', [r.depois.fechou,r.depois.modalAberto], [true,true]);
+checa('  o caminho acompanha', /DIA 03/.test(r.depois.caminho), true);
+checa('  e o carimbo sai certo', r.carimbo, '030826');
+
+console.log('\n=== 5. O CALENDÁRIO DO CABEÇALHO NÃO REGREDIU ===');
+r=await p.evaluate(async ()=>{
+  const campo=document.querySelector('[data-h="envio"]');
+  campo.value=''; campo.dispatchEvent(new Event('input',{bubbles:true}));
+  const ic=document.querySelector('.hd-cal');
+  ic.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,200));
+  const menu=document.getElementById('calMenu');
+  const abriu=getComputedStyle(menu).display==='block';
+  const temLimpar=getComputedStyle(document.getElementById('calLimpar')).display!=='none';
+  const semAcima=!menu.classList.contains('acima');
+  const dia=[...menu.querySelectorAll('.cal-dia:not(.fora)')].find(d=>d.textContent.trim()==='9');
+  dia.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,150));
+  return { abriu, temLimpar, semAcima, valor:campo.value,
+           fechou:getComputedStyle(menu).display==='none' };
+});
+checa('o ícone do cabeçalho ainda abre', r.abriu, true);
+checa('  com "Limpar" de volta', r.temLimpar, true);
+checa('  e sem o z-index de modal', r.semAcima, true);
+checa('escolher o dia 9 preenche o ENVIO', /^09\/\d{2}\/\d{4}$/.test(r.valor), true);
+checa('  e fecha o calendário', r.fechou, true);
+
+console.log('\n=== 6. JÁ ARQUIVADO NÃO PERGUNTA DE NOVO ===');
 r=await p.evaluate(async ()=>{
   defineDataArquivo('280726');
   const antes=dataArquivo();
