@@ -75,13 +75,13 @@ animações assentarem.
 | `teste_largura_v267` · `teste_corte_v267` · `teste_faixa_v268` | **resolução**: faixas de zoom, folha pelo monitor, menu pela janela, nunca cortar |
 | `verifica_trello` | export do Trello, layout de celular, impressão, PDF |
 | `cmp_a4_chave` | compara elemento a elemento o A4 de duas versões |
-| `teste_v288_ajustes` | módulo de layout, tabela, rodapé, cabeçalho das páginas 2+, compressão e caso extremo |
-| `teste_compat_v288` | salva um `.ft` nas versões v274…v287 e abre na v288: cabeçalho, layouts, ajustes e totais campo a campo |
+| `teste_v289_ajustes` | módulo de layout, tabela, rodapé, cabeçalho das páginas 2+, compressão e caso extremo |
+| `teste_compat_v289` | salva um `.ft` nas versões v274…v288 e abre na v289: cabeçalho, layouts, ajustes e totais campo a campo |
 | `teste_arquivar_data` | modal de arquivamento: opção automática/manual, calendário no ícone, máscara com o cursor no lugar (modal e ENVIO), validação da data, pasta e nome do arquivo |
 | `teste_cnpj` | CPF/CNPJ: máscara viva no cadastro e no cabeçalho, consulta em paralelo às duas fontes, ficha que abre com o CNPJ já preenchido |
 | `teste_brilho_obs` | animações do kit v5 no HTML do Trello: `brilhar` na observação e `pulsar` nas cores de DTF/Subli — 10 vezes ao abrir, 5 a cada retorno do foco |
 | `teste_cores_grupos` | cores de tecido por família: menu do orçamento, página do Banco e a compatibilidade (as 50 antigas, o replantio depois da mescla, o pedido antigo) |
-| `teste_painel_v288` | todo token do painel dev ainda chega ao documento |
+| `teste_painel_v289` | todo token do painel dev ainda chega ao documento |
 
 As três de **resolução** podem ser puladas quando a alteração não mexe em
 responsividade — foi o combinado com o usuário.

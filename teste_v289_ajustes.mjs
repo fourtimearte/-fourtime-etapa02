@@ -14,7 +14,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const browser=await abreNavegador();
 const page=await browser.newPage({ viewport:{width:1400,height:900} });
 const erros=[]; page.on('pageerror',e=>erros.push(String(e).slice(0,200)));
-await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v288.html')).href);
+await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v289.html')).href);
 await esperaPronto(page);
 await page.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,1500)); });
 

@@ -15,7 +15,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1400,height:900}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v288.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v289.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O EDITOR NÃO BRILHA — a animação é só do arquivo ===');

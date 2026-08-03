@@ -23,7 +23,7 @@ const ANTIGAS=['Branco','Preto','Cinza Mescla','Cinza Chumbo','Cinza Claro','Pra
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,180)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v288.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v289.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O CATÁLOGO ===');
@@ -59,13 +59,16 @@ r=await p.evaluate(async ()=>{
   const bu=m.querySelector('.cor-busca');
   bu.value='musgo'; bu.dispatchEvent(new Event('input',{bubbles:true}));
   await new Promise(s=>setTimeout(s,150));
+  /* o ".cor-novo" ("Usar tal") é a saída de texto livre, não uma cor do
+     banco — fica de fora da contagem */
   o.busca={grupos:[...m.querySelectorAll('.cor-grupo:not(.oculto)')].map(g=>g.dataset.g),
-           itens:[...m.querySelectorAll('.cor-item:not(.oculta)')].map(i=>i.dataset.nome),
+           itens:[...m.querySelectorAll('.cor-item:not(.oculta):not(.cor-novo)')].map(i=>i.dataset.nome),
+           temUsarAssim:!!m.querySelector('.cor-novo'),
            abriuSozinho:m.querySelectorAll('.cor-grupo.aberto:not(.oculto)').length};
   /* busca sem acento acha o que tem acento */
   bu.value='pessego'; bu.dispatchEvent(new Event('input',{bubbles:true}));
   await new Promise(s=>setTimeout(s,120));
-  o.semAcento=[...m.querySelectorAll('.cor-item:not(.oculta)')].map(i=>i.dataset.nome);
+  o.semAcento=[...m.querySelectorAll('.cor-item:not(.oculta):not(.cor-novo)')].map(i=>i.dataset.nome);
   bu.value=''; bu.dispatchEvent(new Event('input',{bubbles:true}));
   await new Promise(s=>setTimeout(s,120));
   /* escolher uma cor de dentro do grupo */
@@ -105,6 +108,7 @@ checa('  e o menu cabe na tela', r.naTela, true);
 checa('buscar "musgo" deixa só o grupo certo', r.busca.grupos, ['VD']);
 checa('  com só a cor certa dentro', r.busca.itens, ['Verde Musgo']);
 checa('  e ele abre sozinho', r.busca.abriuSozinho, 1);
+checa('  com a saída de texto livre à mão', r.busca.temUsarAssim, true);
 checa('buscar sem acento acha o acentuado', r.semAcento, ['Pêssego']);
 checa('abrir o grupo e clicar escolhe a cor', [r.abriuGrupo,r.escolha.campo], [true,'Verde Musgo']);
 checa('  o swatch pinta com o hex dela', r.escolha.sw, '#4A5D23');
@@ -208,6 +212,60 @@ checa('  e aparece num "Sem grupo" no menu', r.desconhecida.noMenu, true);
 checa('cor apagada de propósito não ressuscita', r.apagadaNaoVolta, true);
 checa('  mas volta se for cadastrada de novo', r.recadastradaVolta, true);
 checa('pedido antigo continua achando a cor pelo nome', r.pedidoAntigo, '#4A5D23');
+
+console.log('\n=== 5. UM MENU SÓ PARA COR ===');
+/* O campo tinha DOIS caminhos: o quadradinho abria o menu de grupos e o
+   campo (ou a seta) abria o dropdown genérico dos outros combos — duas
+   listas diferentes para a mesma escolha. */
+r=await p.evaluate(async ()=>{
+  document.querySelectorAll('#bdPage,#cliPage').forEach(e=>e.style.display='none');
+  await new Promise(s=>setTimeout(s,200));
+  const combo=document.querySelector('.lay-modulo .combo-cor');
+  const ta=combo.querySelector('textarea');
+  const seta=combo.querySelector('.ft-combo-abrir')||combo.querySelector('.ft-combo-seta');
+  const cm=document.getElementById('corMenu'), pm=document.getElementById('pickMenu');
+  const o={};
+  ta.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,250));
+  o.campo={cor:cm.style.display,pick:pm.style.display,grupos:cm.querySelectorAll('.cor-grupo').length};
+  const rc=combo.querySelector('.ft-combo-caixa').getBoundingClientRect();
+  const rm=cm.getBoundingClientRect();
+  o.alinhado=Math.abs(rm.left-rc.left)<2||Math.round(rm.left)===12;
+  document.body.click(); await new Promise(s=>setTimeout(s,150));
+  if(seta){ seta.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+    await new Promise(s=>setTimeout(s,250));
+    o.seta={cor:cm.style.display,pick:pm.style.display};
+    document.body.click(); await new Promise(s=>setTimeout(s,150)); }
+  combo.querySelector('.cor-sw').click();
+  await new Promise(s=>setTimeout(s,250));
+  o.swatch={cor:cm.style.display,pick:pm.style.display};
+  /* texto que não está no banco continua podendo ser usado */
+  const bu=cm.querySelector('.cor-busca');
+  bu.value='AZUL DA CASA'; bu.dispatchEvent(new Event('input',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,200));
+  const novo=cm.querySelector('.cor-novo');
+  o.livre={temBotao:!!novo};
+  if(novo)novo.click();
+  await new Promise(s=>setTimeout(s,250));
+  o.usou=ta.value;
+  /* e o combo de TECIDO segue com o dropdown de sempre */
+  const tec=document.querySelector('.lay-modulo .combo-tecido textarea');
+  tec.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,250));
+  o.tecido={pick:pm.style.display,cor:cm.style.display};
+  return o;
+});
+console.log('     '+JSON.stringify(r));
+checa('clicar no CAMPO abre o menu de grupos',
+      [r.campo.cor,r.campo.grupos], ['block',12]);
+checa('  e não o dropdown genérico', r.campo.pick!=='block', true);
+checa('  alinhado com a caixa do campo', r.alinhado, true);
+checa('a seta leva ao mesmo menu', [r.seta.cor,r.seta.pick!=='block'], ['block',true]);
+checa('o quadradinho também', [r.swatch.cor,r.swatch.pick!=='block'], ['block',true]);
+checa('cor fora do banco ainda pode ser usada', r.livre.temBotao, true);
+checa('  e o nome digitado entra no campo', r.usou, 'AZUL DA CASA');
+checa('TECIDO continua com o dropdown de sempre',
+      [r.tecido.pick,r.tecido.cor], ['block','none']);
 
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro de página', erros.length, 0);

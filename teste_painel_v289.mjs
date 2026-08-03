@@ -13,7 +13,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v288.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v289.html')).href);
 await esperaPronto(p);
 await p.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,2600)); });
 
