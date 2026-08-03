@@ -12,7 +12,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v283.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v284.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O MODAL ABRE E MOSTRA O CAMINHO ===');
@@ -145,7 +145,70 @@ checa('  e sem o z-index de modal', r.semAcima, true);
 checa('escolher o dia 9 preenche o ENVIO', /^09\/\d{2}\/\d{4}$/.test(r.valor), true);
 checa('  e fecha o calendário', r.fechou, true);
 
-console.log('\n=== 6. JÁ ARQUIVADO NÃO PERGUNTA DE NOVO ===');
+console.log('\n=== 6. MÁSCARA DE DATA: O CURSOR FICA ONDE ESTAVA ===');
+/* Reescrever o value de um input joga o cursor para o fim. Apagar um
+   dígito do DIA mandava o cursor para depois do ANO e não dava para
+   corrigir só um pedaço. Vale nos DOIS campos de data do sistema. */
+async function editaDigito(sel){
+  await p.click(sel);
+  await p.evaluate(s=>{const c=document.querySelector(s);c.value='';
+    c.dispatchEvent(new Event('input',{bubbles:true}));},sel);
+  await p.keyboard.type('15082026');
+  const digitado=await p.evaluate(s=>document.querySelector(s).value,sel);
+  /* cursor logo depois do "5" do DIA */
+  await p.evaluate(s=>document.querySelector(s).setSelectionRange(2,2),sel);
+  await p.keyboard.press('Backspace');
+  const apagou=await p.evaluate(s=>document.querySelector(s).selectionStart,sel);
+  await p.keyboard.type('7');
+  const dia=await p.evaluate(s=>document.querySelector(s).value,sel);
+  /* agora o MÊS: cursor depois do segundo dígito dele */
+  await p.evaluate(s=>document.querySelector(s).setSelectionRange(5,5),sel);
+  await p.keyboard.press('Backspace'); await p.keyboard.type('9');
+  const mes=await p.evaluate(s=>document.querySelector(s).value,sel);
+  /* e o ANO: cursor no fim */
+  await p.evaluate(s=>{const c=document.querySelector(s);c.setSelectionRange(10,10);},sel);
+  await p.keyboard.press('Backspace'); await p.keyboard.type('7');
+  const ano=await p.evaluate(s=>document.querySelector(s).value,sel);
+  /* Backspace em cima da BARRA apaga o dígito, não a barra */
+  await p.evaluate(s=>document.querySelector(s).setSelectionRange(3,3),sel);
+  await p.keyboard.press('Backspace');
+  const naBarra=await p.evaluate(s=>document.querySelector(s).value,sel);
+  return {digitado,apagou,dia,mes,ano,naBarra};
+}
+
+await p.evaluate(()=>{perguntaDataArquivo();
+  setTimeout(()=>document.getElementById('arqOpManual').click(),100);});
+await p.waitForTimeout(450);
+r=await editaDigito('#arqCampoData');
+console.log('     modal: '+JSON.stringify(r));
+checa('modal: a máscara põe as barras', r.digitado, '15/08/2026');
+checa('  apagar no DIA deixa o cursor no DIA', r.apagou, 1);
+checa('  e o dígito novo entra ali mesmo', r.dia, '17/08/2026');
+checa('  o mesmo vale para o MÊS', r.mes, '17/09/2026');
+checa('  e para o ANO', r.ano, '17/09/2027');
+/* estava 17/09/2027 com o cursor logo DEPOIS da barra: some o "7" do dia
+   (o dígito antes da barra), não a barra */
+checa('  Backspace na barra apaga o dígito, não a barra', r.naBarra.replace(/\D/g,''), '1092027');
+await p.evaluate(()=>document.getElementById('arqCancelar').click());
+await p.waitForTimeout(300);
+
+r=await editaDigito('[data-h="envio"]');
+console.log('     envio: '+JSON.stringify(r));
+checa('ENVIO: ganhou a máscara (antes ficava 15082026)', r.digitado, '15/08/2026');
+checa('  apagar no DIA deixa o cursor no DIA', r.apagou, 1);
+checa('  e o dígito novo entra ali mesmo', r.dia, '17/08/2026');
+checa('  o mesmo vale para o MÊS', r.mes, '17/09/2026');
+checa('  e para o ANO', r.ano, '17/09/2027');
+r=await p.evaluate(async ()=>{
+  const c=document.querySelector('[data-h="envio"]');
+  c.value=''; c.dispatchEvent(new Event('input',{bubbles:true}));
+  c.focus();
+  for(const ch of 'A COMBINAR'){ c.value+=ch; c.dispatchEvent(new Event('input',{bubbles:true})); }
+  return c.value;
+});
+checa('  mas texto livre continua passando inteiro', r, 'A COMBINAR');
+
+console.log('\n=== 7. JÁ ARQUIVADO NÃO PERGUNTA DE NOVO ===');
 r=await p.evaluate(async ()=>{
   defineDataArquivo('280726');
   const antes=dataArquivo();

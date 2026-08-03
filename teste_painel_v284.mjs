@@ -13,7 +13,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v283.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v284.html')).href);
 await esperaPronto(p);
 await p.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,2600)); });
 
@@ -153,6 +153,47 @@ r=await p.evaluate(async ()=>{
 console.log('     '+JSON.stringify(r));
 checa('o painel continua aberto após o mousedown do select', r.depoisDoMousedown, true);
 checa('  mas um clique inteiro no fundo ainda fecha', r.depoisDoCliqueReal, false);
+
+console.log('\n=== ACHAR UMA COR NA LISTA ===');
+/* Reclamação real: "o painel não tem as cores de gênero". Tinha — mas a
+   lista de 22 cores rola dentro de uma caixa de 300px e só 9 apareciam,
+   sem nenhum sinal de que continuava. Agora tem filtro, contador e sombra
+   no pé. O teste cobra as três coisas. */
+r=await p.evaluate(async ()=>{
+  /* o painel precisa estar VISÍVEL: a sombra do pé se decide medindo, e
+     medir um elemento escondido dá zero em tudo */
+  document.getElementById('ctxCustom').style.display='block';
+  const lista=document.getElementById('ccLista'), cx=lista.parentElement;
+  const bu=document.getElementById('ccBusca');
+  const acha=async q=>{ bu.value=q; bu.dispatchEvent(new Event('input',{bubbles:true}));
+    await new Promise(s=>setTimeout(s,120));
+    return [...lista.querySelectorAll('.cc-var')].map(e=>e.textContent); };
+  await acha('');
+  const rola=lista.scrollHeight>lista.clientHeight+2;
+  const avisaQueRola=!cx.classList.contains('no-fim');
+  const conta=document.getElementById('ccConta').textContent;
+  const porGenero=await acha('genero');
+  const porAcento=(await acha('gênero')).length;
+  const porRef=(await acha('referencia')).length;
+  const nada=(await acha('zzzz')).length;
+  const rGen=await acha('genero');
+  const rl=lista.getBoundingClientRect();
+  const todosNaCaixa=[...lista.querySelectorAll('.cc-linha')].every(e=>{
+    const b=e.getBoundingClientRect(); return b.top>=rl.top-1&&b.bottom<=rl.bottom+1; });
+  await acha('');
+  document.getElementById('ctxCustom').style.display='none';
+  return { rola, avisaQueRola, conta, porGenero, porAcento, porRef, nada, todosNaCaixa, rGen };
+});
+console.log('     '+JSON.stringify(r));
+checa('a lista de cores rola por dentro', r.rola, true);
+checa('  e avisa que rola (sombra no pé)', r.avisaQueRola, true);
+checa('  o contador diz quantas cores existem', r.conta, '22 cores');
+checa('filtrar por "genero" acha as três', r.porGenero,
+      ['--ft-genero-masc','--ft-genero-fem','--ft-genero-inf']);
+checa('  com acento também', r.porAcento, 3);
+checa('  e por "referencia" também', r.porRef, 3);
+checa('  filtradas, cabem todas sem rolar', r.todosNaCaixa, true);
+checa('busca sem resultado não quebra', r.nada, 0);
 
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro de página', erros.length, 0);
