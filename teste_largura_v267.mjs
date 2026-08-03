@@ -1,5 +1,5 @@
 /* v3.267 — a escala segue a LARGURA da janela, e reage a redimensionar. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, redimensiona } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 /* a pasta deste arquivo — assim as suítes rodam de qualquer clone,
    e não só de /home/claude/ft */
@@ -38,14 +38,14 @@ checa('768p',  r[4], ['768p',    0,0.90,0.90]);
 
 console.log('\n=== 2. QUEM MANDA É A LARGURA, NÃO A ALTURA ===');
 // janela ALTA e ESTREITA: pela altura seria 2160p; pela largura é 768p
-await page.setViewportSize({width:1200,height:2000}); await page.waitForTimeout(500);
+await redimensiona(page, {width:1200,height:2000});
 r=await estado();
 console.log('     janela '+r.larg+'×'+r.alt);
 checa('alta e estreita cai em 768p', r.faixa, '768p');
 checa('  com a escala de 768p', r.escalaFolha, 0.90);
 
 // janela BAIXA e LARGA: pela altura seria 768p; pela largura é 1440p
-await page.setViewportSize({width:2400,height:700}); await page.waitForTimeout(500);
+await redimensiona(page, {width:2400,height:700});
 r=await estado();
 console.log('     janela '+r.larg+'×'+r.alt);
 checa('baixa e larga cai em 1440p', r.faixa, '1440p');
@@ -55,16 +55,16 @@ console.log('\n=== 3. CADA LARGURA CAI NA FAIXA CERTA ===');
 for(const [w,esperado] of [[3840,'2160p'],[3072,'2160p'],[2560,'1440p'],[2048,'1440p'],
                            [1920,'1080p'],[1600,'1080p'],[1500,'1080p'],[1440,'900p'],
                            [1366,'768p'],[1024,'768p']]){
-  await page.setViewportSize({width:w,height:900}); await page.waitForTimeout(360);
+  await redimensiona(page, {width:w,height:900});
   const e=await estado();
   checa('janela de '+w+'px', e.faixa, esperado);
 }
 console.log('     (3072 = 4K com o Windows a 125%; 2048 = 1440p a 125%)');
 
 console.log('\n=== 4. REDIMENSIONAR MUDA A ESCALA NA HORA ===');
-await page.setViewportSize({width:1920,height:1080}); await page.waitForTimeout(500);
+await redimensiona(page, {width:1920,height:1080});
 const grande=await estado();
-await page.setViewportSize({width:1200,height:1080}); await page.waitForTimeout(600);
+await redimensiona(page, {width:1200,height:1080});
 const pequeno=await estado();
 console.log('     1920px -> folha '+grande.folhaPx+'px, menu '+grande.menuPx+'px');
 console.log('     1200px -> folha '+pequeno.folhaPx+'px, menu '+pequeno.menuPx+'px');
@@ -73,7 +73,7 @@ checa('a folha encolheu', pequeno.folhaPx < grande.folhaPx, true);
 checa('o menu também', pequeno.menuPx < grande.menuPx, true);
 
 // e volta ao alargar
-await page.setViewportSize({width:1920,height:1080}); await page.waitForTimeout(600);
+await redimensiona(page, {width:1920,height:1080});
 const voltou=await estado();
 checa('e volta ao alargar', voltou.faixa, '1080p');
 checa('  com a folha de novo grande', voltou.folhaPx, grande.folhaPx);

@@ -77,3 +77,37 @@ export async function esperaPronto(page, ms) {
      asserções leem cor e posição, e a aba tem transição de 120 ms */
   await page.waitForTimeout(ms == null ? 200 : ms);
 }
+
+/* ================================================================
+   REDIMENSIONAR E ESPERAR O ZOOM ASSENTAR
+
+   O motor de escala não responde ao `resize`: ele responde ao FIM do
+   resize, por um debounce de 180 ms seguido de requestAnimationFrame
+   (ver aoTerminarDeRedimensionar no editor). As suítes de largura e de
+   corte dormiam 360-600 ms fixos depois de setViewportSize e mediam.
+
+   Isso funciona sozinho e falha em bateria. Com três Chromium disputando
+   a máquina, o rAF é adiado: MEDIDO na v3.294, `teste_largura_v267` e
+   `teste_corte_v267` falharam juntas na bateria completa e passaram as
+   duas quando rodadas sozinhas, sem uma linha de código de editor
+   diferente entre as duas execuções. Era o relógio, não a régua.
+
+   Aqui a espera é pelo SINAL: a largura da folha parar de mudar por dois
+   quadros seguidos. Volta assim que assentou — no caso normal é mais
+   RÁPIDO que os 400 ms fixos — e aguenta até 4 s quando a máquina está
+   ocupada, em vez de medir no meio da transição.
+   ================================================================ */
+export async function redimensiona(page, tamanho, ms) {
+  await page.setViewportSize(tamanho);
+  await page.waitForFunction(async () => {
+    const folha = document.querySelector('.folha-a4');
+    if (!folha) return true;
+    const mede = () => Math.round(folha.getBoundingClientRect().width);
+    const a = mede();
+    await new Promise(s => requestAnimationFrame(() => requestAnimationFrame(s)));
+    return mede() === a && a > 0;
+  }, null, { timeout: 4000, polling: 120 }).catch(() => {});
+  /* o debounce do editor é de 180 ms: um piso garante que ele JÁ disparou,
+     e não que a folha ainda nem começou a mudar de tamanho */
+  await page.waitForTimeout(ms == null ? 260 : ms);
+}

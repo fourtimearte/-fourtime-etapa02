@@ -1,5 +1,5 @@
 /* v3.267 — a folha NUNCA é cortada, e Ctrl+0 volta à escala escolhida. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, redimensiona } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 /* a pasta deste arquivo — assim as suítes rodam de qualquer clone,
    e não só de /home/claude/ft */
@@ -26,7 +26,7 @@ const corte=()=>page.evaluate(()=>{
 
 console.log('\n=== 1. ESTREITANDO A JANELA, A FOLHA NUNCA PASSA DA TELA ===');
 for(const w of [1920,1600,1400,1244,1100,1000,900,800]){
-  await page.setViewportSize({width:w,height:1000}); await page.waitForTimeout(380);
+  await redimensiona(page, {width:w,height:1000});
   const c=await corte();
   checa('janela '+String(w).padStart(4)+'px · folha '+String(c.folha).padStart(4)+'px · zoom '+c.zoom,
         c.passa, false);
@@ -34,7 +34,7 @@ for(const w of [1920,1600,1400,1244,1100,1000,900,800]){
 
 console.log('\n=== 2. CTRL + = TAMBÉM NÃO CORTA ===');
 // o atalho grava o modo 'manual', que antes escapava de qualquer teto
-await page.setViewportSize({width:1100,height:1000}); await page.waitForTimeout(400);
+await redimensiona(page, {width:1100,height:1000});
 let r=await page.evaluate(async ()=>{
   for(let i=0;i<10;i++){
     document.dispatchEvent(new KeyboardEvent('keydown',{key:'=',ctrlKey:true,bubbles:true}));
@@ -56,7 +56,7 @@ console.log('     pediu '+r.manual+' · aplicou '+r.zoomReal+' (o que cabe)');
 console.log('\n=== 3. CTRL + 0 VOLTA À ESCALA ESCOLHIDA DA RESOLUÇÃO ===');
 for(const [w,faixa,escala] of [[1920,'1080p',1.05],[2560,'1440p',1.20],
                                [3200,'2160p',1.40],[1366,'768p',0.90],[1440,'900p',1.00]]){
-  await page.setViewportSize({width:w,height:1000}); await page.waitForTimeout(400);
+  await redimensiona(page, {width:w,height:1000});
   const e=await page.evaluate(async ()=>{
     /* sujeira de propósito: modo manual, calibragem à mão e faixa forçada */
     ZOOM_MODO='manual'; ZOOM_MANUAL=2.4;
@@ -75,7 +75,7 @@ for(const [w,faixa,escala] of [[1920,'1080p',1.05],[2560,'1440p',1.20],
 }
 
 console.log('\n=== 4. CTRL + - CONTINUA DIMINUINDO ===');
-await page.setViewportSize({width:1920,height:1080}); await page.waitForTimeout(400);
+await redimensiona(page, {width:1920,height:1080});
 r=await page.evaluate(async ()=>{
   document.dispatchEvent(new KeyboardEvent('keydown',{key:'0',ctrlKey:true,bubbles:true}));
   await new Promise(s=>setTimeout(s,150));
