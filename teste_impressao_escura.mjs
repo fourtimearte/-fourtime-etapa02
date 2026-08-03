@@ -4,7 +4,7 @@
 import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v278.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v279.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(50)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -77,11 +77,14 @@ const r=await p.evaluate(()=>{
              return tr?getComputedStyle(tr.querySelector('td.num')).borderTopColor:null;})(),
            rodapeTotal:g('.rodape-tot .rt-valor')?.color,
            generoMasc:(()=>{const c=[...f.querySelectorAll('.ft-combo[data-genero="masculino"] .ft-combo-caixa')][0];
-             return c?getComputedStyle(c).backgroundColor:null;})() };
+             return c?getComputedStyle(c).backgroundColor:null;})(),
+           linhaDoDocumento:(()=>{const cab=f.querySelector('.doc-header');
+             return cab?getComputedStyle(cab).backgroundColor:null;})() };
 });
 checa('folha branca', r.folha, 'rgb(255, 255, 255)');
 checa('tinta masculina clara', r.generoMasc, 'rgb(227, 238, 251)');
-checa('borda da tabela clara', r.bordaTabela, 'rgb(228, 232, 237)');
+/* a linha do documento é UMA só desde a v279: comparar com ela */
+checa('borda da tabela = linha do documento', r.bordaTabela, r.linhaDoDocumento);
 console.log('     '+JSON.stringify(r));
 
 console.log('\n=== 4. O HTML EXPORTADO também não leva o tema escuro ===');
@@ -93,29 +96,32 @@ const exp=await p.evaluate(()=>{
 checa('o arquivo do cliente sai sem tema', exp.tema, '(nenhum)');
 checa('  e continua sem valores', /sem-dinheiro/.test(exp.classe), true);
 
-console.log('\n=== 5. A LOGO também vira a de texto escuro no papel ===');
+console.log('\n=== 5. A LOGO do documento no papel ===');
 const logo=await p.evaluate(async ()=>{
-  document.body.dataset.tema='escuro';
-  /* trocar o atributo não basta: quem troca o src das logos é o
-     aplicaLogos(), chamado pelo botão de tema. O teste tem de fazer o
-     mesmo caminho do usuário. */
-  aplicaLogos();
-  await new Promise(s=>setTimeout(s,500));
-  const pega=()=>[...document.querySelectorAll('.folha-a4 .logo-box img,.folha-a4 .folha-topo img')]
-    .map(im=>im.getAttribute('src')===LOGO_H_ESCURA?'escura':(im.getAttribute('src')===LOGO_H_CLARA?'clara':'outra'));
-  const antes=pega();
-  dispatchEvent(new Event('beforeprint'));
-  await new Promise(s=>setTimeout(s,200));
-  const noPapel=pega();
-  dispatchEvent(new Event('afterprint'));
-  await new Promise(s=>setTimeout(s,300));
-  return { antes, noPapel, depois:pega(), quantas:antes.length };
+  document.body.dataset.tema='escuro'; aplicaLogos();
+  await new Promise(s=>setTimeout(s,400));
+  /* NÃO há troca de src: a folha carrega as duas imagens e o CSS escolhe.
+     O teste pergunta qual está VISÍVEL em cada mídia. */
+  const quais=()=>[...document.querySelectorAll('.folha-a4 .logo-box,.folha-a4 .folha-logo')]
+    .map(cx=>[...cx.querySelectorAll('img')].filter(i=>getComputedStyle(i).display!=='none')
+      .map(i=>i.classList.contains('logo-papel')?'papel':'tema').join('+'));
+  return quais;
 });
-console.log('     '+JSON.stringify(logo));
-checa('no tema escuro a tela usa a logo de texto branco', logo.antes.every(v=>v==='escura'), true);
-checa('  ao imprimir, todas viram a de texto escuro', logo.noPapel.every(v=>v==='clara'), true);
-checa('  e voltam sozinhas depois de imprimir', logo.depois.every(v=>v==='escura'), true);
-checa('  (havia logo para trocar)', logo.quantas>0, true);
+await p.emulateMedia({media:'screen'});
+const naTela=await p.evaluate(async ()=>[...document.querySelectorAll('.folha-a4 .logo-box,.folha-a4 .folha-logo')]
+  .map(cx=>[...cx.querySelectorAll('img')].filter(i=>getComputedStyle(i).display!=='none')
+    .map(i=>i.classList.contains('logo-papel')?'papel':'tema').join('+')));
+await p.emulateMedia({media:'print'});
+const noPapel=await p.evaluate(async ()=>[...document.querySelectorAll('.folha-a4 .logo-box,.folha-a4 .folha-logo')]
+  .map(cx=>[...cx.querySelectorAll('img')].filter(i=>getComputedStyle(i).display!=='none')
+    .map(i=>i.classList.contains('logo-papel')?'papel':'tema').join('+')));
+const srcs=await p.evaluate(()=>[...document.querySelectorAll('.folha-a4 .logo-papel')]
+  .map(i=>i.getAttribute('src')===LOGO_H_CLARA?'clara':'outra'));
+console.log('     tela='+JSON.stringify(naTela)+' papel='+JSON.stringify(noPapel));
+checa('havia logo no documento', naTela.length>0, true);
+checa('na tela aparece a do tema', naTela.every(v=>v==='tema'), true);
+checa('no papel aparece a de papel', noPapel.every(v=>v==='papel'), true);
+checa('  e a de papel é a de texto escuro', srcs.every(v=>v==='clara'), true);
 
 console.log('\n=== 6. HTML do Trello: a barra fixa fica ABAIXO do visualizador ===');
 const arq=await p.evaluate(()=>{ document.body.dataset.tema='escuro'; return gerarHTML([]); });

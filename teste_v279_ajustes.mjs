@@ -14,7 +14,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const browser=await abreNavegador();
 const page=await browser.newPage({ viewport:{width:1400,height:900} });
 const erros=[]; page.on('pageerror',e=>erros.push(String(e).slice(0,200)));
-await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v278.html')).href);
+await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v279.html')).href);
 await esperaPronto(page);
 await page.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,1500)); });
 
@@ -111,12 +111,15 @@ r=await page.evaluate(async ()=>{
   aplicaEstado(est2); await new Promise(s=>setTimeout(s,500));
   const t3=document.querySelector('.lay-modulo .lay-tabela-mini');
   const adu=[...t3.querySelectorAll('tbody tr')].find(x=>x.className.includes('tam-adulto'));
-  return { inf, adu: adu?g(adu.children[1]):null };
+  const cab=document.querySelector('.folha-a4 .doc-header');
+  return { inf, adu: adu?g(adu.children[1]):null,
+           linhaDoDocumento: cab?getComputedStyle(cab).backgroundColor:null };
 });
 checa('infantil: borda de topo vermelha', r.inf.cruz.topo, 'rgb(244, 199, 201)');
 checa('  divisórias internas também', r.inf.cruz.esq, 'rgb(244, 199, 201)');
 checa('  e a base (sombra, não borda)', r.inf.cruz.base, 'rgb(244, 199, 201) 0px -1px 0px 0px inset');
-checa('fileira normal continua cinza', r.inf.normal.topo, 'rgb(228, 232, 237)');
+/* a linha do documento agora é uma só: comparar com ELA, e não com um hex */
+checa('fileira normal usa a linha do documento', r.inf.normal.topo, r.linhaDoDocumento);
 checa('a linha NÃO fica mais alta', r.inf.hCruz, r.inf.hNormal);
 checa('adulto: borda azul', r.adu && r.adu.topo, 'rgb(187, 211, 245)');
 checa('  e a base azul', r.adu && r.adu.base, 'rgb(187, 211, 245) 0px -1px 0px 0px inset');
@@ -360,18 +363,83 @@ for(const media of ['screen','print']){
     const m=document.querySelector('.lay-modulo');
     const w=el=>el?getComputedStyle(el).fontWeight:null;
     const t=m.querySelector('.combo-ref textarea');
+    /* nome de tamanho REAL, e não o que o sorteio do kit trouxe: um nome
+       muito comprido não cabe nem em peso normal, e aí o teste mediria o
+       sorteio, não o negrito */
+    const antes=t.value;
+    t.value='FT-020-001M — RAGLAN MASC COM PUNHO';
+    const cabe=t.scrollWidth<=t.clientWidth+1;
+    t.value=antes;
     return { selo:w(m.querySelector('.lay-selo')), ref:w(t),
              tecido:w(m.querySelector('.combo-tecido textarea')),
              rotulo:w(m.querySelector('.combo-tecido .ft-combo-rotulo')),
-             /* negrito ocupa mais largura: o nome não pode passar a caber */
-             cabe:t.scrollWidth<=t.clientWidth+1 };
+             cabe };
   });
   checa(`${media}: selo L-NN em negrito`, r.selo, '700');
   checa(`   referência em negrito`, r.ref, '700');
   checa(`   e só elas — tecido segue normal`, [r.tecido,r.rotulo], ['400','600']);
-  checa(`   o nome continua cabendo no campo`, r.cabe, true);
+  checa(`   um nome de tamanho normal cabe em negrito`, r.cabe, true);
 }
 await page.emulateMedia({ media:'screen' });
+
+console.log('\n=== 15. UMA COR DE BORDA NO DOCUMENTO · LOGO NO PAPEL ===');
+for(const tema of ['claro','escuro']){
+  for(const media of ['screen','print']){
+    await page.emulateMedia({ media });
+    r=await page.evaluate(async (tema)=>{
+      document.body.dataset.tema=tema; if(window.aplicaLogos)aplicaLogos();
+      await new Promise(s=>setTimeout(s,400));
+      const f=document.querySelector('.folha-a4');
+      /* toda linha CINZA do documento tem de ser a mesma. Vermelho, tinta de
+         gênero e o selo são sinal, não estrutura: ficam de fora. */
+      const sinal=new Set(['rgb(198, 22, 27)']);
+      const cinzas={};
+      const conta=(cor,quem)=>{ if(!cor||cor==='rgba(0, 0, 0, 0)'||sinal.has(cor))return;
+        (cinzas[cor]=cinzas[cor]||new Set()).add(quem); };
+      f.querySelectorAll('*').forEach(el=>{
+        if(el.closest('.lay-selo')||el.closest('.dtf-chip')||el.closest('.design-grupo'))return;
+        if(el.closest('.ft-combo[data-genero]'))return;      /* tinta de gênero */
+        const s=getComputedStyle(el);
+        const nome=el.tagName.toLowerCase()+'.'+((el.className&&el.className.split)?el.className.split(' ')[0]:'');
+        ['borderTop','borderRight','borderBottom','borderLeft'].forEach(l=>{
+          if(parseFloat(s[l+'Width'])>0 && s[l+'Style']!=='none') conta(s[l+'Color'],nome);
+        });
+      });
+      const cab=f.querySelector('.doc-header');
+      if(cab)conta(getComputedStyle(cab).backgroundColor,'grade do cabeçalho');
+      const tab=f.querySelector('.lay-tabela-mini td.num');
+      const img=f.querySelector('.lay-img');
+      const logos=[...f.querySelectorAll('.logo-box,.folha-logo')].map(cx=>{
+        const v=[...cx.querySelectorAll('img')].filter(i=>getComputedStyle(i).display!=='none');
+        return v.map(i=>i.classList.contains('logo-papel')?'papel':'tema').join('+');
+      });
+      return { quantasCores:Object.keys(cinzas).length, cores:Object.keys(cinzas),
+               tabela:tab?getComputedStyle(tab).borderTopColor:null,
+               imagem:img?getComputedStyle(img).borderTopColor:null,
+               cabecalho:cab?getComputedStyle(cab).backgroundColor:null, logos };
+    }, tema);
+    checa(`${tema}/${media}: uma única cor de linha no documento`, r.quantasCores, 1);
+    checa(`   tabela = cabeçalho = caixa de imagem`, [r.tabela,r.imagem], [r.cabecalho,r.cabecalho]);
+    checa(`   logo: ${media==='print'?'a de papel':'a do tema'}`,
+          r.logos.every(v=>v===(media==='print'?'papel':'tema')), true);
+  }
+}
+await page.emulateMedia({ media:'screen' });
+await page.evaluate(()=>{ document.body.dataset.tema='claro'; if(window.aplicaLogos)aplicaLogos(); });
+r=await page.evaluate(async ()=>{
+  document.body.dataset.tema='escuro'; if(window.aplicaLogos)aplicaLogos();
+  await new Promise(s=>setTimeout(s,300));
+  /* getComputedStyle devolve um objeto VIVO: guardar `c` e ler depois de
+     trocar o tema devolvia a cor do tema novo. A string tem de ser copiada
+     na hora. */
+  const escuro=getComputedStyle(document.querySelector('.lay-selo')).borderTopColor;
+  document.body.dataset.tema='claro'; if(window.aplicaLogos)aplicaLogos();
+  await new Promise(s=>setTimeout(s,300));
+  const claro=getComputedStyle(document.querySelector('.lay-selo')).borderTopColor;
+  return { escuro, claro };
+});
+checa('o selo tem borda própria no escuro', r.escuro!==r.claro, true);
+console.log('     selo: claro='+r.claro+'  escuro='+r.escuro);
 
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro de página', erros.length, 0);
