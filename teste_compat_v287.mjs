@@ -39,9 +39,9 @@ const RESUMO = `(()=>{
 })()`;
 
 /* a versão NOVA vem do ambiente; as antigas são fixas, é o ponto do teste */
-const NOVA = process.env.FT_ARQ || 'fourtime-editor-v286.html';
-const VER  = process.env.FT_VER || '3.286';
-for (const antiga of ['fourtime-editor-v285.html','fourtime-editor-v284.html','fourtime-editor-v283.html','fourtime-editor-v282.html','fourtime-editor-v281.html','fourtime-editor-v280.html','fourtime-editor-v279.html','fourtime-editor-v278.html','fourtime-editor-v277.html','fourtime-editor-v276.html','fourtime-editor-v275.html','fourtime-editor-v274.html']){
+const NOVA = process.env.FT_ARQ || 'fourtime-editor-v287.html';
+const VER  = process.env.FT_VER || '3.287';
+for (const antiga of ['fourtime-editor-v286.html','fourtime-editor-v285.html','fourtime-editor-v284.html','fourtime-editor-v283.html','fourtime-editor-v282.html','fourtime-editor-v281.html','fourtime-editor-v280.html','fourtime-editor-v279.html','fourtime-editor-v278.html','fourtime-editor-v277.html','fourtime-editor-v276.html','fourtime-editor-v275.html','fourtime-editor-v274.html']){
   console.log('\n=== .ft salvo na '+antiga.replace('fourtime-editor-','').replace('.html','')+' → aberto na v'+VER+' ===');
   let velha;
   try { velha = await abre(antiga); } catch(e){ console.log('  (versão não está aqui, pulando)'); continue; }
