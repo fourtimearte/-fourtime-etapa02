@@ -234,15 +234,24 @@ checa('  formato de pílula', r.raio, '999px');
 console.log('\n=== 8c. CANTOS ARREDONDADOS ===');
 r = await page.evaluate(() => {
   const c = getComputedStyle(document.querySelector('.doc-header'));
+  /* a cor da linha vem de --ft-borda: lê-se o TOKEN resolvido, para o teste
+     não quebrar toda vez que a paleta mudar */
+  const sonda = document.createElement('i');
+  sonda.style.cssText = 'background:var(--ft-borda)';
+  document.querySelector('.folha-a4').appendChild(sonda);
+  const corDaBorda = getComputedStyle(sonda).backgroundColor;
+  sonda.remove();
   return { raio: c.borderRadius, recorte: c.overflow,
-           borda: c.borderTopWidth, fundo: c.backgroundColor, gap: c.gap };
+           borda: c.borderTopWidth, fundo: c.backgroundColor, gap: c.gap, corDaBorda };
 });
 checa('raio r-sm 6px (v3.275: o r-md do app virou r-sm)', r.raio, '6px');
 /* v3.274: o quadro de fora saiu; as linhas INTERNAS não, porque são o gap
    sobre o fundo do container e nunca dependeram da borda */
 checa('  sem borda externa', r.borda, '0px');
 checa('  mas as linhas internas ficam (gap)', r.gap, '1px');
-checa('  sobre o fundo que as desenha', r.fundo, 'rgb(212, 212, 212)');
+/* a cor sai de --ft-borda, e a paleta muda: comparar com o TOKEN, e
+   não com um hexadecimal escrito à mão */
+checa('  sobre o fundo que as desenha', r.fundo, r.corDaBorda);
 /* sem o recorte, os cantos quadrados das CÉLULAS aparecem por cima do raio */
 checa('  com recorte, senão as células vazam no canto', r.recorte, 'hidden');
 

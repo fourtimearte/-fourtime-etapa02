@@ -2398,7 +2398,16 @@
      ela sai de --ft-borda — a entrada "Bordas (tabelas/ficha)" do painel
      de cores. Mudar lá muda o documento inteiro, nos dois temas.
      ================================================================ */
-  .folha-a4{--doc-linha:var(--ft-borda);}
+  .folha-a4{
+    --doc-linha:var(--ft-borda);
+    /* O controle "Fonte" é do DOCUMENTO, mas quase nada do documento o
+       obedecia: desde a v264 o cabeçalho, o aviso, a referência e a
+       observação usam --ft-fonte-ui, que é da INTERFACE. Aqui dentro esse
+       token passa a seguir a escolha do documento; sem escolha, continua
+       nas fontes do kit, então nada muda de aparência por si só. */
+    --ft-fonte-ui:var(--ft-fonte-doc-ui,'IBM Plex Sans',system-ui,-apple-system,sans-serif);
+    --ft-fonte-mono:var(--ft-fonte-doc-mono,'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace);
+  }
   .doc-rodape{
     margin-top:auto;padding-top:2.4mm;
     --rod-txt:#161A20;      /* kit --text        */
@@ -6015,6 +6024,20 @@
       <option value="Georgia,serif">Georgia (serif)</option>
     </select>
   </div>
+  <div class="ft-ctx-rotulo" style="margin-top:10px;">Fonte da interface do editor</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+    <select id="ccFonteUi" style="flex:1;max-width:150px;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--ft-borda-campo);border-radius:6px;background:var(--ft-superficie-2);color:var(--ft-preto);outline:none;">
+      <option value="'IBM Plex Sans',system-ui,sans-serif" selected>IBM Plex Sans</option>
+      <option value="'IBM Plex Mono',ui-monospace,monospace">IBM Plex Mono</option>
+      <option value="'Inter',sans-serif">Inter</option>
+      <option value="'Plus Jakarta Sans',sans-serif">Plus Jakarta Sans</option>
+      <option value="Arial,sans-serif">Arial</option>
+      <option value="Helvetica,sans-serif">Helvetica</option>
+      <option value="Roboto,sans-serif">Roboto</option>
+      <option value="system-ui,sans-serif">System UI</option>
+      <option value="Georgia,serif">Georgia (serif)</option>
+    </select>
+  </div>
   <div class="ft-ctx-rotulo" style="margin-top:10px;">Tamanho do texto no orçamento</div>
   <div class="cc-tam-lista" id="ccTamLista"></div>
   <div class="cc-linha">
@@ -9004,7 +9027,16 @@ document.getElementById('miConfig').addEventListener('click',e=>{
   montaAtalhos();
 });
 document.getElementById('cfgFechar').addEventListener('click',()=>cfgFundo.classList.remove('on'));
-cfgFundo.addEventListener('mousedown',e=>{if(e.target===cfgFundo)cfgFundo.classList.remove('on');});
+/* Fechar só quando o clique COMEÇA e TERMINA no fundo. O <select> nativo
+   abre uma lista fora do DOM: ao escolher uma opção, o mousedown que volta
+   tem o fundo como alvo, e o painel se fechava sozinho a cada troca de
+   fonte — era preciso reabrir para trocar de novo. */
+let cfgInicioNoFundo=false;
+cfgFundo.addEventListener('mousedown',e=>{cfgInicioNoFundo=(e.target===cfgFundo);});
+cfgFundo.addEventListener('mouseup',e=>{
+  if(cfgInicioNoFundo&&e.target===cfgFundo)cfgFundo.classList.remove('on');
+  cfgInicioNoFundo=false;
+});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&cfgFundo.classList.contains('on'))cfgFundo.classList.remove('on');});
 document.querySelectorAll('.cfg-tab').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('.cfg-tab').forEach(x=>x.classList.toggle('on',x===t));
@@ -9119,11 +9151,18 @@ const ccBold=document.getElementById('ccBold');
 const ccItalic=document.getElementById('ccItalic');
 ccFonte.addEventListener('input',()=>{
   const v=ccFonte.value, r=document.documentElement.style;
-  r.setProperty('--ft-fonte',v);
-  /* o módulo de layout e a tabela de tamanhos são documento também: seguem
-     a escolha. Sem escolha, continuam com as fontes do kit. */
-  r.setProperty('--ft-fonte-mod',v);
-  r.setProperty('--ft-fonte-tab',v);
+  /* uma escolha, o DOCUMENTO inteiro: a folha (Roboto), o que usava a
+     fonte de interface (cabeçalho, aviso, referência, observação), o
+     módulo e a tabela. A interface do editor tem controle próprio. */
+  ['--ft-fonte','--ft-fonte-doc-ui','--ft-fonte-doc-mono','--ft-fonte-mod','--ft-fonte-tab']
+    .forEach(t=>r.setProperty(t,v));
+});
+/* ---- fonte da INTERFACE do editor (menu, trilho, abas, painéis) ---- */
+const ccFonteUi=document.getElementById('ccFonteUi');
+if(ccFonteUi)ccFonteUi.addEventListener('input',()=>{
+  /* só fora da folha: dentro dela o --ft-fonte-ui é redefinido pelo
+     documento, então a interface nunca contamina o orçamento */
+  document.documentElement.style.setProperty('--ft-fonte-ui',ccFonteUi.value);
 });
 
 /* ---- tamanhos por parte do orçamento (v167) ---- */
@@ -9175,8 +9214,10 @@ cfgAplica();
 document.getElementById('ccReset').addEventListener('click',()=>{
   ccPaleta[ccAba]={};                            /* restaura a paleta da aba aberta */
   ccAplicaPaletas();
-  ['--ft-fonte','--ft-fonte-mod','--ft-fonte-tab','--ft-fonte-peso','--ft-fonte-estilo']
+  ['--ft-fonte','--ft-fonte-doc-ui','--ft-fonte-doc-mono','--ft-fonte-mod','--ft-fonte-tab',
+   '--ft-fonte-ui','--ft-fonte-peso','--ft-fonte-estilo']
     .forEach(v=>document.documentElement.style.removeProperty(v));
+  const fu=document.getElementById('ccFonteUi'); if(fu)fu.value="'IBM Plex Sans',system-ui,sans-serif";
   ccTam={}; ccAplicaTamanhos(); ccMontaTamanhos();   /* tamanhos voltam ao padrão */
   ccFonte.value="Roboto,sans-serif";
   ccBold.classList.remove('on');ccItalic.classList.remove('on');
