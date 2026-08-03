@@ -38,8 +38,11 @@ const RESUMO = `(()=>{
   };
 })()`;
 
-for (const antiga of ['fourtime-editor-v276.html','fourtime-editor-v275.html','fourtime-editor-v274.html']){
-  console.log('\n=== .ft salvo na '+antiga.replace('fourtime-editor-','').replace('.html','')+' → aberto na v277 ===');
+/* a versão NOVA vem do ambiente; as antigas são fixas, é o ponto do teste */
+const NOVA = process.env.FT_ARQ || 'fourtime-editor-v278.html';
+const VER  = process.env.FT_VER || '3.278';
+for (const antiga of ['fourtime-editor-v277.html','fourtime-editor-v276.html','fourtime-editor-v275.html','fourtime-editor-v274.html']){
+  console.log('\n=== .ft salvo na '+antiga.replace('fourtime-editor-','').replace('.html','')+' → aberto na v'+VER+' ===');
   let velha;
   try { velha = await abre(antiga); } catch(e){ console.log('  (versão não está aqui, pulando)'); continue; }
   const dados = await velha.p.evaluate(async (RESUMO)=>{
@@ -55,7 +58,7 @@ for (const antiga of ['fourtime-editor-v276.html','fourtime-editor-v275.html','f
   checa('a versão antiga abriu', typeof dados.versao, 'string');
   await velha.p.close();
 
-  const nova = await abre('fourtime-editor-v277.html');
+  const nova = await abre(NOVA);
   const depois = await nova.p.evaluate(async ({arq,RESUMO})=>{
     aplicaEstado(JSON.parse(arq));
     await new Promise(s=>setTimeout(s,4200));
@@ -64,7 +67,7 @@ for (const antiga of ['fourtime-editor-v276.html','fourtime-editor-v275.html','f
              estouro:[...document.querySelectorAll('.folha-a4')].map(f=>+excedeFolha(f).toFixed(1)) };
   }, {arq:dados.arquivo, RESUMO});
 
-  checa('abriu na v3.277', depois.versao, '3.277');
+  checa('abriu na v'+VER, depois.versao, VER);
   checa('cabeçalho idêntico', depois.resumo.header, dados.resumo.header);
   checa('mesmo número de layouts', depois.resumo.layouts.length, dados.resumo.layouts.length);
   for(let i=0;i<dados.resumo.layouts.length;i++)
@@ -80,4 +83,4 @@ for (const antiga of ['fourtime-editor-v276.html','fourtime-editor-v275.html','f
 console.log('\n'+'='.repeat(66));
 await b.close();
 if(falhas.length){ console.log(`FALHARAM ${falhas.length}:\n  - ${falhas.join('\n  - ')}`); process.exit(1); }
-console.log('COMPATIBILIDADE OK: .ft das versões anteriores abre igual na v3.277');
+console.log('COMPATIBILIDADE OK: .ft das versões anteriores abre igual na v'+VER);
