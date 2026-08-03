@@ -23,7 +23,7 @@ const ANTIGAS=['Branco','Preto','Cinza Mescla','Cinza Chumbo','Cinza Claro','Pra
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,180)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v289.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v290.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O CATÁLOGO ===');
@@ -214,12 +214,44 @@ checa('  mas volta se for cadastrada de novo', r.recadastradaVolta, true);
 checa('pedido antigo continua achando a cor pelo nome', r.pedidoAntigo, '#4A5D23');
 
 console.log('\n=== 5. UM MENU SÓ PARA COR ===');
+/* CLIQUE DE VERDADE (mouse.click = mousedown+mouseup+click), não um
+   mousedown avulso. Foi essa a cegueira que deixou passar o menu que
+   abria e sumia no mesmo gesto: o `click` do mesmo movimento chegava ao
+   ouvinte do documento e fechava o que o `mousedown` acabara de abrir. */
+const centro=async sel=>await p.evaluate(s=>{
+  const e=document.querySelector(s); if(!e)return null;
+  const r=e.getBoundingClientRect();
+  return {x:Math.round(r.left+Math.min(30,r.width/2)),y:Math.round(r.top+r.height/2)};
+},sel);
+const displayCor=()=>p.evaluate(()=>getComputedStyle(document.getElementById('corMenu')).display);
+/* volta ao ORÇAMENTO pelo trilho: esconder o #bdPage na marra não basta —
+   o editor fica oculto por uma classe do body, e o campo media 0x0 */
+await p.evaluate(async ()=>{
+  document.querySelector('.ft-rail-bt[data-sec="orcamento"]').click();
+  await new Promise(s=>setTimeout(s,500));
+  document.querySelector('.lay-modulo .combo-cor').scrollIntoView({block:'center'});
+});
+await p.waitForTimeout(400);
+let pt=await centro('.lay-modulo .combo-cor .ft-combo-caixa');
+await p.mouse.click(pt.x,pt.y);
+await p.waitForTimeout(350);
+const abriuNoClique=await displayCor();
+await p.waitForTimeout(700);
+const seguiuAberto=await displayCor();
+await p.mouse.click(60,620); await p.waitForTimeout(250);
+const fechouFora=await displayCor();
+checa('clique de verdade no campo ABRE o menu', abriuNoClique, 'block');
+checa('  e ele NÃO some no mesmo gesto', seguiuAberto, 'block');
+checa('  um clique fora fecha', fechouFora, 'none');
+pt=await centro('.lay-modulo .combo-cor .cor-sw');
+await p.mouse.click(pt.x,pt.y); await p.waitForTimeout(350);
+checa('o quadradinho também abre com clique de verdade', await displayCor(), 'block');
+await p.mouse.click(60,620); await p.waitForTimeout(250);
+
 /* O campo tinha DOIS caminhos: o quadradinho abria o menu de grupos e o
    campo (ou a seta) abria o dropdown genérico dos outros combos — duas
    listas diferentes para a mesma escolha. */
 r=await p.evaluate(async ()=>{
-  document.querySelectorAll('#bdPage,#cliPage').forEach(e=>e.style.display='none');
-  await new Promise(s=>setTimeout(s,200));
   const combo=document.querySelector('.lay-modulo .combo-cor');
   const ta=combo.querySelector('textarea');
   const seta=combo.querySelector('.ft-combo-abrir')||combo.querySelector('.ft-combo-seta');

@@ -42,7 +42,7 @@ await p.route('**/api.opencnpj.org/**',async r=>{
   r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(RECEITA_OPENCNPJ)});
 });
 
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v289.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v290.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. A MÁSCARA: SÓ NÚMEROS ENTRAM, A PONTUAÇÃO APARECE ===');
