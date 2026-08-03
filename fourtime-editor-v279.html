@@ -35,19 +35,19 @@
      profissional e duro. */
   --ft-cinza-70:#161A20;                           /* kit --n-900 */
     --ft-cinza-40:#666B70;
-    --ft-borda:#D4D4D4;
-    --ft-borda-campo:#D4D4D4;
+    --ft-borda:#d5d8e2;
+    --ft-borda-campo:#d9c4c4;
     --ft-header-bg:#f2f2f2;
-    --ft-branco:#FFFFFF;
-    --ft-fundo-externo:#5C5C5C;
-    --ft-fundo-pagina:#F6F8FA;      /* kit --n-50 (246,248,250) */
+    --ft-branco:#ffffff;
+    --ft-fundo-externo:#c7c7c7;
+    --ft-fundo-pagina:#f9f9f9;      /* kit --n-50 (246,248,250) */
     /* superfícies (usadas pelo tema escuro) */
-    --ft-superficie:#ffffff;    /* caixas, menus flutuantes, campos */
+    --ft-superficie:#fcfcfc;    /* caixas, menus flutuantes, campos */
     /* Era #ffffff, idêntica a --ft-superficie: não havia segundo nível de
      superfície, então campo, cartão e fundo eram todos o mesmo branco e a
      hierarquia dependia só da borda. */
   --ft-superficie-2:#FBFCFD;                       /* kit --n-25 */  /* base dos gradientes de campo */
-    --ft-menu-bg:#FFFFFF;       /* menu lateral */
+    --ft-menu-bg:#ffffff;       /* menu lateral */
     --ft-hover:#f2f2f2;
     --ft-hover-2:#EEEFF1;
     --ft-vermelho-suave:#FDF1F1;
@@ -98,7 +98,7 @@
     /* anel de foco do kit (--ring). Não existia: os controles só tinham o
        outline padrão do navegador, que muda de desenho a cada navegador. */
     --ft-anel:rgba(198,22,27,.35);
-    --ft-tabbar-bg:#EEF1F4;             /* kit --bg-muted */
+    --ft-tabbar-bg:#ffffff;             /* kit --bg-muted */
     --ft-tab-inativa-bg:#FBFCFD;        /* kit --bg-surface-2 */
     --ft-tab-inativa-txt:#5D6775;       /* kit --text-muted */
     --ft-tab-ativa-bg:#C6161B;
@@ -1214,7 +1214,7 @@
     width:4.5mm;height:4.5mm;flex-shrink:0;
     display:inline-flex;align-items:center;justify-content:center;
     background:var(--ft-header-bg);
-    border:1px solid var(--ft-borda-campo);border-radius:6px;
+    border:1px solid var(--doc-linha,var(--ft-borda-campo));border-radius:6px;
     cursor:pointer;color:var(--ft-cinza-70);padding:0;
   }
   .hd-tags-add:hover{color:var(--ft-vermelho);border-color:var(--ft-vermelho);}
@@ -1459,6 +1459,11 @@
      mas é o que faz "quase igual" virar "igual".
      ================================================================ */
   .lay-modulo{
+    /* Os tamanhos do módulo eram px fixos (8,4 e 9,8 = os 12 e 14 do CRM na
+       escala 0,70) e ignoravam o ajuste "Referência / tecido / cor" do
+       painel. Agora saem de --ft-tam-campos: no padrão de 11px dão os
+       mesmos 8,4 e 9,8 de antes, e acompanham quando o valor muda. */
+    --mod-fonte:var(--ft-tam-campos,11px);
     --mod-borda:var(--doc-linha,var(--ft-borda));   /* a linha do documento */
     --mod-sutil:#68727E;      /* kit --text-subtle   */
     --mod-medio:#5D6775;      /* kit --text-muted    */
@@ -1490,13 +1495,17 @@
   }
   /* a fonte do módulo é a da INTERFACE, como no CRM. Muda o documento
      impresso na área dos layouts — foi decisão sua. */
+  /* O `!important` daqui vencia o seletor de Fonte do painel: escolher
+     outra fonte não mexia em nada dentro do módulo — que é a maior parte
+     do documento. Agora há um degrau no meio: `--ft-fonte-mod` e
+     `--ft-fonte-tab` nascem com as fontes do kit (Plex Sans e Plex Mono,
+     como no CRM) e o painel as troca junto com --ft-fonte. Sem escolha
+     nenhuma, nada muda de aparência. */
   .lay-modulo,.lay-modulo textarea,.lay-modulo input,.lay-modulo button,
-  .lay-modulo .lay-area{font-family:var(--ft-fonte-ui) !important;}
-  /* a tabela SAI dessa regra: no CRM ela é mono, e o !important daqui
-     estava vencendo a family da própria tabela */
-  .lay-modulo .lay-tabela-mini{font-family:var(--ft-fonte-mono) !important;}
+  .lay-modulo .lay-area{font-family:var(--ft-fonte-mod,var(--ft-fonte-ui)) !important;}
+  .lay-modulo .lay-tabela-mini{font-family:var(--ft-fonte-tab,var(--ft-fonte-mono)) !important;}
   .lay-modulo .lay-tabela-mini .c-tam,
-  .lay-modulo .lay-tabela-mini tfoot td:first-child{font-family:var(--ft-fonte-ui) !important;}
+  .lay-modulo .lay-tabela-mini tfoot td:first-child{font-family:var(--ft-fonte-mod,var(--ft-fonte-ui)) !important;}
 
   /* ---- grade do módulo: 1.7fr / 1.3fr ---- */
   /* gap 18 no CRM (não 16, como eu tinha anotado): 18 x 0,70 = 12,6px */
@@ -1567,7 +1576,7 @@
      eles se alinham entre si e ao chevron, ao + e ao swatch. */
   .lay-modulo .ft-combo-rotulo{
     display:none;flex:0 0 auto;align-self:center;white-space:nowrap;
-    font-size:8.4px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    font-size:calc(var(--mod-fonte) * .764);font-weight:600;letter-spacing:.04em;text-transform:uppercase;
     color:var(--mod-sutil);line-height:1.35;padding:0;margin:0 -1.4px 0 0;
   }
   .lay-modulo .ft-combo.com-valor .ft-combo-rotulo{display:block;}
@@ -1588,9 +1597,9 @@
     color:var(--mod-texto);letter-spacing:0;
   }
   .lay-modulo .combo-tecido textarea,
-  .lay-modulo .combo-cor textarea{font-size:8.4px;text-transform:uppercase;}
+  .lay-modulo .combo-cor textarea{font-size:calc(var(--mod-fonte) * .764);text-transform:uppercase;}
   .lay-modulo .combo-ref textarea{
-    font-size:9.8px;text-transform:none;align-self:center;
+    font-size:calc(var(--mod-fonte) * .891);text-transform:none;align-self:center;
     /* negrito, a pedido: a referência é o nome da peça, a informação que
        identifica o layout — pesa igual ao selo L-NN ao lado. Só ela; os
        outros campos do módulo continuam em peso normal. */
@@ -1753,7 +1762,7 @@
   .ft-combo{position:relative;flex:1;}
   .ft-combo-caixa{
     display:flex;align-items:flex-start;
-    border:1px solid var(--ft-borda-campo);
+    border:1px solid var(--doc-linha,var(--ft-borda-campo));
     border-radius:6px;
     background:linear-gradient(180deg,var(--ft-superficie) 0%,var(--ft-superficie-2) 100%);
     box-shadow:0 1px 2px rgba(17,18,20,.05), 0 1px 1px rgba(17,18,20,.03);
@@ -1800,7 +1809,7 @@
   /* módulo de imagem */
   .lay-img{
     position:relative;
-    border:1.5px dashed var(--ft-borda-campo);
+    border:1.5px dashed var(--doc-linha,var(--ft-borda));   /* linha do documento */
     border-radius:6px 6px 0 0;   /* cantos de baixo retos */
     min-height:52mm;
     display:flex;align-items:center;justify-content:center;
@@ -1808,7 +1817,7 @@
     overflow:hidden;cursor:pointer;
   }
   .lay-img img{width:100%;height:100%;object-fit:contain;display:block;}
-  .lay-img.com-img{border:1px solid var(--ft-borda-campo);}
+  .lay-img.com-img{border:1px solid var(--doc-linha,var(--ft-borda));}
   /* área vazia: ícone grande + instrução */
   .lay-img-txt{
     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3mm;
@@ -1873,7 +1882,7 @@
     position:absolute;top:2mm;right:2mm;z-index:5;
     display:none;align-items:center;justify-content:center;
     width:22px;height:22px;border-radius:6px;
-    background:var(--ft-superficie);border:1px solid var(--ft-borda-campo);
+    background:var(--ft-superficie);border:1px solid var(--doc-linha,var(--ft-borda));
     box-shadow:0 1px 3px rgba(17,18,20,.10);
     cursor:pointer;color:var(--ft-cinza-70);
   }
@@ -1917,7 +1926,7 @@
   }
   /* sinal: um toque troca somar por subtrair */
   .fin-sinal{
-    width:15px;height:15px;flex:0 0 15px;border:1px solid var(--ft-borda-campo);
+    width:15px;height:15px;flex:0 0 15px;border:1px solid var(--doc-linha,var(--ft-borda));
     border-radius:3px;background:var(--ft-superficie);cursor:pointer;
     font:700 11px var(--ft-fonte);line-height:1;display:grid;place-items:center;
     color:var(--ft-vermelho);transition:all var(--mov-rapido,120ms);padding:0;
@@ -2033,7 +2042,7 @@
   /* o separador do "| Motivo:" só existe no papel */
   .fin-sep-motivo{display:none;}
   .lay-area{
-    border:1px solid var(--ft-borda-campo);border-radius:6px;
+    border:1px solid var(--doc-linha,var(--ft-borda-campo));border-radius:6px;
     background:linear-gradient(180deg,var(--ft-superficie) 0%,var(--ft-superficie-2) 100%);
     box-shadow:0 1px 2px rgba(17,18,20,.05);
     font-size:12px;line-height:1.35;padding:1.5mm 2.6mm;
@@ -2197,7 +2206,7 @@
   .ft-ctx-limpar{
     margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px;
     padding:7px;border-radius:9px;font-size:12px;font-weight:500;color:var(--ft-cinza-70);
-    background:none;border:1px dashed var(--ft-borda-campo);cursor:pointer;width:100%;font-family:inherit;
+    background:none;border:1px dashed var(--doc-linha,var(--ft-borda-campo));cursor:pointer;width:100%;font-family:inherit;
   }
   .ft-ctx-limpar:hover{color:var(--ft-preto);border-color:var(--ft-cinza-40);}
   .ft-ctx-limpar svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
@@ -2389,13 +2398,7 @@
      ela sai de --ft-borda — a entrada "Bordas (tabelas/ficha)" do painel
      de cores. Mudar lá muda o documento inteiro, nos dois temas.
      ================================================================ */
-  .folha-a4{
-    --doc-linha:var(--ft-borda);
-    /* a caixa de observação e os botõezinhos da folha desenhavam com
-       --ft-borda-campo, que no tema escuro é um cinza diferente. Dentro do
-       documento tudo é a mesma linha. */
-    --ft-borda-campo:var(--doc-linha);
-  }
+  .folha-a4{--doc-linha:var(--ft-borda);}
   .doc-rodape{
     margin-top:auto;padding-top:2.4mm;
     --rod-txt:#161A20;      /* kit --text        */
@@ -2710,7 +2713,7 @@
     .ft-combo-abrir,.hd-abrir,.pick-menu,.lay-img-limpar,.ft-ctx-cores-menu,.ft-add,.design-add,#ctxTags,.ft-selbar,.lay-btn,.lay-del,#ctxCustom,#ctxConfig,#cfgFundo,.tec-btn,#viewer{display:none !important;}
     .dtf-chip{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .lay-img,.lay-img.com-img{
-      border:1px solid var(--ft-borda-campo) !important;
+      border:1px solid var(--doc-linha,var(--ft-borda)) !important;
       border-radius:6px 6px 0 0;
       min-height:0;
     }
@@ -2924,19 +2927,19 @@
       --ft-preto:#474747;
       --ft-cinza-70:#161A20;
       --ft-cinza-40:#666B70;
-      --ft-borda:#D4D4D4;
-      --ft-borda-campo:#D4D4D4;
+      --ft-borda:#d5d8e2;
+      --ft-borda-campo:#d9c4c4;
       --ft-header-bg:#f2f2f2;
-      --ft-branco:#FFFFFF;
-      --ft-fundo-externo:#5C5C5C;
-      --ft-fundo-pagina:#F6F8FA;
-      --ft-superficie:#ffffff;
-      --ft-superficie-2:#FBFCFD;
-      --ft-menu-bg:#FFFFFF;
+      --ft-branco:#ffffff;
+      --ft-fundo-externo:#c7c7c7;
+      --ft-fundo-pagina:#f9f9f9;
+      --ft-superficie:#fcfcfc;
+      --ft-superficie-2:#ffffff;
+      --ft-menu-bg:#ffffff;
       --ft-hover:#f2f2f2;
       --ft-hover-2:#EEEFF1;
       --ft-vermelho-suave:#FDF1F1;
-      --ft-tabbar-bg:#EEF1F4;
+      --ft-tabbar-bg:#ffffff;
       --ft-anel:rgba(198,22,27,.35);
       --ft-tab-inativa-bg:#FBFCFD; --ft-tab-inativa-txt:#5D6775;
       --ft-tab-ativa-bg:#C6161B;   --ft-tab-ativa-txt:#FFFFFF;
@@ -6001,6 +6004,8 @@
       <small style="display:block;font-weight:400;font-size:9.5px;color:var(--ft-cinza-40);">
         só o A4 — a interface usa IBM Plex Sans</small></div>
     <select id="ccFonte" style="flex:1;max-width:150px;font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--ft-borda-campo);border-radius:6px;background:var(--ft-superficie-2);color:var(--ft-preto);outline:none;">
+      <option value="'IBM Plex Sans',system-ui,sans-serif">IBM Plex Sans</option>
+      <option value="'IBM Plex Mono',ui-monospace,monospace">IBM Plex Mono</option>
       <option value="'Inter',sans-serif">Inter</option>
       <option value="'Plus Jakarta Sans',sans-serif">Plus Jakarta Sans</option>
       <option value="Arial,sans-serif">Arial</option>
@@ -8654,11 +8659,11 @@ const CC_VARS=[
 const CC_PADRAO={
   claro:{
     "--ft-vermelho":"#C6161B","--ft-preto":"#474747","--ft-cinza-70":"#000000","--ft-cinza-40":"#666B70",
-    "--ft-borda":"#D4D4D4","--ft-borda-campo":"#D4D4D4","--ft-header-bg":"#EDEDED","--ft-branco":"#FFFFFF",
-    "--ft-fundo-externo":"#5C5C5C","--ft-fundo-pagina":"#F5F5F5","--ft-superficie":"#EDEDED",
-    "--ft-superficie-2":"#FFFFFF","--ft-menu-bg":"#FFFFFF","--ft-hover":"#f2f2f2",
+    "--ft-borda":"#d5d8e2","--ft-borda-campo":"#d9c4c4","--ft-header-bg":"#f2f2f2","--ft-branco":"#ffffff",
+    "--ft-fundo-externo":"#c7c7c7","--ft-fundo-pagina":"#f9f9f9","--ft-superficie":"#fcfcfc",
+    "--ft-superficie-2":"#ffffff","--ft-menu-bg":"#ffffff","--ft-hover":"#f2f2f2",
     "--ft-genero-masc":"#E3EEFB","--ft-genero-fem":"#FCE7F1","--ft-genero-inf":"#E4F3EC",
-    "--ft-tabbar-bg":"#f2f2f2","--ft-tab-inativa-bg":"#FFFFFF","--ft-tab-inativa-txt":"#808080","--ft-tab-ativa-bg":"#C6161B","--ft-tab-ativa-txt":"#FFFFFF"
+    "--ft-tabbar-bg":"#ffffff","--ft-tab-inativa-bg":"#FFFFFF","--ft-tab-inativa-txt":"#808080","--ft-tab-ativa-bg":"#C6161B","--ft-tab-ativa-txt":"#FFFFFF"
   },
   escuro:{
     "--ft-vermelho":"#C6161B","--ft-preto":"#E4E7EA","--ft-cinza-70":"#F3F5F7","--ft-cinza-40":"#98A0A8",
@@ -9088,7 +9093,14 @@ ctxCustom.addEventListener('input',e=>{
 const ccFonte=document.getElementById('ccFonte');
 const ccBold=document.getElementById('ccBold');
 const ccItalic=document.getElementById('ccItalic');
-ccFonte.addEventListener('input',()=>document.documentElement.style.setProperty('--ft-fonte',ccFonte.value));
+ccFonte.addEventListener('input',()=>{
+  const v=ccFonte.value, r=document.documentElement.style;
+  r.setProperty('--ft-fonte',v);
+  /* o módulo de layout e a tabela de tamanhos são documento também: seguem
+     a escolha. Sem escolha, continuam com as fontes do kit. */
+  r.setProperty('--ft-fonte-mod',v);
+  r.setProperty('--ft-fonte-tab',v);
+});
 
 /* ---- tamanhos por parte do orçamento (v167) ---- */
 const CC_TAMANHOS=[
@@ -9139,7 +9151,8 @@ cfgAplica();
 document.getElementById('ccReset').addEventListener('click',()=>{
   ccPaleta[ccAba]={};                            /* restaura a paleta da aba aberta */
   ccAplicaPaletas();
-  ['--ft-fonte','--ft-fonte-peso','--ft-fonte-estilo'].forEach(v=>document.documentElement.style.removeProperty(v));
+  ['--ft-fonte','--ft-fonte-mod','--ft-fonte-tab','--ft-fonte-peso','--ft-fonte-estilo']
+    .forEach(v=>document.documentElement.style.removeProperty(v));
   ccTam={}; ccAplicaTamanhos(); ccMontaTamanhos();   /* tamanhos voltam ao padrão */
   ccFonte.value="Roboto,sans-serif";
   ccBold.classList.remove('on');ccItalic.classList.remove('on');
@@ -9567,20 +9580,25 @@ const VIEWER_RUNTIME=`
    a folha estourar, a tabela é compactada verticalmente SÓ o necessário,
    nível a nível, até caber na A4. Se sobrar espaço de novo, ela volta.
    ================================================================ */
+/* A fonte de cada nível é um FATOR de --ft-tam-tabela, e não um px fixo.
+   Com px fixo, o `--tf` inline que a compressão grava passava por cima do
+   ajuste do painel: mexer no "Tabela de tamanhos" não fazia nada. Os
+   fatores saem dos px antigos divididos pelos 11px padrão, então o
+   resultado visual é o mesmo de antes quando o painel está no padrão. */
 const NIVEIS_TAB=[
-  {p:'1.2mm', f:'11.5px', lh:'1.4'},   /* padrão */
-  {p:'1mm',   f:'11.5px', lh:'1.35'},
-  {p:'0.85mm',f:'11px',   lh:'1.3'},
-  {p:'0.7mm', f:'11px',   lh:'1.25'},
-  {p:'0.55mm',f:'10.5px', lh:'1.2'},
-  {p:'0.45mm',f:'10px',   lh:'1.15'},
-  {p:'0.35mm',f:'9.5px',  lh:'1.1'}    /* mínimo */
+  {p:'1.2mm', f:1.045, lh:'1.4'},   /* padrão  (11,5/11) */
+  {p:'1mm',   f:1.045, lh:'1.35'},
+  {p:'0.85mm',f:1.000, lh:'1.3'},
+  {p:'0.7mm', f:1.000, lh:'1.25'},
+  {p:'0.55mm',f:0.955, lh:'1.2'},
+  {p:'0.45mm',f:0.909, lh:'1.15'},
+  {p:'0.35mm',f:0.864, lh:'1.1'}    /* mínimo (9,5/11) */
 ];
 function aplicaNivel(tabs,n){
   const v=NIVEIS_TAB[n];
   tabs.forEach(t=>{
     t.style.setProperty('--tp',v.p);
-    t.style.setProperty('--tf',v.f);
+    t.style.setProperty('--tf','calc(var(--ft-tam-tabela,11px) * '+v.f+')');
     t.style.setProperty('--tlh',v.lh);
     t.dataset.nivel=n;
   });
