@@ -16,7 +16,7 @@ const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
 /* o servidor de mentira: só a rota da versão */
 await p.route('**/api/versao-publica', route=>route.fulfill({
   status:200, contentType:'application/json', body:JSON.stringify({editor:'9.999', minimo:'0'})}));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v284.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v285.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. COM A SINCRONIZAÇÃO DESLIGADA, o aviso ainda chega ===');
