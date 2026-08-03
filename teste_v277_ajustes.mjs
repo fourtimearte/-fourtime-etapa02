@@ -353,6 +353,26 @@ checa('papel: referência centrada na caixa', r.ref, 0);
 checa('  tecido também', [r.tecido,r.rotulo], [0,0]);
 await page.emulateMedia({ media:'screen' });
 
+console.log('\n=== 14. NEGRITO NO SELO E NA REFERÊNCIA ===');
+for(const media of ['screen','print']){
+  await page.emulateMedia({ media });
+  r=await page.evaluate(()=>{
+    const m=document.querySelector('.lay-modulo');
+    const w=el=>el?getComputedStyle(el).fontWeight:null;
+    const t=m.querySelector('.combo-ref textarea');
+    return { selo:w(m.querySelector('.lay-selo')), ref:w(t),
+             tecido:w(m.querySelector('.combo-tecido textarea')),
+             rotulo:w(m.querySelector('.combo-tecido .ft-combo-rotulo')),
+             /* negrito ocupa mais largura: o nome não pode passar a caber */
+             cabe:t.scrollWidth<=t.clientWidth+1 };
+  });
+  checa(`${media}: selo L-NN em negrito`, r.selo, '700');
+  checa(`   referência em negrito`, r.ref, '700');
+  checa(`   e só elas — tecido segue normal`, [r.tecido,r.rotulo], ['400','600']);
+  checa(`   o nome continua cabendo no campo`, r.cabe, true);
+}
+await page.emulateMedia({ media:'screen' });
+
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro de página', erros.length, 0);
 if(erros.length)erros.slice(0,4).forEach(e=>console.log('     ! '+e));
