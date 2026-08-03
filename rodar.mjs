@@ -26,7 +26,7 @@ const SUITES = [
   'teste_faixa_v268', 'teste_botoes_v271', 'teste_abas_v270', 'teste_cab_v269',
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
   /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
-  'teste_v279_ajustes', 'teste_compat_v279', 'teste_impressao_escura', 'teste_painel_v279',
+  'teste_v280_ajustes', 'teste_compat_v280', 'teste_impressao_escura', 'teste_painel_v280',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
 /* as suítes das versões anteriores: garantem que nada do que já funcionava
