@@ -12,7 +12,7 @@ function checa(r,o,e){const ok=JSON.stringify(o)===JSON.stringify(e);
 const browser = await abreNavegador();
 const page=await browser.newPage({viewport:{width:1920,height:1080}});
 const erros=[]; page.on('pageerror',e=>erros.push(String(e).slice(0,200)));
-await page.goto(pathToFileURL(DIR+'fourtime-editor-v276.html').href);
+await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v276.html')).href);
 await esperaPronto(page);
 await page.evaluate(()=>{ ccMonta(); if(window.ccFaixasMonta)ccFaixasMonta();
                           document.getElementById('ctxCustom').style.display='block'; });

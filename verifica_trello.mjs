@@ -9,7 +9,7 @@ const DIR = import.meta.dirname + '/';
 
 const b = await abreNavegador();
 const p = await b.newPage({viewport:{width:1600,height:1100}});
-await p.goto(pathToFileURL(DIR+'fourtime-editor-v276.html').href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v276.html')).href);
 await esperaPronto(p);
 const html = await p.evaluate(()=>{
   const põe=(k,v)=>{const e=document.querySelector('[data-h="'+k+'"]');if(e){e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}));}};

@@ -33,7 +33,7 @@ const erros = [];
 async function abreEditor(w, h) {
   const page = await browser.newPage({ viewport: { width: w, height: h } });
   page.on('pageerror', e => erros.push(String(e).slice(0, 200)));
-  await page.goto(pathToFileURL(DIR+'fourtime-editor-v276.html').href);
+  await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v276.html')).href);
   await esperaPronto(page);
   await page.evaluate(() => document.getElementById('ftRailRel').click());
   await page.waitForTimeout(900);

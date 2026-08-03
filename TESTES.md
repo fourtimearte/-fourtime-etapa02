@@ -8,10 +8,18 @@ que falhou.
 ## Rodar
 
 ```bash
-node rodar.mjs              # as 10 suítes da versão atual        ~28 s
-node rodar.mjs tudo         # + Trello/impressão + A4 + 9 antigas ~48 s
+node rodar.mjs              # as suítes da versão atual
+node rodar.mjs tudo         # + Trello/impressão + A4 + 9 antigas  ~75 s
 node rodar.mjs pop modal    # só as que casarem com esses nomes
+
+# apontar TODAS as suítes para outra versão do editor
+FT_ARQ=fourtime-editor-v277.html FT_VER=3.277 node rodar.mjs tudo
 ```
+
+As suítes leem o arquivo e a versão de `FT_ARQ` / `FT_VER`; sem eles, cada
+uma roda contra a versão para a qual foi escrita. É assim que se prova que
+uma versão nova não quebrou nada do que já funcionava: a mesma bateria roda
+duas vezes, contra a versão antiga e contra a nova.
 
 Concorrência 3. A máquina de desenvolvimento tem 2 núcleos; com 6 o tempo
 total piora, porque três Chromium disputando 2 núcleos ficam mais lentos
@@ -67,6 +75,8 @@ animações assentarem.
 | `teste_largura_v267` · `teste_corte_v267` · `teste_faixa_v268` | **resolução**: faixas de zoom, folha pelo monitor, menu pela janela, nunca cortar |
 | `verifica_trello` | export do Trello, layout de celular, impressão, PDF |
 | `cmp_a4_chave` | compara elemento a elemento o A4 de duas versões |
+| `teste_v277_ajustes` | módulo de layout, tabela, rodapé, cabeçalho das páginas 2+, compressão e caso extremo |
+| `teste_compat_v277` | salva um `.ft` na v274/v275/v276 e abre na v277: cabeçalho, layouts, ajustes e totais campo a campo |
 
 As três de **resolução** podem ser puladas quando a alteração não mexe em
 responsividade — foi o combinado com o usuário.

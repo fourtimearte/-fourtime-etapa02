@@ -19,11 +19,11 @@ const browser = await abreNavegador();
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
 const erros = [];
 page.on('pageerror', e => erros.push(String(e).slice(0, 200)));
-await page.goto(pathToFileURL(DIR+'fourtime-editor-v276.html').href);
+await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v276.html')).href);
 await esperaPronto(page);
 
 console.log('\n=== 0. CARREGOU ===');
-checa('versão', await page.evaluate(() => FT_EDITOR), '3.276');
+checa('versão', await page.evaluate(() => FT_EDITOR), (process.env.FT_VER||'3.276'));
 checa('sem erro de página', erros.length, 0);
 if (erros.length) erros.slice(0, 4).forEach(e => console.log('     ! ' + e));
 

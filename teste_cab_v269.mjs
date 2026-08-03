@@ -7,7 +7,7 @@ import { pathToFileURL } from 'url';
    e não só de /home/claude/ft */
 const DIR = import.meta.dirname + '/';
 
-const ARQ = DIR+'fourtime-editor-v276.html';
+const ARQ = DIR+(process.env.FT_ARQ||'fourtime-editor-v276.html');
 const falhas = [];
 function checa(r, o, e) {
   const ok = JSON.stringify(o) === JSON.stringify(e);
@@ -29,7 +29,7 @@ await esperaPronto(page);
 await page.evaluate(() => { window.CC_ESC_FOLHA = 1; aplicaZoom(); });
 
 console.log('\n=== 0. CARREGOU ===');
-checa('versão', await page.evaluate(() => FT_EDITOR), '3.276');
+checa('versão', await page.evaluate(() => FT_EDITOR), (process.env.FT_VER||'3.276'));
 checa('sem erro de página', erros.length, 0);
 if (erros.length) erros.slice(0, 4).forEach(e => console.log('     ! ' + e));
 
@@ -159,16 +159,24 @@ r = await page.evaluate(() => {
     cpfMono: f(document.querySelector('.doc-header [data-h="cpf"]')),
     aviso: f(document.querySelector('.warn-bar')),
     refDoLayout: f(document.querySelector('.lay-modulo textarea')),
-    tabela: f(document.querySelector('.lay-tabela-mini td')),
+    /* td.num e não o primeiro td: o primeiro é a COLUNA DO TAMANHO, que na
+       v277 é a exceção de propósito (fonte de interface, como no CRM). */
+    tabela: f(document.querySelector('.lay-tabela-mini td.num')),
     rodape: f(document.querySelector('.rodape-endereco')),
   };
 });
 checa('cliente em IBM Plex Sans', /IBM Plex Sans/.test(r.cabecalho), true);
 checa('CNPJ em IBM Plex Mono', /IBM Plex Mono/.test(r.cpfMono), true);
 checa('aviso em IBM Plex Sans', /IBM Plex Sans/.test(r.aviso), true);
-checa('o RESTO do A4 continua Roboto — referência', /Roboto/.test(r.refDoLayout), true);
-checa('  tabela de tamanhos', /Roboto/.test(r.tabela), true);
-checa('  rodapé', /Roboto/.test(r.rodape), true);
+/* v3.277: o MÓDULO DE LAYOUT passou a seguir o CRM — interface em IBM Plex
+   Sans e a tabela de tamanhos em IBM Plex Mono (decisão aprovada). O resto
+   do documento continua em Roboto. Até a v276 estes dois eram Roboto. */
+const V277 = (process.env.FT_VER||'3.276') >= '3.277';
+checa('referência: Plex Sans na v277+, Roboto antes',
+      V277 ? /IBM Plex Sans/.test(r.refDoLayout) : /Roboto/.test(r.refDoLayout), true);
+checa('  tabela de tamanhos: Plex Mono na v277+, Roboto antes',
+      V277 ? /IBM Plex Mono/.test(r.tabela) : /Roboto/.test(r.tabela), true);
+checa('  rodapé continua Roboto', /Roboto/.test(r.rodape), true);
 
 console.log('\n=== 8. BARRA DE AVISO VAZADA (kit §01) ===');
 r = await page.evaluate(() => {

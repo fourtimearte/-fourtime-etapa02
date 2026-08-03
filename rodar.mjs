@@ -2,9 +2,14 @@
 /* ================================================================
    RODAR — executa as suítes em paralelo e resume.
 
-     node rodar.mjs              as 10 suítes de regressão
+     node rodar.mjs              as suítes de regressão
      node rodar.mjs tudo         + Trello/impressão + A4 + as 9 antigas
      node rodar.mjs pop modal    só as que casarem com esses nomes
+
+   Por padrão as suítes rodam contra a versão do próprio arquivo delas.
+   Para apontar todas para outra versão:
+
+     FT_ARQ=fourtime-editor-v277.html FT_VER=3.277 node rodar.mjs tudo
 
    A máquina tem 2 núcleos, então o paralelismo útil é pequeno: 3 de cada
    vez foi o melhor medido (com 6 o tempo total PIOROU, porque três
@@ -20,6 +25,8 @@ const SUITES = [
   'teste_dd_v273', 'teste_corte_v267', 'teste_largura_v267', 'teste_modal_v274',
   'teste_faixa_v268', 'teste_botoes_v271', 'teste_abas_v270', 'teste_cab_v269',
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
+  /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
+  'teste_v277_ajustes', 'teste_compat_v277',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
 /* as suítes das versões anteriores: garantem que nada do que já funcionava
