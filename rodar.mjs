@@ -27,8 +27,8 @@ const SUITES = [
   'teste_faixa_v268', 'teste_botoes_v271', 'teste_abas_v270', 'teste_cab_v269',
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
   /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
-  'teste_v287_ajustes', 'teste_compat_v287', 'teste_impressao_escura', 'teste_painel_v287',
-  'teste_arquivar_data', 'teste_cnpj', 'teste_brilho_obs',
+  'teste_v288_ajustes', 'teste_compat_v288', 'teste_impressao_escura', 'teste_painel_v288',
+  'teste_arquivar_data', 'teste_cnpj', 'teste_brilho_obs', 'teste_cores_grupos',
   'teste_aviso_versao', 'teste_versao_servidor',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
@@ -52,12 +52,13 @@ const ANTIGAS = [
    compatibilidade (que é onde a versão anterior entra) e o painel. Uns 45s
    em vez de 90s. A bateria inteira é para quando o CÓDIGO muda. */
 const SUBIDA = [
-  'teste_v287_ajustes',      /* o que a versão trouxe                        */
+  'teste_v288_ajustes',      /* o que a versão trouxe                        */
   'teste_arquivar_data',     /* a data de arquivamento: modal, máscara, pasta */
   'teste_cnpj',              /* CNPJ: máscara, duas fontes, ficha se preenche   */
   'teste_brilho_obs',        /* brilhar/pulsar no arquivo do Trello             */
-  'teste_compat_v287',       /* aqui a versão anterior entra como origem     */
-  'teste_painel_v287',       /* nenhum token do painel pode ter morrido      */
+  'teste_cores_grupos',      /* cores por grupo: menu, banco e compatibilidade  */
+  'teste_compat_v288',       /* aqui a versão anterior entra como origem     */
+  'teste_painel_v288',       /* nenhum token do painel pode ter morrido      */
   'teste_impressao_escura',  /* o documento do cliente e o papel             */
   'teste_aviso_versao', 'teste_versao_servidor',      /* sem isto, ninguém fica sabendo da publicação */
 ];

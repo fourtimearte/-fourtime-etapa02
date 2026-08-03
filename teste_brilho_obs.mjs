@@ -15,21 +15,36 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1400,height:900}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v287.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v288.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O EDITOR NÃO BRILHA — a animação é só do arquivo ===');
 let r=await p.evaluate(async ()=>{
   const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click();
-  /* esperar um tempo FIXO aqui é frágil: com a bateria rodando em paralelo o
-     kit demora mais e o teste media um documento ainda pela metade.
-     Espera pelo SINAL — as cores do design são a última coisa a aparecer. */
+  /* esperar um tempo FIXO aqui é frágil: com a bateria em paralelo o kit
+     demora mais e o teste media um documento pela metade. Espera pelo SINAL. */
   for(let i=0;i<120;i++){
-    if(document.querySelectorAll('.lay-modulo .dtf-tok').length &&
-       document.querySelectorAll('.lay-area').length>2)break;
+    if(document.querySelectorAll('.lay-area').length>2)break;
     await new Promise(s=>setTimeout(s,100));
   }
   await new Promise(s=>setTimeout(s,400));
+  /* o KIT DE TESTE sorteia de ZERO a três cores por tag de design — havia
+     execução em que nenhuma saía e o teste do `pulsar` ficava sem alvo.
+     Se o sorteio não deu cor, o teste põe uma: o que se mede aqui é a
+     animação, não a sorte. */
+  if(!document.querySelector('.lay-modulo .dtf-tok')){
+    let g=document.querySelector('.lay-modulo .design-grupo');
+    if(!g){
+      const wrap=document.querySelector('.lay-modulo .design-wrap');
+      if(wrap){ g=criaGrupo('DTF'); wrap.appendChild(g); }
+    }
+    if(g){
+      g.querySelector('.design-tokens').insertAdjacentHTML('beforeend',
+        tokenHTML('001')+tokenHTML('S05'));
+      atualizaGrupo(g);
+      await new Promise(s=>setTimeout(s,250));
+    }
+  }
   const areas=[...document.querySelectorAll('.lay-area')];
   areas.forEach(a=>a.innerHTML='');
   areas[0].innerHTML='Conferir o escudo antes de imprimir.';
