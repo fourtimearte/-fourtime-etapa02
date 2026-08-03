@@ -28,7 +28,7 @@ const SUITES = [
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
   /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
   'teste_v281_ajustes', 'teste_compat_v281', 'teste_impressao_escura', 'teste_painel_v281',
-  'teste_aviso_versao',
+  'teste_aviso_versao', 'teste_versao_servidor',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
 /* as suítes das versões anteriores: garantem que nada do que já funcionava
@@ -55,7 +55,7 @@ const SUBIDA = [
   'teste_compat_v281',       /* aqui a versão anterior entra como origem     */
   'teste_painel_v281',       /* nenhum token do painel pode ter morrido      */
   'teste_impressao_escura',  /* o documento do cliente e o papel             */
-  'teste_aviso_versao',      /* sem isto, ninguém fica sabendo da publicação */
+  'teste_aviso_versao', 'teste_versao_servidor',      /* sem isto, ninguém fica sabendo da publicação */
 ];
 
 const arg = process.argv.slice(2);

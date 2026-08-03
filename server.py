@@ -1459,8 +1459,16 @@ def versao_publicada():
         return {"versao": _versao_cache["versao"], "arquivo": os.path.basename(p)}
     versao = ""
     try:
+        # ARQUIVO INTEIRO, e não os primeiros 400 KB.
+        #
+        # A constante fica depois do CSS. Enquanto o CSS foi pequeno ela caía
+        # dentro da janela; na v279 o módulo de layout empurrou o `const
+        # FT_EDITOR` para o caractere 416.188 — fora dos 400.000 lidos. O
+        # servidor passou a devolver versão VAZIA, e como o editor ignora
+        # versão vazia, ninguém mais era avisado de publicação nova.
+        # É 1 MB lido uma vez por deploy: o resultado fica no cache por mtime.
         with open(p, "r", encoding="utf-8", errors="ignore") as f:
-            trecho = f.read(400000)      # a constante fica no começo do script
+            trecho = f.read()
         m = _re.search(r"const\s+FT_EDITOR\s*=\s*['\"]([0-9.]+)['\"]", trecho)
         if m:
             versao = m.group(1)
