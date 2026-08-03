@@ -93,6 +93,60 @@ const exp=await p.evaluate(()=>{
 checa('o arquivo do cliente sai sem tema', exp.tema, '(nenhum)');
 checa('  e continua sem valores', /sem-dinheiro/.test(exp.classe), true);
 
+console.log('\n=== 5. A LOGO também vira a de texto escuro no papel ===');
+const logo=await p.evaluate(async ()=>{
+  document.body.dataset.tema='escuro';
+  /* trocar o atributo não basta: quem troca o src das logos é o
+     aplicaLogos(), chamado pelo botão de tema. O teste tem de fazer o
+     mesmo caminho do usuário. */
+  aplicaLogos();
+  await new Promise(s=>setTimeout(s,500));
+  const pega=()=>[...document.querySelectorAll('.folha-a4 .logo-box img,.folha-a4 .folha-topo img')]
+    .map(im=>im.getAttribute('src')===LOGO_H_ESCURA?'escura':(im.getAttribute('src')===LOGO_H_CLARA?'clara':'outra'));
+  const antes=pega();
+  dispatchEvent(new Event('beforeprint'));
+  await new Promise(s=>setTimeout(s,200));
+  const noPapel=pega();
+  dispatchEvent(new Event('afterprint'));
+  await new Promise(s=>setTimeout(s,300));
+  return { antes, noPapel, depois:pega(), quantas:antes.length };
+});
+console.log('     '+JSON.stringify(logo));
+checa('no tema escuro a tela usa a logo de texto branco', logo.antes.every(v=>v==='escura'), true);
+checa('  ao imprimir, todas viram a de texto escuro', logo.noPapel.every(v=>v==='clara'), true);
+checa('  e voltam sozinhas depois de imprimir', logo.depois.every(v=>v==='escura'), true);
+checa('  (havia logo para trocar)', logo.quantas>0, true);
+
+console.log('\n=== 6. HTML do Trello: a barra fixa fica ABAIXO do visualizador ===');
+const arq=await p.evaluate(()=>{ document.body.dataset.tema='escuro'; return gerarHTML([]); });
+const fs=await import('fs');
+fs.writeFileSync(DIR+'export_teste.html', arq);
+const cel=await b.newPage({viewport:{width:390,height:780}});
+const errCel=[]; cel.on('pageerror',e=>errCel.push(String(e).slice(0,160)));
+await cel.goto(pathToFileURL(DIR+'export_teste.html').href);
+await cel.waitForTimeout(1200);
+const pilha=await cel.evaluate(async ()=>{
+  window.scrollTo(0,900); await new Promise(s=>setTimeout(s,700));
+  const barra=document.getElementById('ftBarra');
+  const barraVisivel=barra?barra.getBoundingClientRect().top>=-1:false;
+  const im=document.querySelector('.lay-img.com-img img');
+  if(im)im.click();
+  await new Promise(s=>setTimeout(s,700));
+  const v=document.getElementById('viewer');
+  const noPonto=document.elementFromPoint(195,30);
+  return { barraVisivel, aberto:v?v.classList.contains('open'):false,
+           zViewer:v?+getComputedStyle(v).zIndex:null,
+           zBarra:barra?+getComputedStyle(barra).zIndex:null,
+           noTopo:noPonto?(noPonto.id||noPonto.className||noPonto.tagName):null };
+});
+console.log('     '+JSON.stringify(pilha));
+checa('a barra estava visível antes de abrir', pilha.barraVisivel, true);
+checa('o visualizador abriu', pilha.aberto, true);
+checa('o visualizador fica ACIMA da barra', pilha.zViewer > pilha.zBarra, true);
+checa('  e é ele que aparece no topo da tela', pilha.noTopo, 'viewer');
+checa('sem erro de página no arquivo exportado', errCel.length, 0);
+await cel.close();
+
 await p.emulateMedia({media:'screen'});
 await p.evaluate(()=>{document.body.dataset.tema='claro';});
 console.log('\n'+'='.repeat(64));

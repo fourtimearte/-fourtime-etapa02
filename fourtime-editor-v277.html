@@ -2629,7 +2629,10 @@
      VISUALIZADOR DE IMAGEM — tela cheia, zoom (roda) e pan (arrastar)
      ============================================================ */
   #viewer{
-    position:fixed;inset:0;z-index:400;display:none;
+    /* z-index 950: acima da barra fixa do arquivo exportado (#ftBarra, 900),
+       que ficava POR CIMA da imagem aberta no Trello, e ainda abaixo dos
+       modais do editor (9500+), que precisam vencer o visualizador. */
+    position:fixed;inset:0;z-index:950;display:none;
     background:rgba(12,14,16,.93);
     overflow:hidden;cursor:grab;
   }
@@ -6036,6 +6039,31 @@ function logoDoTema(atual){
   if(atual===LOGO_V_CLARA||atual===LOGO_V_ESCURA)return escuro?LOGO_V_ESCURA:LOGO_V_CLARA;
   return atual;
 }
+/* ================================================================
+   A LOGO NA IMPRESSÃO (v3.277)
+
+   Todo o resto do documento vira claro no papel por CSS. A logo não:
+   o `src` é escolhido em JavaScript pelo tema, e CSS não troca imagem.
+   Imprimir do tema escuro saía com a logo de texto BRANCO sobre a folha
+   branca — invisível.
+
+   `beforeprint` cobre os dois caminhos (Ctrl+P e o botão Impressão/PDF,
+   que chama window.print()), e `afterprint` devolve a logo do tema para
+   a tela. Só as logos DE DENTRO da folha mudam; a do menu fica como está,
+   porque o menu não é impresso.
+   ================================================================ */
+(function logoClaraNoPapel(){
+  const doDocumento=()=>[...document.querySelectorAll('.folha-a4 img.logo-do-tema, .logo-box img, .folha-logo img')];
+  addEventListener('beforeprint',()=>{
+    doDocumento().forEach(im=>{
+      const src=im.getAttribute('src');
+      if(src===LOGO_H_ESCURA)im.setAttribute('src',LOGO_H_CLARA);
+      else if(src===LOGO_V_ESCURA)im.setAttribute('src',LOGO_V_CLARA);
+    });
+  });
+  addEventListener('afterprint',()=>{ if(typeof aplicaLogos==='function')aplicaLogos(); });
+})();
+
 function aplicaLogos(){
   document.querySelectorAll('.ft-menu-marca img,.logo-box img,.folha-logo img').forEach(im=>{
     const novo=logoDoTema(im.getAttribute('src'));
@@ -12776,7 +12804,10 @@ function gerarHTML(imagens){
     const lh=document.createElement('img');
     lh.className='logo-h';
     lh.alt='Fourtime';
-    lh.src=logoDoTema(LOGO_H_CLARA);
+    /* o arquivo do cliente é sempre claro (o data-tema é removido logo
+       abaixo), então a logo tem de ser a de texto escuro — logoDoTema()
+       aqui devolveria a de texto BRANCO quando exportado do tema escuro */
+    lh.src=LOGO_H_CLARA;
     box.appendChild(lh);
   });
   /* exportação para o Trello: troca as imagens pelas versões comprimidas
@@ -12786,6 +12817,13 @@ function gerarHTML(imagens){
       if(imagens[i])im.src=imagens[i];
     });
   }
+  /* as logos do documento no clone: a versão de texto escuro, pelo mesmo
+     motivo — nenhuma imagem do arquivo do cliente pode supor fundo escuro */
+  raiz.querySelectorAll('.logo-box img,.folha-logo img,.folha-topo img').forEach(im=>{
+    const src=im.getAttribute('src');
+    if(src===LOGO_H_ESCURA)im.setAttribute('src',LOGO_H_CLARA);
+    else if(src===LOGO_V_ESCURA)im.setAttribute('src',LOGO_V_CLARA);
+  });
   /* estado de edição não vai para o arquivo salvo */
   raiz.querySelectorAll('.layout-copiado').forEach(el=>el.classList.remove('layout-copiado'));
   raiz.querySelectorAll('.ft-toast,.ft-notif,.ft-notif-wrap').forEach(el=>el.remove());
