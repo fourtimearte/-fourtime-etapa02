@@ -75,8 +75,8 @@ animações assentarem.
 | `teste_largura_v267` · `teste_corte_v267` · `teste_faixa_v268` | **resolução**: faixas de zoom, folha pelo monitor, menu pela janela, nunca cortar |
 | `verifica_trello` | export do Trello, layout de celular, impressão, PDF |
 | `cmp_a4_chave` | compara elemento a elemento o A4 de duas versões |
-| `teste_v280_ajustes` | módulo de layout, tabela, rodapé, cabeçalho das páginas 2+, compressão e caso extremo |
-| `teste_compat_v280` | salva um `.ft` na v274/v275/v276 e abre na v277: cabeçalho, layouts, ajustes e totais campo a campo |
+| `teste_v281_ajustes` | módulo de layout, tabela, rodapé, cabeçalho das páginas 2+, compressão e caso extremo |
+| `teste_compat_v281` | salva um `.ft` na v274/v275/v276 e abre na v277: cabeçalho, layouts, ajustes e totais campo a campo |
 
 As três de **resolução** podem ser puladas quando a alteração não mexe em
 responsividade — foi o combinado com o usuário.

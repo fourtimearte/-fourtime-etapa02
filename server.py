@@ -1476,6 +1476,21 @@ def api_versao(request: Request):
     return {"editor": v["versao"], "arquivo": v["arquivo"], "minimo": FT_EDITOR_MINIMO}
 
 
+@app.get("/api/versao-publica")
+def api_versao_publica():
+    """A versão publicada, SEM token.
+
+    O aviso de versão nova viajava de carona na vigia do banco
+    (/api/db/rev), que exige token e só roda com a sincronização ligada.
+    Quem usava o editor sem estar logado NUNCA era avisado — e é justamente
+    quem mais precisa, porque fica com o arquivo velho em cache.
+
+    Só devolve o número da versão: não expõe nada. A página do editor já é
+    pública, e a versão está escrita dentro dela."""
+    v = versao_publicada()
+    return {"editor": v["versao"], "minimo": FT_EDITOR_MINIMO}
+
+
 
 # ============================================================
 #  ORÇAMENTOS (.ft) NO GOOGLE DRIVE  (v152)

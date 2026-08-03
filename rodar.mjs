@@ -3,6 +3,7 @@
    RODAR — executa as suítes em paralelo e resume.
 
      node rodar.mjs              as suítes de regressão
+     node rodar.mjs subida       só o que a publicação muda de verdade
      node rodar.mjs tudo         + Trello/impressão + A4 + as 9 antigas
      node rodar.mjs pop modal    só as que casarem com esses nomes
 
@@ -26,7 +27,8 @@ const SUITES = [
   'teste_faixa_v268', 'teste_botoes_v271', 'teste_abas_v270', 'teste_cab_v269',
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
   /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
-  'teste_v280_ajustes', 'teste_compat_v280', 'teste_impressao_escura', 'teste_painel_v280',
+  'teste_v281_ajustes', 'teste_compat_v281', 'teste_impressao_escura', 'teste_painel_v281',
+  'teste_aviso_versao',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
 /* as suítes das versões anteriores: garantem que nada do que já funcionava
@@ -37,10 +39,31 @@ const ANTIGAS = [
   'teste_relabre_v265',
 ];
 
+/* O QUE RODAR NA HORA DE SUBIR
+
+   Rodar a bateria inteira de novo no momento da publicação é quase toda
+   redundante: o arquivo da versão nova é cópia byte a byte do que já foi
+   testado, com uma linha diferente — a constante FT_EDITOR. O que MUDA na
+   subida é outra coisa: a versão anterior passa a ser uma origem do teste
+   de compatibilidade, e o servidor passa a servir outro arquivo.
+
+   `node rodar.mjs subida` roda só isso — o específico da versão, a
+   compatibilidade (que é onde a versão anterior entra) e o painel. Uns 45s
+   em vez de 90s. A bateria inteira é para quando o CÓDIGO muda. */
+const SUBIDA = [
+  'teste_v281_ajustes',      /* o que a versão trouxe                        */
+  'teste_compat_v281',       /* aqui a versão anterior entra como origem     */
+  'teste_painel_v281',       /* nenhum token do painel pode ter morrido      */
+  'teste_impressao_escura',  /* o documento do cliente e o papel             */
+  'teste_aviso_versao',      /* sem isto, ninguém fica sabendo da publicação */
+];
+
 const arg = process.argv.slice(2);
 let lista = SUITES.slice();
-if (arg.includes('tudo')) lista = lista.concat(EXTRA, ANTIGAS);
-const filtros = arg.filter(a => a !== 'tudo');
+if (arg.includes('subida')) lista = SUBIDA;
+else if (arg.includes('tudo')) lista = lista.concat(EXTRA, ANTIGAS);
+/* 'subida' e 'tudo' são MODOS, não filtros de nome */
+const filtros = arg.filter(a => a !== 'tudo' && a !== 'subida');
 if (filtros.length) lista = SUITES.concat(EXTRA, ANTIGAS).filter(s => filtros.some(f => s.includes(f)));
 
 const LIMITE = 3;
