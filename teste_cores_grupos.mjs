@@ -23,7 +23,7 @@ const ANTIGAS=['Branco','Preto','Cinza Mescla','Cinza Chumbo','Cinza Claro','Pra
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,180)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v290.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v291.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O CATÁLOGO ===');

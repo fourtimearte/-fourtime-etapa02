@@ -456,7 +456,7 @@ def mescla_banco(base, novo, remocoes=None, admin=False, limpezas=None, renomeac
     return saida
 
 
-def _inchou(base, junto, pct=50, minimo=25):
+def _inchou(base, junto, pct=50, minimo=25, semente=None):
     """Freio de mão: uma gravação que INCHA uma categoria é quase sempre bug.
 
     Existe o freio contrário desde a v3.2xx (o banco não pode ENCOLHER de
@@ -471,6 +471,16 @@ def _inchou(base, junto, pct=50, minimo=25):
 
     Os dois limites juntos (percentual E quantidade) evitam falso alarme em
     lista pequena: sair de 3 para 6 embalagens é crescer 100%, mas são 3 itens.
+
+    CATÁLOGO DE FÁBRICA (v3.291). Existe um crescimento grande que é legítimo:
+    quando o editor traz um catálogo novo embutido — as cores de tecido saltaram
+    de 50 para 121 na v3.288 — e o planta no banco de quem já usa o sistema.
+    Isso não é duplicação: são nomes NOVOS e DISTINTOS, o editor os declara no
+    campo `semente` do envio, e eles aparecem na página do Banco para conferir.
+
+    O desconto é conservador de propósito: só sai da conta o item que (a) o
+    editor declarou pelo nome E (b) NÃO existia no banco do servidor. Um envio
+    que repita o que já está lá continua sendo barrado, que é o ponto do freio.
     """
     for cat, depois in (junto or {}).items():
         if cat == LAPIDES or not isinstance(depois, list):
@@ -480,6 +490,12 @@ def _inchou(base, junto, pct=50, minimo=25):
         if not antes:
             continue                      # categoria nova ou vazia: não há o que comparar
         somou = len(depois) - antes
+        declarados = {str(n).strip().upper() for n in ((semente or {}).get(cat) or [])}
+        if declarados:
+            ja_tinha = {_chave(it) for it in (antes_l or [])}
+            plantados = sum(1 for it in depois
+                            if _chave(it) in declarados and _chave(it) not in ja_tinha)
+            somou -= plantados
         if somou > minimo and somou > antes * pct / 100.0:
             return {"categoria": cat, "antes": antes, "depois": len(depois),
                     "somou": somou}
@@ -567,6 +583,8 @@ async def gravar_db(request: Request):
     # "Importar DB" cresce de propósito — é a única gravação que pode inchar.
     # Vem marcada no corpo e é privilégio do admin.
     forcar = bool(corpo.get("forcar")) and admin
+    # catálogo embutido no editor, declarado pelo nome (ver _inchou)
+    semente = corpo.get("semente") or {}
 
     if not drive_ligado():
         with _lock, conn() as c:
@@ -575,7 +593,7 @@ async def gravar_db(request: Request):
             junto = mescla_banco(base, dados, remocoes if admin else None, admin=admin,
                                  limpezas=limpezas, renomeacoes=renomeacoes)
             if not forcar:
-                cresceu = _inchou(base, junto)
+                cresceu = _inchou(base, junto, semente=semente)
                 if cresceu:
                     return JSONResponse(status_code=409, content={
                         "inchou": cresceu, "rev": atual["rev"], "data": base,
@@ -598,7 +616,7 @@ async def gravar_db(request: Request):
                              limpezas=limpezas, renomeacoes=renomeacoes)
 
         if not forcar:
-            cresceu = _inchou(base, junto)
+            cresceu = _inchou(base, junto, semente=semente)
             if cresceu:
                 # não grava NADA e devolve o banco bom, para o editor adotá-lo
                 return JSONResponse(status_code=409, content={

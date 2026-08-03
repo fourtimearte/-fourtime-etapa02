@@ -14,7 +14,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const browser=await abreNavegador();
 const page=await browser.newPage({ viewport:{width:1400,height:900} });
 const erros=[]; page.on('pageerror',e=>erros.push(String(e).slice(0,200)));
-await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v290.html')).href);
+await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v291.html')).href);
 await esperaPronto(page);
 await page.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,1500)); });
 
@@ -413,11 +413,17 @@ for(const tema of ['claro','escuro']){
         const v=[...cx.querySelectorAll('img')].filter(i=>getComputedStyle(i).display!=='none');
         return v.map(i=>i.classList.contains('logo-papel')?'papel':'tema').join('+');
       });
-      return { quantasCores:Object.keys(cinzas).length, cores:Object.keys(cinzas),
+      const deQuem={};
+      Object.keys(cinzas).forEach(c=>deQuem[c]=[...cinzas[c]].slice(0,6));
+      return { quantasCores:Object.keys(cinzas).length, cores:Object.keys(cinzas), deQuem,
                tabela:tab?getComputedStyle(tab).borderTopColor:null,
                imagem:img?getComputedStyle(img).borderTopColor:null,
                cabecalho:cab?getComputedStyle(cab).backgroundColor:null, logos };
     }, tema);
+    /* quando falha, o que interessa é QUAL cor sobrou e de quem — sem isso
+       a falha só diz "2" e não dá para consertar nada */
+    if(r.quantasCores!==1)console.log('     ! cores encontradas: '+JSON.stringify(r.cores)
+      +'\n       de quem: '+JSON.stringify(r.deQuem||{}));
     checa(`${tema}/${media}: uma única cor de linha no documento`, r.quantasCores, 1);
     checa(`   tabela = cabeçalho = caixa de imagem`, [r.tabela,r.imagem], [r.cabecalho,r.cabecalho]);
     checa(`   logo: ${media==='print'?'a de papel':'a do tema'}`,
