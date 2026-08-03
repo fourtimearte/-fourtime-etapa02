@@ -141,6 +141,53 @@ checa('nada do que estava escrito foi trocado',
       [r.n,r.razao,r.cidade,r.rua],
       ['CLIENTE MEU','RAZAO ESCRITA A MAO','ANAPOLIS','RUA MINHA']);
 
+console.log('\n=== 7. O CLIENTE NOVO SOBREVIVE A UMA MESCLA DO SERVIDOR ===');
+/* O caso relatado: cadastrar cliente novo e nada salvar. O rascunho
+   ("NOVO CLIENTE") de propósito não sobe para o servidor; a mescla refazia
+   DB.clientes do zero e ele evaporava no meio da digitação. A partir daí
+   cliAberto() devolvia null e TUDO desistia em silêncio — o nome, o botão
+   Salvar e o CNPJ. */
+r=await p.evaluate(async ()=>{
+  DB.clientes=[{id:'ja1',n:'CLIENTE QUE JA EXISTIA'}];
+  cliListaDesenha();
+  document.getElementById('cliNovo').click();
+  await new Promise(s=>setTimeout(s,350));
+  const criou=(DB.clientes[0]||{}).n;
+  /* chega uma mescla do servidor no meio do cadastro */
+  aplicarDBExterno({clientes:[{id:'ja1',n:'CLIENTE QUE JA EXISTIA'}]});
+  await new Promise(s=>setTimeout(s,200));
+  const sobreviveu=!!cliAberto();
+  const inp=document.getElementById('cli_n');
+  inp.value='ESCOLA JOAO XXIII';
+  inp.dispatchEvent(new Event('change',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,250));
+  const salvouNome=(DB.clientes.find(c=>c.id===CLI_SEL)||{}).n;
+  const doc=document.getElementById('cli_doc');
+  doc.focus(); doc.value='';
+  for(const ch of '25260940000140'){ doc.value+=ch; doc.dispatchEvent(new Event('input',{bubbles:true})); }
+  await new Promise(s=>setTimeout(s,1100));
+  const c=DB.clientes.find(x=>x.id===CLI_SEL)||{};
+  const vaiSubir=(ftDadosParaEnviar().clientes||[]).map(x=>x.n).sort();
+  return {criou, sobreviveu, salvouNome, doc:c.doc, cidade:c.cidade, vaiSubir};
+});
+console.log('     '+JSON.stringify(r));
+checa('o botão cria o rascunho', r.criou, 'NOVO CLIENTE');
+checa('  e ele NÃO some quando o servidor mescla', r.sobreviveu, true);
+checa('o nome digitado é gravado', r.salvouNome, 'ESCOLA JOAO XXIII');
+checa('  e o CNPJ preenche a ficha depois disso', [r.doc,r.cidade],
+      ['25.260.940/0001-40','GOIANIA']);
+checa('com nome, o cliente passa a subir para o servidor', r.vaiSubir,
+      ['CLIENTE QUE JA EXISTIA','ESCOLA JOAO XXIII']);
+/* e o rascunho SEM nome continua sem subir — a peneira que evita dois
+   "NOVO CLIENTE" virarem um só não pode ter sido derrubada pelo conserto */
+r=await p.evaluate(async ()=>{
+  DB.clientes=[{id:'ja1',n:'CLIENTE QUE JA EXISTIA'}];
+  document.getElementById('cliNovo').click();
+  await new Promise(s=>setTimeout(s,300));
+  return (ftDadosParaEnviar().clientes||[]).map(x=>x.n);
+});
+checa('rascunho sem nome continua fora do envio', r, ['CLIENTE QUE JA EXISTIA']);
+
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro de página', erros.length, 0);
 if(erros.length)erros.slice(0,3).forEach(e=>console.log('     ! '+e));

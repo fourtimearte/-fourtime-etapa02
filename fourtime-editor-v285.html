@@ -6513,6 +6513,18 @@ async function ftSyncFetch(caminho,opt){
 /* substitui o conteúdo do DB mantendo as MESMAS referências de array (DBS aponta pra elas) */
 function aplicarDBExterno(o){
   if(!o||typeof o!=='object')return;
+  /* ------------------------------------------------------------------
+     O RASCUNHO NÃO PODE EVAPORAR NO MEIO DO CADASTRO
+     Uma ficha recém-criada se chama "NOVO CLIENTE" e, de propósito, NÃO
+     sobe para o servidor — senão duas pessoas cadastrando ao mesmo tempo
+     mandariam dois "NOVO CLIENTE" que virariam um só. Só que esta função
+     REFAZ DB.clientes do zero com o que veio de lá; o rascunho, que não
+     estava lá, sumia. A partir daí cliAberto() devolvia null e tudo o que
+     depende dele desistia EM SILÊNCIO: o nome digitado era descartado, o
+     botão Salvar não fazia nada e o CNPJ não preenchia campo nenhum.
+     Agora os rascunhos ficam de lado e voltam depois da mescla.
+     ------------------------------------------------------------------ */
+  const rascunhos=(Array.isArray(DB.clientes)?DB.clientes:[]).filter(ftClienteRascunho);
   const base=Object.assign(JSON.parse(JSON.stringify(DB_PADRAO)),o);
   Object.keys(base).forEach(k=>{
     if(Array.isArray(base[k])){
@@ -6520,6 +6532,13 @@ function aplicarDBExterno(o){
       DB[k].length=0; base[k].forEach(v=>DB[k].push(v));
     }else DB[k]=base[k];
   });
+  if(rascunhos.length){
+    if(!Array.isArray(DB.clientes))DB.clientes=[];
+    rascunhos.forEach(r=>{
+      if(!DB.clientes.some(c=>c&&c.id===r.id))DB.clientes.unshift(r);
+    });
+    try{ if(typeof cliListaDesenha==='function')cliListaDesenha(); }catch(e){}
+  }
   try{normalizaCores();sincCores();syncDatalists();}catch(e){}
   try{const pg=document.getElementById('bdPage'); if(pg&&!pg.hidden&&typeof bdRender==='function')bdRender();}catch(e){}
 }
@@ -6588,14 +6607,18 @@ async function ftSyncPull(silencioso){
    Nada é apagado por isto: a mesclagem do servidor é união, e o que
    não sobe hoje sobe amanhã.
    ---------------------------------------------------------------- */
+/* A regra do rascunho num lugar só: quem envia e quem protege da mescla
+   precisam concordar, senão o cadastro cai no vão entre as duas. */
+function ftClienteRascunho(c){
+  if(!c||typeof c!=='object')return false;
+  const n=String(c.n||'').trim().toUpperCase();
+  return !n || n==='NOVO CLIENTE';
+}
 function ftDadosParaEnviar(){
   const saida={};
   for(const k in DB)saida[k]=DB[k];
   if(Array.isArray(DB.clientes)){
-    saida.clientes=DB.clientes.filter(c=>{
-      const n=String((c&&c.n)||'').trim().toUpperCase();
-      return n && n!=='NOVO CLIENTE';
-    }).map(c=>{
+    saida.clientes=DB.clientes.filter(c=>!ftClienteRascunho(c)).map(c=>{
       if(!c||typeof c!=='object')return c;
       if(!String(c.id||'').startsWith('tmp_'))return c;
       const o=Object.assign({},c); delete o.id; return o;
@@ -13082,6 +13105,59 @@ const CSS_BARRA_FIXA=`
 @media print{ .ft-barra{display:none !important;} }
 `;
 
+/* ================================================================
+   BRILHAR NA OBSERVAÇÃO — só no HTML exportado para o Trello
+
+   Animação `brilhar` do Design Kit v5 (§ Movimento): anel de brilho que
+   pulsa, 900ms, ease cubic-bezier(.2,.7,.3,1), uma vez. Serve para
+   "campo recém-alterado" — e é exatamente o papel dela aqui: no arquivo
+   que vai para o Trello, quem abre precisa notar QUAL layout tem recado
+   escrito na observação.
+
+   Duas decisões:
+   · só entra em campo COM texto. O `gerarHTML` marca com .tem-obs quem
+     tem conteúdo — CSS não sabe olhar dentro de um elemento.
+   · dispara quando o campo ENTRA NA TELA, não no load. Um orçamento de
+     4 páginas tem observação na página 3; brilhar tudo no carregamento
+     seria brilhar para ninguém. É o mesmo padrão de scroll-reveal do
+     kit, com IntersectionObserver.
+
+   O anel some no fim (fill both) e a classe é retirada no animationend,
+   devolvendo a sombra normal do campo — assim ele pode brilhar de novo
+   se a pessoa rolar de volta.
+   ================================================================ */
+const CSS_BRILHO_OBS=`
+/* a sombra de base do campo viaja junto: sem ela, o anel APAGARIA a
+   sombra que o .lay-area já tem enquanto a animação corre */
+@keyframes a-brilhar{
+  0%  {box-shadow:0 1px 2px rgba(17,18,20,.05),0 0 0 0 var(--ft-anel,rgba(198,22,27,.35));}
+  45% {box-shadow:0 1px 2px rgba(17,18,20,.05),0 0 0 7px var(--ft-anel,rgba(198,22,27,.35));}
+  100%{box-shadow:0 1px 2px rgba(17,18,20,.05),0 0 0 0 rgba(0,0,0,0);}
+}
+.play-brilhar{animation:a-brilhar .9s cubic-bezier(.2,.7,.3,1) both;}
+/* papel não anima, e quem pediu menos movimento no sistema não recebe */
+@media print{ .play-brilhar{animation:none !important;} }
+@media (prefers-reduced-motion:reduce){ .play-brilhar{animation:none !important;} }
+`;
+const BRILHO_RUNTIME=`
+(function(){
+  var alvos=[].slice.call(document.querySelectorAll('.lay-area.tem-obs'));
+  if(!alvos.length)return;
+  var brilha=function(el){
+    el.classList.remove('play-brilhar');
+    void el.offsetWidth;                 /* reinicia a animação */
+    el.classList.add('play-brilhar');
+  };
+  alvos.forEach(function(el){
+    el.addEventListener('animationend',function(){ el.classList.remove('play-brilhar'); });
+  });
+  if(!('IntersectionObserver' in window)){ alvos.forEach(brilha); return; }
+  var obs=new IntersectionObserver(function(es){
+    es.forEach(function(en){ if(en.isIntersecting)brilha(en.target); });
+  },{threshold:.35});
+  alvos.forEach(function(el){ obs.observe(el); });
+})();
+`;
 const BARRA_RUNTIME=`
 (function(){
   var barra=document.getElementById('ftBarra');
@@ -13218,6 +13294,10 @@ function gerarHTML(imagens){
   });
   /* módulos sem imagem não deixam moldura vazia */
   raiz.querySelectorAll('.lay-img:not(.com-img)').forEach(el=>el.style.display='none');
+  /* observação COM texto ganha a marca do brilho; CSS não enxerga conteúdo */
+  raiz.querySelectorAll('.lay-area').forEach(el=>{
+    if((el.textContent||'').trim())el.classList.add('tem-obs');
+  });
 
   /* trava de edição: nada recebe clique/foco, exceto a imagem (visualizador) */
   const trava=document.createElement('style');
@@ -13230,7 +13310,8 @@ function gerarHTML(imagens){
     /* trava de impressão do arquivo salvo: zoom nunca chega ao papel */
     '@media print{.area-paginas{--zoom:1 !important;zoom:1 !important;transform:none !important;}}'+
     CSS_CELULAR+   /* layout empilhado em telas de toque (só no arquivo exportado) */
-    CSS_BARRA_FIXA;
+    CSS_BARRA_FIXA+
+    CSS_BRILHO_OBS;   /* o brilho da observação — só existe no arquivo exportado */
   const cab=raiz.querySelector('head');
   if(cab)cab.appendChild(trava);
 
@@ -13253,7 +13334,8 @@ function gerarHTML(imagens){
   if(bf)body.insertBefore(bf,body.firstChild);
   const sc=document.createElement('script');
   sc.textContent='const VIEWER_RUNTIME='+JSON.stringify(VIEWER_RUNTIME)+';(new Function(VIEWER_RUNTIME))();'
-    +'const BARRA_RUNTIME='+JSON.stringify(BARRA_RUNTIME)+';(new Function(BARRA_RUNTIME))();';
+    +'const BARRA_RUNTIME='+JSON.stringify(BARRA_RUNTIME)+';(new Function(BARRA_RUNTIME))();'
+    +'const BRILHO_RUNTIME='+JSON.stringify(BRILHO_RUNTIME)+';(new Function(BRILHO_RUNTIME))();';
   body.appendChild(sc);
   return '<!DOCTYPE html>\n'+raiz.outerHTML;
 }
@@ -14402,7 +14484,22 @@ window.loginAbre=loginAbre; window.loginFecha=loginFecha;
    caber numa linha de tabela.
    ================================================================ */
 let CLI_SEL='';        /* ID do cliente aberto; vazio = nenhum */
-function cliAberto(){ return (DB.clientes||[]).find(c=>c.id===CLI_SEL)||null; }
+let CLI_ABERTO_OBJ=null;
+function cliAberto(){
+  const c=(DB.clientes||[]).find(c=>c.id===CLI_SEL)||null;
+  if(c){ CLI_ABERTO_OBJ=c; return c; }
+  /* Rede de segurança: a ficha continua na tela mas o registro saiu do
+     banco (qualquer caminho que refaça a lista). Em vez de devolver null e
+     deixar a pessoa digitando num fantasma, o registro volta para a lista.
+     Só vale com a ficha REALMENTE aberta — apagar um cliente zera o
+     CLI_SEL e cai fora daqui. */
+  if(CLI_ABERTO_OBJ && CLI_ABERTO_OBJ.id===CLI_SEL && document.getElementById('cli_n')){
+    if(!Array.isArray(DB.clientes))DB.clientes=[];
+    DB.clientes.unshift(CLI_ABERTO_OBJ);
+    return CLI_ABERTO_OBJ;
+  }
+  return null;
+}
 function cliIndice(){ return (DB.clientes||[]).findIndex(c=>c.id===CLI_SEL); }
 let CLI_BUSCA='';
 
@@ -14891,12 +14988,22 @@ function cliLigaBuscas(pg){
   const doc=pg.querySelector('#cli_doc');
   if(doc){
     let ultimo='';
+    /* Escrever no campo joga o cursor para o fim. A consulta volta DEPOIS
+       (até 12s), e nesse meio-tempo a pessoa pode estar corrigindo um
+       dígito — reescrever ali arrancaria o cursor da mão dela. Como a
+       máscara já deixa o campo pontuado, na prática não há nada para
+       reescrever: só escreve se o texto realmente estiver diferente E se
+       os dígitos ainda forem os mesmos que foram consultados. */
+    const poeDoc=n=>{
+      const bonito=ftFormataDoc(n);
+      if(doc.value!==bonito && ftDig(doc.value)===n)doc.value=bonito;
+    };
     const busca=async()=>{
       const n=ftDig(doc.value);
       if(!n){ dica('doc',''); ultimo=''; return; }
       const alvo=cliAberto(); if(!alvo)return;
       if(n.length===11){                     /* CPF: não existe consulta pública, e ainda bem */
-        doc.value=ftFormataDoc(n); alvo.doc=doc.value; bdPersiste();
+        poeDoc(n); alvo.doc=ftFormataDoc(n); bdPersiste();
         dica('doc','CPF não tem consulta pública — preencha o resto à mão','');
         return;
       }
@@ -14906,7 +15013,7 @@ function cliLigaBuscas(pg){
       dica('doc','buscando na Receita…','buscando');
       const e=await ftBuscaCnpj(n);
       if(cliAberto()!==alvo)return;
-      doc.value=ftFormataDoc(n); alvo.doc=doc.value;
+      poeDoc(n); alvo.doc=ftFormataDoc(n);
       if(!e){ bdPersiste(); dica('doc','não achei esse CNPJ — preencha à mão','nada'); return; }
 
       let q=0;

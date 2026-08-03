@@ -79,6 +79,7 @@ animações assentarem.
 | `teste_compat_v285` | salva um `.ft` nas versões v274…v284 e abre na v285: cabeçalho, layouts, ajustes e totais campo a campo |
 | `teste_arquivar_data` | modal de arquivamento: opção automática/manual, calendário no ícone, máscara com o cursor no lugar (modal e ENVIO), validação da data, pasta e nome do arquivo |
 | `teste_cnpj` | CPF/CNPJ: máscara viva no cadastro e no cabeçalho, consulta em paralelo às duas fontes, ficha que abre com o CNPJ já preenchido |
+| `teste_brilho_obs` | animação `brilhar` do kit v5 na observação: só no HTML do Trello, só onde há texto, ao entrar na tela |
 | `teste_painel_v285` | todo token do painel dev ainda chega ao documento |
 
 As três de **resolução** podem ser puladas quando a alteração não mexe em

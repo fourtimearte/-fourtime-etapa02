@@ -28,7 +28,7 @@ const SUITES = [
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
   /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
   'teste_v285_ajustes', 'teste_compat_v285', 'teste_impressao_escura', 'teste_painel_v285',
-  'teste_arquivar_data', 'teste_cnpj',
+  'teste_arquivar_data', 'teste_cnpj', 'teste_brilho_obs',
   'teste_aviso_versao', 'teste_versao_servidor',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
@@ -55,6 +55,7 @@ const SUBIDA = [
   'teste_v285_ajustes',      /* o que a versão trouxe                        */
   'teste_arquivar_data',     /* a data de arquivamento: modal, máscara, pasta */
   'teste_cnpj',              /* CNPJ: máscara, duas fontes, ficha se preenche   */
+  'teste_brilho_obs',        /* o brilho da observação no arquivo do Trello     */
   'teste_compat_v285',       /* aqui a versão anterior entra como origem     */
   'teste_painel_v285',       /* nenhum token do painel pode ter morrido      */
   'teste_impressao_escura',  /* o documento do cliente e o papel             */
