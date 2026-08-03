@@ -42,7 +42,7 @@ await p.route('**/api.opencnpj.org/**',async r=>{
   r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(RECEITA_OPENCNPJ)});
 });
 
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v285.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v286.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. A MÁSCARA: SÓ NÚMEROS ENTRAM, A PONTUAÇÃO APARECE ===');
@@ -167,8 +167,11 @@ r=await p.evaluate(async ()=>{
   for(const ch of '25260940000140'){ doc.value+=ch; doc.dispatchEvent(new Event('input',{bubbles:true})); }
   await new Promise(s=>setTimeout(s,1100));
   const c=DB.clientes.find(x=>x.id===CLI_SEL)||{};
+  const antesDoSalvar=(ftDadosParaEnviar().clientes||[]).map(x=>x.n).sort();
+  document.getElementById('cliSalvar').click();
+  await new Promise(s=>setTimeout(s,500));
   const vaiSubir=(ftDadosParaEnviar().clientes||[]).map(x=>x.n).sort();
-  return {criou, sobreviveu, salvouNome, doc:c.doc, cidade:c.cidade, vaiSubir};
+  return {criou, sobreviveu, salvouNome, doc:c.doc, cidade:c.cidade, antesDoSalvar, vaiSubir};
 });
 console.log('     '+JSON.stringify(r));
 checa('o botão cria o rascunho', r.criou, 'NOVO CLIENTE');
@@ -176,7 +179,8 @@ checa('  e ele NÃO some quando o servidor mescla', r.sobreviveu, true);
 checa('o nome digitado é gravado', r.salvouNome, 'ESCOLA JOAO XXIII');
 checa('  e o CNPJ preenche a ficha depois disso', [r.doc,r.cidade],
       ['25.260.940/0001-40','GOIANIA']);
-checa('com nome, o cliente passa a subir para o servidor', r.vaiSubir,
+checa('antes do Salvar, ainda não sobe', r.antesDoSalvar, ['CLIENTE QUE JA EXISTIA']);
+checa('depois do Salvar, sobe', r.vaiSubir,
       ['CLIENTE QUE JA EXISTIA','ESCOLA JOAO XXIII']);
 /* e o rascunho SEM nome continua sem subir — a peneira que evita dois
    "NOVO CLIENTE" virarem um só não pode ter sido derrubada pelo conserto */
@@ -187,6 +191,60 @@ r=await p.evaluate(async ()=>{
   return (ftDadosParaEnviar().clientes||[]).map(x=>x.n);
 });
 checa('rascunho sem nome continua fora do envio', r, ['CLIENTE QUE JA EXISTIA']);
+
+console.log('\n=== 8. CLIENTE NOVO SÓ SOBE NO SALVAR ===');
+/* O que criava um segundo cliente: cada saída de campo já enviava o banco,
+   e o servidor casa cadastro sem id pelo NOME. Digitar "ESCOLA", sair do
+   campo e depois completar mandava DOIS nomes em dois envios — e lá
+   viravam DOIS clientes. */
+r=await p.evaluate(async ()=>{
+  DB.clientes=[{id:'ja1',n:'CLIENTE QUE JA EXISTIA'}]; cliListaDesenha();
+  FT_SYNC.renomeacoes.clientes={};      /* zera o que as seções anteriores deixaram */
+  document.getElementById('cliNovo').click();
+  await new Promise(s=>setTimeout(s,350));
+  const o={};
+  o.avisa=document.getElementById('cliEstado').textContent;
+  o.marcaNaLista=/não salvo/.test(document.getElementById('cliLista').textContent);
+  const inp=document.getElementById('cli_n');
+  inp.value='ESCOLA'; inp.dispatchEvent(new Event('change',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,200));
+  o.noMeio=(ftDadosParaEnviar().clientes||[]).map(c=>c.n);
+  o.semRenome=JSON.stringify((FT_SYNC.renomeacoes||{}).clientes||{});
+  inp.value='ESCOLA JOAO XXIII'; inp.dispatchEvent(new Event('change',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,200));
+  o.completo=(ftDadosParaEnviar().clientes||[]).map(c=>c.n);
+  document.getElementById('cliSalvar').click();
+  await new Promise(s=>setTimeout(s,500));
+  o.aposSalvar=(ftDadosParaEnviar().clientes||[]).map(c=>c.n).sort();
+  o.marcaSaiu=!/não salvo/.test(document.getElementById('cliLista').textContent);
+  /* confirmado, editar volta a ser edição normal — e não vira outro cadastro */
+  inp.value='ESCOLA JOAO XXIII - MATRIZ'; inp.dispatchEvent(new Event('change',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,200));
+  o.depoisDeSalvo=(ftDadosParaEnviar().clientes||[]).map(c=>c.n).sort();
+  return o;
+});
+console.log('     '+JSON.stringify(r));
+checa('a ficha avisa que ainda não subiu', /apertar Salvar/.test(r.avisa), true);
+checa('  e a lista marca "não salvo"', r.marcaNaLista, true);
+checa('nome pela metade NÃO vai para o servidor', r.noMeio, ['CLIENTE QUE JA EXISTIA']);
+checa('  e não declara renomeação de quem não existe lá', r.semRenome, '{}');
+checa('nome completo, ainda não vai (falta o Salvar)', r.completo, ['CLIENTE QUE JA EXISTIA']);
+checa('o Salvar é que faz o cliente existir', r.aposSalvar,
+      ['CLIENTE QUE JA EXISTIA','ESCOLA JOAO XXIII']);
+checa('  e a marca "não salvo" sai da lista', r.marcaSaiu, true);
+checa('depois de salvo, editar é edição — segue UM cliente', r.depoisDeSalvo,
+      ['CLIENTE QUE JA EXISTIA','ESCOLA JOAO XXIII - MATRIZ']);
+r=await p.evaluate(async ()=>{
+  DB.clientes=[]; cliListaDesenha();
+  document.getElementById('cliNovo').click();
+  await new Promise(s=>setTimeout(s,300));
+  document.getElementById('cliSalvar').click();
+  await new Promise(s=>setTimeout(s,300));
+  return {estado:document.getElementById('cliEstado').textContent,
+          envio:(ftDadosParaEnviar().clientes||[]).map(c=>c.n)};
+});
+checa('Salvar sem nome não cria nada e explica', 
+      [/escreva o nome/.test(r.estado), r.envio], [true,[]]);
 
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro de página', erros.length, 0);
