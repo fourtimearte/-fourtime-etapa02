@@ -2862,6 +2862,13 @@
     color-scheme:dark;
   }
   /* textos/ícones que eram pretos por padrão */
+  /* @media screen: ESTAS REGRAS SÃO DE TELA, e só.
+     Elas existem porque no escuro o fundo é escuro. No papel o documento é
+     sempre claro, e deixá-las valer ali fazia o mesmo elemento sair com uma
+     cor no papel do tema escuro e outra no do claro — o total do cabeçalho
+     perdia o vermelho, a observação virava preto puro. Fora da tela, os
+     tokens já são os claros e cada elemento acerta a cor sozinho. */
+  @media screen{
   body[data-tema="escuro"] .ft-tabela td,
   body[data-tema="escuro"] .lay-tabela-mini td,
   body[data-tema="escuro"] input,
@@ -2876,6 +2883,7 @@
   body[data-tema="escuro"] .ft-combo[data-genero="infantil"] textarea{color:var(--ft-genero-inf-tx);}
   /* a imagem do layout ganha um fundo claro para não "sujar" o mockup */
   body[data-tema="escuro"] .lay-img.com-img{background:#F4F5F6;}
+  }
   /* SVGs dos ícones do menu acompanham a cor do texto */
   body[data-tema="escuro"] .ft-menu-item svg{stroke:currentColor;}
   /* a logo do documento em fundo escuro */
@@ -2884,29 +2892,54 @@
   /* IMPRESSÃO SEMPRE CLARA — o tema escuro é desligado ao imprimir */
   @media print{
     body[data-tema="escuro"]{
+      /* Os valores são os MESMOS do :root claro, sem "paleta de impressão"
+         própria. A antiga usava #D1D1D1/#B8B8B8/#E6E6E6, um degrau fora do
+         tema claro, e o papel saía diferente conforme o tema em que se
+         estava — que é justamente o defeito. */
       --ft-preto:#474747;
-      --ft-cinza-70:#000000;
+      --ft-cinza-70:#161A20;
       --ft-cinza-40:#666B70;
-      --ft-borda:#D1D1D1;
-      --ft-borda-campo:#B8B8B8;
-      --ft-header-bg:#E6E6E6;
+      --ft-borda:#D4D4D4;
+      --ft-borda-campo:#D4D4D4;
+      --ft-header-bg:#f2f2f2;
       --ft-branco:#FFFFFF;
-      --ft-fundo-externo:#FFFFFF;
-      --ft-fundo-pagina:#FFFFFF;
-      --ft-superficie:#FFFFFF;
-      --ft-superficie-2:#FBFBFC;
+      --ft-fundo-externo:#5C5C5C;
+      --ft-fundo-pagina:#F6F8FA;
+      --ft-superficie:#ffffff;
+      --ft-superficie-2:#FBFCFD;
       --ft-menu-bg:#FFFFFF;
-      --ft-hover:#F1F2F4;
+      --ft-hover:#f2f2f2;
       --ft-hover-2:#EEEFF1;
       --ft-vermelho-suave:#FDF1F1;
+      --ft-tabbar-bg:#EEF1F4;
+      --ft-anel:rgba(198,22,27,.35);
+      --ft-tab-inativa-bg:#FBFCFD; --ft-tab-inativa-txt:#5D6775;
+      --ft-tab-ativa-bg:#C6161B;   --ft-tab-ativa-txt:#FFFFFF;
+      /* Tudo o que entrou DEPOIS que este bloco foi escrito e que o tema
+         escuro também redefine. Sem isto, imprimir do tema escuro entregava
+         a folha com as tintas de gênero escuras, a grade da tabela escura,
+         o rodapé escuro e o texto do módulo claro sobre branco. */
+      --ft-genero-masc:#E3EEFB; --ft-genero-masc-bd:#BBD3F5; --ft-genero-masc-tx:#12213F;
+      --ft-genero-fem:#FCE7F1;  --ft-genero-fem-bd:#F5C6DE;  --ft-genero-fem-tx:#7A123F;
+      --ft-genero-inf:#E4F3EC;  --ft-genero-inf-bd:#BFE3D2;  --ft-genero-inf-tx:#0F5138;
+      --ft-genero-masc-pt:#2563EB; --ft-genero-fem-pt:#DB2777; --ft-genero-inf-pt:#0F766E;
+      --ft-inf-bg:#FCE8E9;
+      --ft-adu-bg:#E3EEFB; --ft-adu-txt:#12213F;
       color-scheme:light;
     }
-    body[data-tema="escuro"] .ft-tabela td,
-    body[data-tema="escuro"] .lay-tabela-mini td,
-    body[data-tema="escuro"] input,
-    body[data-tema="escuro"] textarea,
-    body[data-tema="escuro"] [contenteditable]{color:var(--ft-cinza-70);}
-    body[data-tema="escuro"] .lay-img.com-img{background:transparent;}
+    /* os tokens com escopo próprio precisam ser desligados no escopo deles:
+       herdar do body não adianta, porque a regra escura é mais específica */
+    body[data-tema="escuro"] .lay-modulo{
+      --mod-borda:#D6DCE3; --mod-sutil:#68727E; --mod-medio:#5D6775;
+      --mod-texto:#161A20; --mod-sup2:#FBFCFD;
+      --mod-tab-borda:#E4E8ED; --mod-tab-tot:#EEF1F4;
+      --mod-inf-bd:#F4C7C9; --mod-adu-bd:#BBD3F5;
+    }
+    body[data-tema="escuro"] .folha-a4{--doc-linha:#E4E8ED;}
+    body[data-tema="escuro"] .doc-rodape{
+      --rod-txt:#161A20; --rod-med:#5D6775; --rod-sut:#68727E;
+    }
+    body[data-tema="escuro"] .logo-box{filter:none;}
   }
 
   /* ================================================================
@@ -12769,7 +12802,14 @@ function gerarHTML(imagens){
   });
   /* o arquivo salvo NUNCA leva valores */
   const bodyClone=raiz.querySelector('body');
-  if(bodyClone)bodyClone.classList.add('sem-dinheiro');
+  if(bodyClone){
+    bodyClone.classList.add('sem-dinheiro');
+    /* nem o tema escuro: quem exporta com o editor no escuro mandava um
+       orçamento PRETO para o cliente. O documento é sempre claro — na
+       tela do cliente e no papel. */
+    delete bodyClone.dataset.tema;
+    bodyClone.removeAttribute('data-tema');
+  }
   /* some tudo que só existe para editar */
   raiz.querySelectorAll('#ftTabBar,.ft-menu,.ft-rail,#ftLoginFundo,#cliPage,#bugPage,#bdPage,#relPage,#cssRel,#corMenu,#calMenu,#pickMenu,#ctxCustom,#ctxConfig,#cfgFundo,#ctxCores,#ctxTags,#ctxObs,.hd-tags-add,#selbar,#fileOpen,'+
     '#ftFill,#ftDropFt,#ftStatusFundo,#ftEscFundo,#ftTxtFundo,#ftLinkFundo,'+   /* flutuantes do editor: não vão para o arquivo exportado */
