@@ -15,7 +15,7 @@
 import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v298.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v299.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(52)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -141,7 +141,7 @@ checa('  e mesmo assim a maquete mostra o papel',
   ['rgb(108, 160, 228)','rgb(254, 144, 193)','rgb(104, 187, 176)']);
 checa('  selo e aviso vermelhos', [lidos.selo,lidos.aviso], ['rgb(254, 57, 57)','rgb(240, 66, 69)']);
 checa('  bordas escurecidas', lidos.borda, 'rgb(186, 186, 186)');
-checa('  e o documento de verdade intocado', lidos.doc, '#E3EEFB');
+checa('  e o documento de verdade intocado', lidos.doc, '#d2e7fe');
 
 console.log('\n=== 7. MEXER MUDA A MAQUETE NA HORA, E SÓ ELA ===');
 const dep=await p.evaluate(async()=>{
@@ -161,7 +161,7 @@ console.log('     '+JSON.stringify(dep));
 checa('a cor nova aparece na maquete', dep.fem, 'rgb(0, 255, 0)');
 checa('o tamanho novo também', dep.seloTam, '15px');
 checa('  e o rótulo do slider acompanha', dep.rotulo, '15px');
-checa('o documento de verdade não mudou de cor', dep.doc, '#FCE7F1');
+checa('o documento de verdade não mudou de cor', dep.doc, '#ffcce5');
 checa('  nem de tamanho', dep.docSelo, '8.4px');
 
 console.log('\n=== 8. COPIAR CSS COPIA TUDO, DE QUALQUER ABA ===');

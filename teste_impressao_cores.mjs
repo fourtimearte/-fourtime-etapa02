@@ -20,7 +20,7 @@ import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 import { readFileSync } from 'fs';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v298.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v299.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(52)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -121,11 +121,13 @@ const tela=await mede();
 console.log('     '+JSON.stringify(tela).slice(0,220));
 checa('a borda do documento é a de sempre', tela.borda, '#d5d8e2');
 checa('  e a linha derivada também', tela.linha, '#d5d8e2');
-checa('a tarja masculina segue pastel', tela.masc.bg, 'rgb(227, 238, 251)');
-checa('  a feminina também', tela.fem.bg, 'rgb(252, 231, 241)');
-checa('  e a infantil', tela.inf.bg, 'rgb(228, 243, 236)');
-checa('o selo do layout segue claro', tela.selo.bg, 'rgb(253, 241, 241)');
-checa('  e a barra de aviso também', tela.aviso.bg, 'rgb(253, 241, 241)');
+/* v3.299: paleta de tela nova, escolhida no painel. O que este teste
+   protege não é o valor, é a SEPARAÇÃO — o papel tem os dele. */
+checa('a tarja masculina é a da tela', tela.masc.bg, 'rgb(210, 231, 254)');
+checa('  a feminina também', tela.fem.bg, 'rgb(255, 204, 229)');
+checa('  e a infantil', tela.inf.bg, 'rgb(173, 230, 203)');
+checa('o selo do layout é o da tela', tela.selo.bg, 'rgb(255, 189, 189)');
+checa('  e a barra de aviso também', tela.aviso.bg, 'rgb(255, 189, 189)');
 
 console.log('\n=== 2. NO PAPEL, A PALETA DE IMPRESSÃO ===');
 await p.emulateMedia({media:'print'});

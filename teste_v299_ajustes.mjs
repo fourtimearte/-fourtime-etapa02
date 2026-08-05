@@ -14,7 +14,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const browser=await abreNavegador();
 const page=await browser.newPage({ viewport:{width:1400,height:900} });
 const erros=[]; page.on('pageerror',e=>erros.push(String(e).slice(0,200)));
-await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v298.html')).href);
+await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v299.html')).href);
 await esperaPronto(page);
 await page.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,1500)); });
 
@@ -399,6 +399,12 @@ for(const tema of ['claro','escuro']){
       f.querySelectorAll('*').forEach(el=>{
         if(el.closest('.lay-selo')||el.closest('.dtf-chip')||el.closest('.design-grupo'))return;
         if(el.closest('.ft-combo[data-genero]'))return;      /* tinta de gênero */
+        /* A BARRA DE AVISO é sinal, como o selo — e desde a v3.295 o traço
+           dela tem cor PRÓPRIA no papel (--pr-aviso-bd), diferente do
+           vermelho da marca. Excluir pela COR, como era antes, dependia de
+           ela ser exatamente #C6161B; excluir pelo ELEMENTO é o critério de
+           verdade e é o mesmo já usado para o selo. */
+        if(el.closest('.warn-bar'))return;
         const s=getComputedStyle(el);
         const nome=el.tagName.toLowerCase()+'.'+((el.className&&el.className.split)?el.className.split(' ')[0]:'');
         ['borderTop','borderRight','borderBottom','borderLeft'].forEach(l=>{
