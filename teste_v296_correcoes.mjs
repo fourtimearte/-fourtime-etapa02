@@ -18,7 +18,7 @@
 import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v295.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v296.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(56)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -107,6 +107,14 @@ await q.evaluate(()=>document.body.dispatchEvent(new MouseEvent('contextmenu',
 await q.waitForTimeout(400);
 checa('Ctrl+botão direito abre o painel', await disp(), 'block');
 
+/* v3.296: os dois seletores de fonte mudaram para a aba "Fontes". Sem
+   abrir a aba, o elemento está em display:none, o getBoundingClientRect
+   devolve zeros e o clique vai parar em (0,0) — fora do painel, que então
+   fecha. O teste acusava exatamente o defeito que ele existe para vigiar,
+   e por um motivo que não era o defeito. */
+await q.evaluate(()=>{ const bt=document.querySelector('.cc-nav-bt[data-painel="fontes"]');
+  if(bt)bt.click(); });
+await q.waitForTimeout(250);
 await q.evaluate(()=>{ const s=document.getElementById('ccFonte');
   if(s)(s.closest('.ft-dd')||s).scrollIntoView({block:'center'}); });
 await q.waitForTimeout(200);

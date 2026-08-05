@@ -20,7 +20,7 @@ import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 import { readFileSync } from 'fs';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v295.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v296.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(52)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -46,8 +46,8 @@ const corpo=(abertura)=>{
     /* o comentário que explica a duplicação só existe num dos lados */
     .replace(/\/\*[\s\S]*?\*\//g,'').replace(/\s+/g,' ').trim();
 };
-const doPrint=corpo('@media print{\n    /* os tokens do documento passam a ler da paleta de impressão */');
-const daLente=corpo('body.ver-impressao{');
+const doPrint=corpo('@media print{\n    /* os tokens do documento passam a ler da paleta de impressão.');
+const daLente=corpo('  .ver-impressao{');
 checa('o bloco do @media print foi encontrado', !!doPrint && doPrint.length>200, true);
 checa('o bloco do "ver na tela" também', !!daLente && daLente.length>200, true);
 checa('e os dois são o MESMO texto', doPrint===daLente, true);
@@ -171,19 +171,29 @@ await p.evaluate(()=>document.body.dispatchEvent(new MouseEvent('contextmenu',
   {bubbles:true,ctrlKey:true,clientX:500,clientY:300})));
 await p.waitForTimeout(350);
 checa('o painel abriu', await p.evaluate(()=>document.getElementById('ctxCustom').style.display), 'block');
+/* v3.296: o painel é em abas. A lista de papel mora na aba Impressão. */
+await p.evaluate(()=>document.querySelector('.cc-nav-bt[data-painel="impressao"]').click());
+await p.waitForTimeout(250);
 checa('  com as 17 cores de impressão',
   await p.evaluate(()=>document.querySelectorAll('#ccListaImp input[data-var-imp]').length), 17);
+checa('  e os 3 tamanhos de fonte do papel',
+  await p.evaluate(()=>document.querySelectorAll('#ccListaImp input[data-tvar-imp]').length), 3);
 checa('  e o botão da lente desligado',
   await p.evaluate(()=>document.getElementById('ccVerImp').textContent), 'Desligado');
-/* o filtro vale para as duas listas */
+/* CADA ABA TEM A SUA BUSCA (v3.296): filtrar uma não pode mexer na outra */
 await p.evaluate(()=>{ const bu=document.getElementById('ccBusca');
   bu.value='genero'; bu.dispatchEvent(new Event('input',{bubbles:true})); });
 await p.waitForTimeout(200);
-checa('buscar "genero" acha nas duas listas',
+checa('a busca da aba Cores filtra só a lista dela',
   await p.evaluate(()=>[document.querySelectorAll('#ccLista input[data-var]').length,
-                        document.querySelectorAll('#ccListaImp input[data-var-imp]').length]), [3,9]);
-await p.evaluate(()=>{ const bu=document.getElementById('ccBusca');
-  bu.value=''; bu.dispatchEvent(new Event('input',{bubbles:true})); });
+                        document.querySelectorAll('#ccListaImp input[data-var-imp]').length]), [3,17]);
+await p.evaluate(()=>{ const bi=document.getElementById('ccBuscaImp');
+  bi.value='genero'; bi.dispatchEvent(new Event('input',{bubbles:true})); });
+await p.waitForTimeout(200);
+checa('  e a da aba Impressão, só a de papel',
+  await p.evaluate(()=>document.querySelectorAll('#ccListaImp input[data-var-imp]').length), 9);
+await p.evaluate(()=>{ ['ccBusca','ccBuscaImp'].forEach(id=>{ const e=document.getElementById(id);
+  e.value=''; e.dispatchEvent(new Event('input',{bubbles:true})); }); });
 await p.waitForTimeout(200);
 
 /* a lente acende a paleta de papel NA TELA */
@@ -215,8 +225,12 @@ checa('  sem a lente, a tela volta ao normal', dep.semLente, '#d5d8e2');
 console.log('\n=== 6. COPIAR CSS TRAZ O BLOCO DE IMPRESSÃO ===');
 const css=await p.evaluate(async()=>{ document.getElementById('ccCopiar').click();
   await new Promise(s=>setTimeout(s,300)); return document.getElementById('ccSaida').value; });
-checa('o bloco existe no texto copiado', /CORES DE IMPRESSÃO/.test(css), true);
-checa('  com as 17 variáveis', (css.match(/--pr-[a-z-]+:/g)||[]).length, 17);
+checa('o bloco existe no texto copiado', /---- IMPRESSÃO/.test(css), true);
+/* 17 cores + 3 tamanhos de fonte */
+checa('  com as 20 variáveis', (css.match(/--pr-[a-z-]+:/g)||[]).length, 20);
+checa('  incluindo os tamanhos de fonte do papel',
+  [/--pr-tam-ref: [\d.]+px/.test(css),/--pr-tam-aviso: [\d.]+px/.test(css),/--pr-tam-selo: [\d.]+px/.test(css)],
+  [true,true,true]);
 checa('  e com a cor que acabei de escolher', /--pr-borda: #123456/.test(css), true);
 
 console.log('\n=== 7. O ARQUIVO DO TRELLO ===');

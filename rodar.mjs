@@ -27,10 +27,10 @@ const SUITES = [
   'teste_faixa_v268', 'teste_botoes_v271', 'teste_abas_v270', 'teste_cab_v269',
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
   /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
-  'teste_v295_ajustes', 'teste_compat_v295', 'teste_impressao_escura', 'teste_painel_v295',
+  'teste_v296_ajustes', 'teste_compat_v296', 'teste_impressao_escura', 'teste_painel_v296',
   'teste_arquivar_data', 'teste_cnpj', 'teste_brilho_obs', 'teste_cores_grupos',
-  'teste_freio_servidor', 'teste_v295_correcoes', 'teste_cabecalho_v295',
-  'teste_impressao_cores',
+  'teste_freio_servidor', 'teste_v296_correcoes', 'teste_cabecalho_v296',
+  'teste_impressao_cores', 'teste_painel_abas',
   'teste_aviso_versao', 'teste_versao_servidor',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
@@ -54,17 +54,18 @@ const ANTIGAS = [
    compatibilidade (que é onde a versão anterior entra) e o painel. Uns 45s
    em vez de 90s. A bateria inteira é para quando o CÓDIGO muda. */
 const SUBIDA = [
-  'teste_v295_ajustes',      /* o que a versão trouxe                        */
+  'teste_v296_ajustes',      /* o que a versão trouxe                        */
   'teste_arquivar_data',     /* a data de arquivamento: modal, máscara, pasta */
   'teste_cnpj',              /* CNPJ: máscara, duas fontes, ficha se preenche   */
   'teste_brilho_obs',        /* brilhar/pulsar no arquivo do Trello             */
   'teste_cores_grupos',      /* cores por grupo: menu, banco e compatibilidade  */
   'teste_freio_servidor',    /* o catálogo passa, a duplicação continua barrada */
-  'teste_v295_correcoes',    /* CEP após o blur, painel x fonte, visualizador   */
-  'teste_cabecalho_v295',    /* as 12 células do cabeçalho, uma a uma           */
+  'teste_v296_correcoes',    /* CEP após o blur, painel x fonte, visualizador   */
+  'teste_cabecalho_v296',    /* as 12 células do cabeçalho, uma a uma           */
   'teste_impressao_cores',   /* a paleta de papel: só no print, e sincronizada  */
-  'teste_compat_v295',       /* aqui a versão anterior entra como origem     */
-  'teste_painel_v295',       /* nenhum token do painel pode ter morrido      */
+  'teste_painel_abas',       /* as quatro abas, a maquete e o copiar-tudo       */
+  'teste_compat_v296',       /* aqui a versão anterior entra como origem     */
+  'teste_painel_v296',       /* nenhum token do painel pode ter morrido      */
   'teste_impressao_escura',  /* o documento do cliente e o papel             */
   'teste_aviso_versao', 'teste_versao_servidor',      /* sem isto, ninguém fica sabendo da publicação */
 ];

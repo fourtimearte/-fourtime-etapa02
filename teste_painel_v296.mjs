@@ -13,7 +13,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v295.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v296.html')).href);
 await esperaPronto(p);
 await p.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,2600)); });
 
@@ -161,8 +161,14 @@ console.log('\n=== ACHAR UMA COR NA LISTA ===');
    no pé. O teste cobra as três coisas. */
 r=await p.evaluate(async ()=>{
   /* o painel precisa estar VISÍVEL: a sombra do pé se decide medindo, e
-     medir um elemento escondido dá zero em tudo */
+     medir um elemento escondido dá zero em tudo.
+     v3.296: e não basta o painel — a lista mora na ABA "Cores", que também
+     é display:none quando outra aba está aberta. Sem abrir a aba, tudo
+     media zero e o teste acusava que a lista tinha parado de rolar. */
   document.getElementById('ctxCustom').style.display='block';
+  const btCores=document.querySelector('.cc-nav-bt[data-painel="cores"]');
+  if(btCores)btCores.click();
+  await new Promise(s=>setTimeout(s,150));
   const lista=document.getElementById('ccLista'), cx=lista.parentElement;
   const bu=document.getElementById('ccBusca');
   const acha=async q=>{ bu.value=q; bu.dispatchEvent(new Event('input',{bubbles:true}));
