@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fourtime — Mockup: modal de referência + banco com ficha de material</title>
+<style>
+:root{
+  --ft-vermelho:#C6161B; --ft-vermelho-suave:#FDF1F1;
+  --ft-preto:#161A20; --ft-cinza-70:#5D6775; --ft-cinza-40:#868D96;
+  --ft-borda:#d5d8e2; --ft-borda-campo:#d5d8e2;
+  --ft-branco:#ffffff; --ft-superficie:#fcfcfc; --ft-superficie-2:#ffffff;
+  --ft-hover:#f2f2f2; --ft-fundo:#eef0f4;
+  --ft-genero-masc:#d2e7fe; --ft-genero-masc-bd:#7c98c0; --ft-genero-masc-tx:#4c669a;
+  --ft-genero-fem:#ffcce5;  --ft-genero-fem-bd:#ff0084;  --ft-genero-fem-tx:#bd2869;
+  --ft-genero-inf:#ade6cb;  --ft-genero-inf-bd:#137748;  --ft-genero-inf-tx:#186346;
+  --ft-genero-uni:#e8e5f5;  --ft-genero-uni-bd:#8b7fc0;  --ft-genero-uni-tx:#5b4f90;
+  --verde:#17A34A; --ambar:#E8A93B;
+  --sh-1:0 1px 2px rgba(17,18,20,.05);
+  --sh-3:0 8px 24px rgba(16,20,28,.10),0 2px 6px rgba(16,20,28,.06);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:0;background:var(--ft-fundo);
+  font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  color:var(--ft-preto);font-size:13px;line-height:1.45;
+}
+.topo{
+  background:var(--ft-branco);border-bottom:1px solid var(--ft-borda);
+  padding:14px 22px;position:sticky;top:0;z-index:50;
+}
+.topo h1{margin:0 0 3px;font-size:15px;font-weight:700;letter-spacing:-.01em;}
+.topo p{margin:0;font-size:11.5px;color:var(--ft-cinza-40);}
+.abas{display:flex;gap:4px;margin-top:12px;background:var(--ft-hover);padding:3px;border-radius:10px;width:fit-content;}
+.aba{
+  border:none;background:transparent;cursor:pointer;border-radius:8px;padding:7px 14px;
+  font:inherit;font-size:12px;font-weight:600;color:var(--ft-cinza-40);
+}
+.aba.on{background:var(--ft-branco);color:var(--ft-preto);box-shadow:var(--sh-1);}
+.tela{display:none;padding:22px;}
+.tela.on{display:block;}
+.nota{
+  background:var(--ft-branco);border:1px solid var(--ft-borda);border-left:3px solid var(--ft-vermelho);
+  border-radius:8px;padding:11px 14px;margin:0 0 18px;font-size:12px;color:var(--ft-cinza-70);
+  max-width:1180px;
+}
+.nota b{color:var(--ft-preto);}
+.nota code{background:var(--ft-hover);padding:1px 5px;border-radius:4px;font-size:11px;}
+
+/* ============ MODAL DE REFERÊNCIA ============ */
+.palco{
+  background:#dfe3ea;border:1px solid var(--ft-borda);border-radius:12px;
+  padding:26px;display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;
+}
+.campo-demo{
+  width:330px;background:var(--ft-superficie-2);border:1px solid var(--ft-borda-campo);
+  border-radius:6px;padding:7px 10px;display:flex;align-items:center;gap:7px;box-shadow:var(--sh-1);
+}
+.campo-demo .rot{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ft-cinza-40);}
+.campo-demo .val{flex:1;font-size:11px;font-weight:700;}
+.campo-demo svg{width:13px;height:13px;stroke:var(--ft-cinza-40);fill:none;stroke-width:2;}
+
+.ref-menu{
+  width:400px;background:var(--ft-superficie);border:1px solid var(--ft-borda);
+  border-radius:12px;box-shadow:var(--sh-3);overflow:hidden;
+}
+.ref-busca{
+  display:flex;align-items:center;gap:7px;padding:10px 12px;border-bottom:1px solid var(--ft-borda);
+  background:var(--ft-branco);
+}
+.ref-busca svg{width:14px;height:14px;stroke:var(--ft-cinza-40);fill:none;stroke-width:2;flex:0 0 auto;}
+.ref-busca input{
+  flex:1;border:none;outline:none;background:none;font:inherit;font-size:12.5px;color:var(--ft-preto);
+}
+.ref-busca input::placeholder{color:var(--ft-cinza-40);}
+.ref-rolo{max-height:460px;overflow-y:auto;}
+
+.grp{border-bottom:1px solid var(--ft-borda);}
+.grp:last-child{border-bottom:none;}
+.grp-bt{
+  width:100%;display:flex;align-items:center;gap:9px;padding:9px 12px;
+  background:none;border:none;cursor:pointer;font:inherit;text-align:left;
+}
+.grp-bt:hover{background:var(--ft-hover);}
+.grp.aberto .grp-bt{background:var(--ft-branco);}
+.grp-cod{
+  flex:0 0 auto;font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:10px;font-weight:700;letter-spacing:.04em;color:var(--ft-vermelho);
+  background:var(--ft-vermelho-suave);border:1px solid #F4C7C9;border-radius:5px;padding:2px 6px;
+}
+.grp-nome{flex:1;min-width:0;font-size:12.5px;font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* as bolinhas sobrepostas: prévia de quem mora dentro, como no menu de cor */
+.grp-pilha{display:flex;flex:0 0 auto;}
+.grp-pilha i{
+  width:15px;height:15px;border-radius:50%;border:1.5px solid var(--ft-branco);
+  margin-left:-6px;display:inline-block;
+}
+.grp-pilha i:first-child{margin-left:0;}
+.grp-qtd{flex:0 0 auto;font-size:10.5px;font-weight:600;color:var(--ft-cinza-40);
+  font-variant-numeric:tabular-nums;min-width:20px;text-align:right;}
+.grp-seta{flex:0 0 auto;width:13px;height:13px;stroke:var(--ft-cinza-40);fill:none;stroke-width:2.2;
+  transition:transform .16s ease;}
+.grp.aberto .grp-seta{transform:rotate(180deg);}
+.grp-lista{display:none;padding:2px 0 6px;background:var(--ft-branco);}
+.grp.aberto .grp-lista{display:block;}
+
+.ref-item{
+  display:flex;align-items:center;gap:8px;padding:6px 12px 6px 14px;cursor:pointer;
+}
+.ref-item:hover{background:var(--ft-hover);}
+.ref-item.sel{background:var(--ft-vermelho-suave);}
+.ref-cod{
+  flex:0 0 auto;font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;
+  color:var(--ft-cinza-40);font-variant-numeric:tabular-nums;
+}
+.ref-nome{flex:1;min-width:0;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ref-item.sel .ref-nome{font-weight:600;color:var(--ft-vermelho);}
+/* a tarja de gênero é a MESMA do editor: a pessoa já sabe ler essa cor */
+.gen{
+  flex:0 0 auto;width:17px;height:17px;border-radius:5px;border:1px solid;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;
+}
+.gen.M{background:var(--ft-genero-masc);border-color:var(--ft-genero-masc-bd);color:var(--ft-genero-masc-tx);}
+.gen.F{background:var(--ft-genero-fem);border-color:var(--ft-genero-fem-bd);color:var(--ft-genero-fem-tx);}
+.gen.C{background:var(--ft-genero-inf);border-color:var(--ft-genero-inf-bd);color:var(--ft-genero-inf-tx);}
+.gen.U{background:var(--ft-genero-uni);border-color:var(--ft-genero-uni-bd);color:var(--ft-genero-uni-tx);}
+.ref-pe{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:8px 12px;border-top:1px solid var(--ft-borda);background:var(--ft-branco);
+  font-size:10.5px;color:var(--ft-cinza-40);
+}
+.ref-pe button{
+  border:1px solid var(--ft-borda);background:none;border-radius:6px;padding:4px 9px;
+  font:inherit;font-size:10.5px;font-weight:600;color:var(--ft-cinza-70);cursor:pointer;
+}
+.ref-pe button:hover{border-color:var(--ft-vermelho);color:var(--ft-vermelho);}
+.legenda-gen{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;font-size:11px;color:var(--ft-cinza-70);}
+.legenda-gen span{display:inline-flex;align-items:center;gap:5px;}
+
+/* ============ PÁGINA DO BANCO ============ */
+.bd{
+  background:var(--ft-branco);border:1px solid var(--ft-borda);border-radius:12px;
+  overflow:hidden;max-width:1180px;box-shadow:var(--sh-1);
+}
+.bd-topo{
+  display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--ft-borda);
+}
+.bd-topo h2{margin:0;font-size:14px;font-weight:700;flex:0 0 auto;}
+.bd-topo .conta{font-size:11px;color:var(--ft-cinza-40);}
+.bd-busca{
+  flex:1;max-width:280px;display:flex;align-items:center;gap:6px;
+  border:1px solid var(--ft-borda-campo);border-radius:6px;padding:5px 9px;background:var(--ft-superficie-2);
+}
+.bd-busca input{flex:1;border:none;outline:none;background:none;font:inherit;font-size:12px;}
+.bd-busca svg{width:13px;height:13px;stroke:var(--ft-cinza-40);fill:none;stroke-width:2;}
+.bt{
+  border:1px solid var(--ft-borda);background:var(--ft-superficie-2);border-radius:6px;
+  padding:6px 11px;font:inherit;font-size:11.5px;font-weight:600;color:var(--ft-cinza-70);cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.bt:hover{border-color:var(--ft-vermelho);color:var(--ft-vermelho);}
+.bt.forte{background:var(--ft-vermelho);border-color:#B01418;color:#fff;}
+.bt svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;}
+
+.bd-corpo{display:grid;grid-template-columns:340px 1fr;min-height:560px;}
+.bd-esq{border-right:1px solid var(--ft-borda);overflow-y:auto;max-height:640px;background:var(--ft-superficie);}
+.bd-dir{padding:16px 18px;overflow-y:auto;max-height:640px;}
+
+/* ---- ficha de material ---- */
+.ficha-cab{display:flex;align-items:flex-start;gap:12px;margin-bottom:4px;}
+.ficha-cab h3{margin:0;font-size:15px;font-weight:700;}
+.ficha-cab .cod{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:11px;color:var(--ft-cinza-40);
+}
+.ficha-sub{font-size:11px;color:var(--ft-cinza-40);margin:0 0 16px;}
+.sec{margin-bottom:20px;}
+.sec-tit{
+  display:flex;align-items:center;gap:8px;margin-bottom:9px;
+  font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ft-cinza-40);
+}
+.sec-tit::after{content:'';flex:1;height:1px;background:var(--ft-borda);}
+
+.linha-mat{
+  display:grid;grid-template-columns:1fr 92px 74px 34px;gap:8px;align-items:center;
+  padding:6px 0;border-bottom:1px solid var(--ft-borda);
+}
+.linha-mat:last-of-type{border-bottom:none;}
+.linha-mat .nome{font-size:12px;font-weight:600;}
+.linha-mat .nome small{display:block;font-weight:400;font-size:10px;color:var(--ft-cinza-40);}
+.inp{
+  width:100%;border:1px solid var(--ft-borda-campo);border-radius:6px;padding:4px 7px;
+  font:inherit;font-size:11.5px;background:var(--ft-superficie-2);outline:none;
+  font-variant-numeric:tabular-nums;
+}
+.inp:focus{border-color:var(--ft-vermelho);box-shadow:0 0 0 2px rgba(198,22,27,.14);}
+.inp.num{text-align:right;}
+.uni{font-size:11px;color:var(--ft-cinza-40);}
+.lixo{
+  border:none;background:none;cursor:pointer;color:var(--ft-cinza-40);padding:2px;line-height:0;
+}
+.lixo:hover{color:var(--ft-vermelho);}
+.lixo svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;}
+
+/* consumo por tamanho */
+.grade{width:100%;border-collapse:separate;border-spacing:0;margin-top:4px;}
+.grade th,.grade td{
+  border:1px solid var(--ft-borda);padding:4px 3px;text-align:center;font-size:11px;
+  font-variant-numeric:tabular-nums;
+}
+.grade th{
+  background:var(--ft-superficie);font-size:9.5px;font-weight:700;color:var(--ft-cinza-40);
+  letter-spacing:.04em;
+}
+.grade th:first-child{border-top-left-radius:6px;}
+.grade th:last-child{border-top-right-radius:6px;}
+.grade tr:last-child td:first-child{border-bottom-left-radius:6px;}
+.grade tr:last-child td:last-child{border-bottom-right-radius:6px;}
+.grade td:not(:first-child),.grade th:not(:first-child){border-left:none;}
+.grade tr+tr td{border-top:none;}
+.grade td.rot{text-align:left;font-weight:600;font-size:10.5px;padding-left:7px;white-space:nowrap;}
+.grade input{
+  width:100%;border:none;background:none;outline:none;font:inherit;font-size:11px;
+  text-align:center;font-variant-numeric:tabular-nums;color:var(--ft-preto);
+}
+.grade input:focus{background:var(--ft-vermelho-suave);border-radius:3px;}
+.grade td.base{background:#FFFBEC;}
+.grade td.base input{font-weight:700;}
+
+.escada{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:9px;
+  background:var(--ft-superficie);border:1px solid var(--ft-borda);border-radius:8px;padding:8px 11px;
+  font-size:11px;color:var(--ft-cinza-70);
+}
+.escada b{color:var(--ft-preto);}
+.escada select,.escada input{
+  border:1px solid var(--ft-borda-campo);border-radius:6px;padding:3px 6px;
+  font:inherit;font-size:11px;background:var(--ft-superficie-2);outline:none;
+}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;
+  font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+}
+.pill.ok{background:#E8F6EE;color:var(--verde);border:1px solid #B7E4C9;}
+.pill.pend{background:#FFF6E5;color:#A6741B;border:1px solid #F2DCAF;}
+
+/* simulador do pedido */
+.sim{
+  background:var(--ft-superficie);border:1px solid var(--ft-borda);border-radius:10px;padding:13px 15px;
+}
+.sim table{width:100%;border-collapse:collapse;font-size:11.5px;}
+.sim th,.sim td{padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums;}
+.sim th{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ft-cinza-40);font-weight:700;}
+.sim td:first-child,.sim th:first-child{text-align:left;}
+.sim tr.tot td{border-top:1px solid var(--ft-borda);font-weight:700;padding-top:7px;}
+.sim .grande{font-size:16px;font-weight:700;color:var(--ft-vermelho);}
+
+.marca-mat{
+  display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;
+  color:var(--ft-cinza-40);
+}
+.marca-mat svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4;}
+.marca-mat.ok{color:var(--verde);}
+.marca-mat.falta{color:var(--ambar);}
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <h1>Fourtime · Referências — modal agrupado + banco com ficha de material</h1>
+  <p>Mockup para decidir antes de implementar. Os dados são os 114 códigos reais que estão no editor hoje.</p>
+  <div class="abas">
+    <button class="aba on" data-t="modal">1 · Modal de referência</button>
+    <button class="aba" data-t="banco">2 · Página do banco</button>
+    <button class="aba" data-t="decisoes">3 · O que precisa ser decidido</button>
+  </div>
+</div>
+
+<!-- =================== 1. MODAL =================== -->
+<div class="tela on" id="t-modal">
+  <div class="nota">
+    <b>Mesma linguagem do menu de cor.</b> Busca no topo, grupos recolhidos, lista vertical dentro de cada
+    um e a pilha de bolinhas mostrando o que mora lá. O que muda é o critério do grupo: aqui é o
+    <b>código</b> — <code>FT-<b>010</b>-000M</code> — e a bolinha vira a <b>tarja de gênero</b>, que é a
+    letra final do código (<code>M</code>, <code>F</code>, <code>C</code>, <code>U</code>). A cor é a mesma
+    que a referência já mostra no A4, então não há um segundo código de cores para aprender.
+  </div>
+  <div class="palco">
+    <div>
+      <div class="campo-demo">
+        <span class="rot">Ref</span>
+        <span class="val" id="demoRef">FT-020-000M — RAGLAN MASC SEM PUNHO</span>
+        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="legenda-gen">
+        <span><i class="gen M">M</i> masculino</span>
+        <span><i class="gen F">F</i> feminino</span>
+        <span><i class="gen C">C</i> infantil</span>
+        <span><i class="gen U">U</i> unissex</span>
+      </div>
+    </div>
+    <div class="ref-menu">
+      <div class="ref-busca">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="buscaRef" placeholder="Buscar referência, código ou peça…" spellcheck="false">
+      </div>
+      <div class="ref-rolo" id="roloRef"></div>
+      <div class="ref-pe">
+        <span id="peRef">—</span>
+        <button id="btLimparRef">limpar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =================== 2. BANCO =================== -->
+<div class="tela" id="t-banco">
+  <div class="nota">
+    <b>O banco ganha a ficha de material.</b> À esquerda a mesma lista agrupada do modal; à direita, para a
+    referência escolhida, <b>quanto de cada material a peça consome</b>. O consumo de tecido é
+    <b>por tamanho</b> — um PP não gasta o mesmo que um G4 — e os aviamentos são por peça.
+    Embaixo, um simulador que multiplica a ficha pela grade de um pedido e diz quanto comprar.
+  </div>
+  <div class="bd">
+    <div class="bd-topo">
+      <h2>Banco · Referências</h2>
+      <span class="conta" id="bdConta">—</span>
+      <div class="bd-busca">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="buscaBd" placeholder="Buscar…" spellcheck="false">
+      </div>
+      <div style="flex:1"></div>
+      <button class="bt"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Nova referência</button>
+      <button class="bt forte"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Salvar</button>
+    </div>
+    <div class="bd-corpo">
+      <div class="bd-esq" id="bdLista"></div>
+      <div class="bd-dir" id="bdFicha"></div>
+    </div>
+  </div>
+</div>
+
+<!-- =================== 3. DECISÕES =================== -->
+<div class="tela" id="t-decisoes">
+  <div class="nota">
+    <b>Isto aqui é o que eu preciso que você decida</b> antes de implementar. Cada item mudou o desenho
+    acima de um jeito ou de outro; onde eu escolhi sozinho, digo o que escolhi e por quê.
+  </div>
+  <div class="bd" style="padding:18px 20px;max-width:900px;">
+    <div class="sec">
+      <div class="sec-tit">1 · Os 114 códigos viraram 14 grupos</div>
+      <p style="margin:0 0 8px;font-size:12.5px;">
+        O agrupamento sai do número do meio do código. Os nomes dos grupos eu inventei olhando o que tem
+        dentro de cada um — <b>confira, é o que vai aparecer na tela para todo mundo</b>:
+      </p>
+      <div id="tabelaGrupos"></div>
+      <p style="margin:10px 0 0;font-size:12px;color:var(--ft-cinza-70);">
+        Dois cadastros <b>não têm código</b> (“CALÇA MOLETOM MASC TRAD CORTE RETO SEM PUNHO” e “CALÇA
+        MOLETOM FEMININA COM PUNHO”) e um é <b>KIT</b> com dois códigos no mesmo item. Eles caíram em
+        grupos próprios em vez de sumirem — igual ao que fizemos com os tecidos desconhecidos.
+      </p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-tit">2 · O consumo é por tamanho, e vem de uma escada</div>
+      <p style="margin:0;font-size:12.5px;">
+        Digitar 10 números por peça, vezes 114 peças, é 1.140 números — ninguém preenche isso. Então:
+        você digita <b>um</b> valor (o tamanho base, M) e escolhe uma <b>escada</b> — quanto cada tamanho
+        cresce sobre o anterior. O sistema preenche os outros nove, e <b>qualquer célula pode ser corrigida
+        à mão</b> depois; a corrigida fica marcada e a escada não a atropela mais.
+        A escada de fábrica que propus é <b>+6% por tamanho</b>, que é a praxe de modelagem.
+      </p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-tit">3 · Onde a ficha encosta no orçamento</div>
+      <p style="margin:0;font-size:12.5px;">
+        O simulador da aba 2 já mostra a conta pronta. A pergunta é <b>até onde isso vai</b>:
+        <b>(a)</b> fica só no banco, como consulta; <b>(b)</b> aparece no orçamento como um resumo de
+        material para a produção; ou <b>(c)</b> alimenta o custo — aí precisa de preço por metro no
+        cadastro de tecido, e vira outro assunto. Desenhei o <b>(a)</b>, que não mexe em nada do que já
+        funciona, e deixei a porta aberta para os outros.
+      </p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-tit">4 · Compatibilidade — o que NÃO pode mudar</div>
+      <p style="margin:0;font-size:12.5px;">
+        O <code>.ft</code> guarda a referência como <b>texto</b>, do jeito que está hoje
+        (“FT-020-000M — RAGLAN MASC SEM PUNHO”). O agrupamento é <b>só de exibição</b>: nada do que já foi
+        salvo muda, e um orçamento antigo continua abrindo igual. Mesma decisão do catálogo de cores.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= dados reais do editor ================= */
+const REFS=["FT-010-000M — CAMISETA MASC TRAD","FT-010-001M — CAMISETA MASC TRAD GOLA V","FT-010-002M — CAMISETA MASC TRAD ML","FT-010-003M — CAMISETA MASC TRAD ML GOLA V","FT-010-004F — BABY LOOK","FT-010-006F — BABY LOOK ML","FT-010-005F — BABY LOOK GOLA V","FT-010-007F — BABY LOOK  ML GOLA V","FT-010-008C — CAMISETA INFANTIL UNISSEX","FT-010-009C — CAMISETA INFANTIL UNISSEX ML","FT-010-010M — CAMISETA OVERSIZE MASC","FT-010-011M — CAMISETA POLO MASC SEM PUNHO","FT-010-012M — CAMISETA POLO MASC COM PUNHO","FT-010-013F — CAMISETA POLO FEM SEM PUNHO","FT-010-014F — CAMISETA POLO FEM COM PUNHO","FT-010-015M — CAMISETA COM CAPUZ MASC ML","FT-010-016F — BABY LOOK COM CAPUZ ML","FT-020-000M — RAGLAN MASC SEM PUNHO","FT-020-001M — RAGLAN MASC COM PUNHO","FT-020-002M — RAGLAN MASC SEM PUNHO GOLA V","FT-020-003M — RAGLAN MASC COM PUNHO GOLA V","FT-020-004M — RAGLAN MASC SEM PUNHO GOLA PADRE","FT-020-005M — RAGLAN MASC COM PUNHO GOLA PADRE","FT-020-006M — RAGLAN MASC ML","FT-020-007M — RAGLAN MASC ML GOLA V","FT-020-008M — RAGLAN MASC FORTIME","FT-020-009F — RAGLAN FEM SEM PUNHO","FT-020-010F — RAGLAN FEM C0M PUNHO","FT-020-011F — RAGLAN FEM ML","FT-020-012M — RAGLAN RASH GUARD MASC","FT-020-013M — RAGLAN RASH GUARD MASC ML","FT-020-014C — RAGLAN INFANTIL UNISSEX","FT-030-000M — REGATA MASC TRAD","FT-030-001M — REGATÃO MASC MACHÃO","FT-030-002M — REGATA MASC OVERSIZED","FT-030-003M — BASQUETEIRO GOLA REDONDA","FT-030-004M — BASQUETEIRO GOLA V","FT-030-005F — REGATA FEM TRAD","FT-030-006F — REGATÃO FEM","FT-030-007F — REGATÃO FEM RANI","FT-030-008F — REGATÃO FEM FUTEVOLEY","FT-040-000M — BLUSA MOLETOM MASC SEM ZIPER","FT-040-001M — BLUSA MOLETOM MASC COM ZIPER","FT-040-002F — BLUSA MOLETOM FEM SEM ZIPER","FT-040-003F — BLUSA MOLETOM FEM COM ZIPER","FT-040-004M — BLUSA MOLETON MASC SEM CAPUZ","FT-040-005F — BLUSA MOLETON FEM SEM CAPUZ","FT-050-000F — CROPPED FEM OVERSIZE","FT-050-001F — CROPPED FEM SEM MANGA","FT-060-000F — TOP FEM TRAD","FT-060-001F — TOP FEM 4 TIRAS","FT-060-002F — TOP FEM NADADOR","FT-060-003F — TOP FEM MARCELA","FT-060-004F — TOP FEM DANI","FT-060-005F — TOP FEM ALCINHA","FT-060-006M — TOP MASC FUTEBOL","FT-070-000M — CALÇA COMPRESSÃO MASC","FT-070-001U — CALÇA MOLETOM UNISSEX COM PUNHO","FT-070-002F — CALÇA LEGGINGS FEM","FT-070-003C — CALÇA INFANTIL FEM","FT-070-004M — CALÇA NO GI MASC","FT-070-005U — CALÇA INDUSTRIAL UNISSEX SEM BOLSO","FT-080-000M — BERMUDA DRY FOURTIME COM BOLSO","FT-080-001M — BERMUDA DRY FOURTIME SEM BOLSO","FT-080-002M — BERMUDA NO GI MASC COM BOLSO","FT-080-003M — BERMUDA NO GI MASC SEM BOLSO","FT-080-004U — BERMUDA DRY INFANTIL UNISSEX SEM BOLSO","FT-080-005U — BERMUDA DRY INFANTIL UNISSEX COM BOLSO","FT-080-006U — BERMUDA TACTEL INFANTIL UNISSEX SEM BOLSO","FT-080-007U — BERMUDA TACTEL INFANTIL UNISSEX COM BOLSO","FT-090-000M — CALÇAO MASC SEM BOLSO","FT-090-001M — CALÇÃO MASC COM BOLSO","FT-100-000F — SHORT FEM RECORTADO","FT-100-001F — SHORT FEM DANI","FT-100-002F — SHORT FEM FERNANDA","FT-100-003F — SHORT FEM FUTEVOLEI","FT-100-004F — SHORT FEM SAIA FEM","FT-100-005C — SHORT INFANTIL SUPLEX","FT-100-006M — SHORT NO GI MASC SEM BOLSO","FT-100-007M — SHORT NO GI MASC COM BOLSO","FT-100-008M — SHORT TACTEL MASC FOURTIME CURTO","FT-100-009M — SHORT TACTEL MASC FOURTIME MEDIA","FT-110-000U — JALECO E CALÇA COM BOTÃO","FT-110-001U — JALECO E CALÇA COM BOTÃO ML","FT-110-002U — JALECO E CALÇA SEM BOTÃO","FT-110-003U — JALECO E CALÇA SEM BOTÃO ML","FT-120-000U — COLETE COM VIES UNISSEX","FT-120-001U — COLETE DUPLA FACE","FT-120-002U — AVENTAL UNISSEX","FT-120-003U — BALACLAVA UNISSEX","FT-120-004U — BONE","FT-120-005U — BANDEIRA","FT-010-017M — CAMISETA MASC LONG LINE","FT-010-018M — CAMISETA MASC LONG LINE GOLA V","FT-010-019F — BABY LOOK LONG LINE","FT-010-020F — BABY LOOK LONG LINE GOLA V","FT-120-007U — MEIAO FUTEBOL","FT-030-009F — REGATAO FEM DANI","FT-090-002U — CALÇÃO INF SEM BOLSO","FT-090-003U — CALÇÃO INF COM BOLSO","FT-040-006C — BLUSA MOLETOM INF COM ZIPER","FT-040-007C — BLUSA MOLETOM INF SEM  ZIPER","FT-110-004M — CAMISA MASCULINA SOCIAL","FT-110-006F — CAMISETE FEMININA MANGA 3/4","FT-110-005F — CAMISETE FEMININA MANGA LONGA","FT-110-008U — CALÇA INDUSTRIAL UNISSEX 4 BOLSOS","FT-110-002U — JALECO GOLA V SEM BOTAO M.C","FT-110-003U — JALECO GOLA V SEM BOTAO M.L","FT-100-010F — SHORT FEM CORRIDA","FT-100-007F — TOP FEM LADO","FT-100-011M — SHORT VOLEIBOL MASCULINO","FT-KIT-020-000M-090-000M — KIT RAGLAN S/ PUNHO E CALÇAO S/ BOLSO","CALÇA MOLETOM MASC TRAD CORTE RETO SEM PUNHO","CALÇA MOLETOM FEMININA COM PUNHO"];
+
+const TAMANHOS=["PP","P","M","G","GG","XG","G1","G2","G3","G4"];
+const TECIDOS=["DRYFIT POLIESTER 100%","DRYFIT COM ELASTANO PROTEÇÃO UV50","POLIAMIDA 96% ELASTANO 4%","ALGODAO 100%","ALGODAO COM ELASTANO","MOLETOM","PIQUET COM ELASTANO","SUPLEX POLIAMIDA","TACTEL COM ELASTANO","BRIM LEVE"];
+
+/* nomes dos grupos — inventados a partir do conteúdo de cada faixa */
+const GRUPOS={
+  '010':'Camisetas e polos', '020':'Raglan', '030':'Regatas',
+  '040':'Moletom', '050':'Cropped', '060':'Tops',
+  '070':'Calças', '080':'Bermudas', '090':'Calções',
+  '100':'Shorts', '110':'Uniformes e social', '120':'Acessórios',
+  'KIT':'Kits (conjuntos)', '???':'Sem código — a classificar'
+};
+
+/* "FT-010-000M — CAMISETA" -> {cod, nome, grupo, gen} */
+function parse(t){
+  const p=t.split('—');
+  const cod=(p[0]||'').trim();
+  const nome=(p.slice(1).join('—')||'').trim()||cod;
+  let grupo='???', gen='U';
+  if(/^FT-KIT/i.test(cod)) grupo='KIT';
+  else{
+    const m=cod.match(/^FT-(\d{3})-\d{3}([MFCU])/i);
+    if(m){ grupo=m[1]; gen=m[2].toUpperCase(); }
+  }
+  if(grupo==='???'){ /* sem código: o gênero sai do nome */
+    if(/FEMININ|\bFEM\b/i.test(t)) gen='F'; else if(/MASC/i.test(t)) gen='M';
+  }
+  if(grupo==='KIT') gen='U';
+  return {txt:t, cod:grupo==='???'?'—':cod, nome, grupo, gen};
+}
+const ITENS=REFS.map(parse);
+const ORDEM=['010','020','030','040','050','060','070','080','090','100','110','120','KIT','???'];
+const CORGEN={M:'var(--ft-genero-masc)',F:'var(--ft-genero-fem)',C:'var(--ft-genero-inf)',U:'var(--ft-genero-uni)'};
+
+function porGrupo(filtro){
+  const q=(filtro||'').trim().toLowerCase();
+  const map={};
+  ITENS.forEach(i=>{
+    if(q && !(i.txt.toLowerCase().includes(q))) return;
+    (map[i.grupo]=map[i.grupo]||[]).push(i);
+  });
+  return ORDEM.filter(g=>map[g]&&map[g].length).map(g=>({g, nome:GRUPOS[g], itens:map[g]}));
+}
+
+/* ---------- modal ---------- */
+let selecionado='FT-020-000M — RAGLAN MASC SEM PUNHO';
+let abertos=new Set(['020']);
+function desenhaModal(){
+  const q=document.getElementById('buscaRef').value;
+  const gs=porGrupo(q);
+  const rolo=document.getElementById('roloRef');
+  if(!gs.length){ rolo.innerHTML='<div style="padding:18px;font-size:12px;color:var(--ft-cinza-40)">Nenhuma referência com esse nome.</div>'; }
+  else rolo.innerHTML=gs.map(({g,nome,itens})=>{
+    /* com busca ativa os grupos abrem sozinhos: esconder o resultado é o
+       oposto do que a pessoa pediu ao digitar */
+    const aberto=(q.trim()||abertos.has(g))?' aberto':'';
+    const pilha=[...new Set(itens.map(i=>i.gen))].slice(0,4)
+      .map(gen=>`<i style="background:${CORGEN[gen]}"></i>`).join('');
+    return `<div class="grp${aberto}" data-g="${g}">
+      <button class="grp-bt">
+        <span class="grp-cod">${g==='???'?'—':g}</span>
+        <span class="grp-nome">${nome}</span>
+        <span class="grp-pilha">${pilha}</span>
+        <span class="grp-qtd">${itens.length}</span>
+        <svg class="grp-seta" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="grp-lista">${itens.map(i=>`
+        <div class="ref-item${i.txt===selecionado?' sel':''}" data-ref="${i.txt.replace(/"/g,'&quot;')}">
+          <span class="gen ${i.gen}">${i.gen}</span>
+          <span class="ref-cod">${i.cod.replace('FT-','')}</span>
+          <span class="ref-nome">${i.nome}</span>
+        </div>`).join('')}</div>
+    </div>`;
+  }).join('');
+  const total=gs.reduce((s,x)=>s+x.itens.length,0);
+  document.getElementById('peRef').textContent=
+    q.trim()? `${total} de ${ITENS.length} referências` : `${ITENS.length} referências · ${gs.length} grupos`;
+  document.getElementById('demoRef').textContent=selecionado||'Selecione…';
+}
+document.getElementById('roloRef').addEventListener('click',e=>{
+  const bt=e.target.closest('.grp-bt');
+  if(bt){ const g=bt.parentElement.dataset.g;
+    abertos.has(g)?abertos.delete(g):abertos.add(g); desenhaModal(); return; }
+  const it=e.target.closest('.ref-item');
+  if(it){ selecionado=it.dataset.ref; desenhaModal(); }
+});
+document.getElementById('buscaRef').addEventListener('input',desenhaModal);
+document.getElementById('btLimparRef').addEventListener('click',()=>{
+  selecionado=''; desenhaModal();
+});
+
+/* ---------- banco ---------- */
+let bdSel='FT-020-000M — RAGLAN MASC SEM PUNHO';
+let bdAbertos=new Set(['020']);
+/* fichas de exemplo — só três preenchidas, para mostrar os dois estados */
+const FICHAS={
+  'FT-020-000M — RAGLAN MASC SEM PUNHO':{
+    tecidos:[{nome:'DRYFIT POLIESTER 100%',parte:'Corpo',base:0.72},
+             {nome:'DRYFIT COM ELASTANO PROTEÇÃO UV50',parte:'Mangas (raglan)',base:0.28}],
+    avi:[{nome:'Ribana de gola',qtd:0.35,uni:'m'},
+         {nome:'Linha de costura',qtd:120,uni:'m'},
+         {nome:'Etiqueta de composição',qtd:1,uni:'un'}]
+  },
+  'FT-040-001M — BLUSA MOLETOM MASC COM ZIPER':{
+    tecidos:[{nome:'MOLETOM',parte:'Corpo + mangas',base:1.45},
+             {nome:'MOLETOM',parte:'Capuz',base:0.38}],
+    avi:[{nome:'Zíper destacável 60cm',qtd:1,uni:'un'},
+         {nome:'Cordão de capuz',qtd:1.4,uni:'m'},
+         {nome:'Ilhós',qtd:2,uni:'un'},
+         {nome:'Punho canelado',qtd:0.30,uni:'m'},
+         {nome:'Linha de costura',qtd:210,uni:'m'}]
+  },
+  'FT-100-000F — SHORT FEM RECORTADO':{
+    tecidos:[{nome:'SUPLEX POLIAMIDA',parte:'Corpo',base:0.46}],
+    avi:[{nome:'Elástico 3cm',qtd:0.82,uni:'m'},
+         {nome:'Linha de costura',qtd:85,uni:'m'},
+         {nome:'Etiqueta de composição',qtd:1,uni:'un'}]
+  }
+};
+/* escada: quanto cada tamanho cresce sobre o anterior */
+let escadaPct=6;
+const AJUSTES={};   /* {ref|tecIdx|tam: valor} — células corrigidas à mão */
+
+function consumo(base,i,chaveAjuste){
+  const a=AJUSTES[chaveAjuste];
+  if(a!=null)return a;
+  const iM=TAMANHOS.indexOf('M');
+  return base*Math.pow(1+escadaPct/100, i-iM);
+}
+const f2=n=>n.toFixed(2).replace('.',',');
+const f3=n=>n.toFixed(3).replace('.',',');
+
+function desenhaBanco(){
+  const q=document.getElementById('buscaBd').value;
+  const gs=porGrupo(q);
+  document.getElementById('bdLista').innerHTML=gs.map(({g,nome,itens})=>{
+    const aberto=(q.trim()||bdAbertos.has(g))?' aberto':'';
+    const comFicha=itens.filter(i=>FICHAS[i.txt]).length;
+    return `<div class="grp${aberto}" data-g="${g}">
+      <button class="grp-bt">
+        <span class="grp-cod">${g==='???'?'—':g}</span>
+        <span class="grp-nome">${nome}</span>
+        <span class="marca-mat ${comFicha?'ok':'falta'}" title="referências com ficha de material">
+          ${comFicha?'<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>':''}${comFicha}/${itens.length}</span>
+        <svg class="grp-seta" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="grp-lista">${itens.map(i=>`
+        <div class="ref-item${i.txt===bdSel?' sel':''}" data-ref="${i.txt.replace(/"/g,'&quot;')}">
+          <span class="gen ${i.gen}">${i.gen}</span>
+          <span class="ref-nome">${i.nome}</span>
+          ${FICHAS[i.txt]?'<span class="marca-mat ok"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></span>':''}
+        </div>`).join('')}</div>
+    </div>`;
+  }).join('');
+  const total=gs.reduce((s,x)=>s+x.itens.length,0);
+  const comFicha=Object.keys(FICHAS).length;
+  document.getElementById('bdConta').textContent=
+    `${total} referências · ${comFicha} com ficha de material`;
+  desenhaFicha();
+}
+
+function desenhaFicha(){
+  const item=ITENS.find(i=>i.txt===bdSel);
+  const cx=document.getElementById('bdFicha');
+  if(!item){ cx.innerHTML='<p style="color:var(--ft-cinza-40)">Escolha uma referência à esquerda.</p>'; return; }
+  const fi=FICHAS[bdSel];
+  const cab=`
+    <div class="ficha-cab">
+      <span class="gen ${item.gen}" style="width:24px;height:24px;font-size:11px;">${item.gen}</span>
+      <div style="flex:1">
+        <h3>${item.nome}</h3>
+        <span class="cod">${item.cod}</span>
+        <span style="margin-left:8px">${fi?'<span class="pill ok">ficha completa</span>':'<span class="pill pend">sem ficha</span>'}</span>
+      </div>
+    </div>
+    <p class="ficha-sub">Grupo ${item.grupo==='???'?'sem código':item.grupo} · ${GRUPOS[item.grupo]}</p>`;
+
+  if(!fi){
+    cx.innerHTML=cab+`
+      <div class="sec" style="text-align:center;padding:36px 20px;border:1.5px dashed var(--ft-borda);border-radius:10px;">
+        <p style="margin:0 0 12px;font-size:12.5px;color:var(--ft-cinza-70);">
+          Esta referência ainda não tem ficha de material.<br>
+          <span style="font-size:11.5px;color:var(--ft-cinza-40)">Sem ela, o pedido é orçado mas não dá para saber quanto comprar.</span>
+        </p>
+        <button class="bt forte"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Criar ficha de material</button>
+        <p style="margin:12px 0 0;font-size:11px;color:var(--ft-cinza-40);">
+          ou <a href="#" style="color:var(--ft-vermelho)">copiar a ficha de outra referência do grupo ${item.grupo}</a>
+        </p>
+      </div>`;
+    return;
+  }
+
+  const gradeDe=(t,ti)=>`
+    <table class="grade">
+      <thead><tr><th style="text-align:left;padding-left:7px">Tamanho</th>${TAMANHOS.map(x=>`<th>${x}</th>`).join('')}</tr></thead>
+      <tbody><tr>
+        <td class="rot">metros</td>
+        ${TAMANHOS.map((x,i)=>{
+          const ch=bdSel+'|'+ti+'|'+x;
+          const manual=AJUSTES[ch]!=null;
+          return `<td class="${x==='M'?'base':''}" ${manual?'style="background:#FDF1F1"':''}
+            title="${x==='M'?'tamanho base — digite aqui':'da escada; edite para fixar'}">
+            <input value="${f3(consumo(t.base,i,ch))}" data-t="${ti}" data-tam="${x}"></td>`;
+        }).join('')}
+      </tr></tbody>
+    </table>`;
+
+  const tecidos=fi.tecidos.map((t,ti)=>`
+    <div style="margin-bottom:14px">
+      <div class="linha-mat" style="grid-template-columns:1fr 200px 34px">
+        <div class="nome">${t.parte}<small>parte da peça</small></div>
+        <select class="inp">${TECIDOS.map(x=>`<option${x===t.nome?' selected':''}>${x}</option>`).join('')}</select>
+        <button class="lixo" title="remover"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+      </div>
+      ${gradeDe(t,ti)}
+    </div>`).join('');
+
+  const avi=fi.avi.map(a=>`
+    <div class="linha-mat">
+      <div class="nome">${a.nome}</div>
+      <input class="inp num" value="${a.uni==='un'?a.qtd:f2(a.qtd)}">
+      <select class="inp"><option${a.uni==='m'?' selected':''}>m</option><option${a.uni==='un'?' selected':''}>un</option><option>g</option><option>par</option></select>
+      <button class="lixo" title="remover"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
+    </div>`).join('');
+
+  /* simulador: uma grade de pedido de exemplo */
+  const PEDIDO={PP:4,P:8,M:22,G:26,GG:14,XG:6,G1:0,G2:2,G3:0,G4:0};
+  const totalPecas=Object.values(PEDIDO).reduce((a,b)=>a+b,0);
+  const porTecido=fi.tecidos.map((t,ti)=>{
+    let m=0;
+    TAMANHOS.forEach((x,i)=>{ m+=consumo(t.base,i,bdSel+'|'+ti+'|'+x)*(PEDIDO[x]||0); });
+    return {nome:t.nome, parte:t.parte, m};
+  });
+  const somaTec=porTecido.reduce((s,x)=>s+x.m,0);
+
+  cx.innerHTML=cab+`
+    <div class="sec">
+      <div class="sec-tit">Tecidos · consumo por tamanho</div>
+      ${tecidos}
+      <div class="escada">
+        <b>Escada:</b> cada tamanho gasta
+        <input id="escPct" type="number" step="0.5" value="${escadaPct}" style="width:56px" > % a mais que o anterior,
+        a partir do <b>M</b>. <span style="color:var(--ft-cinza-40)">Célula editada à mão fica rosa e a escada não a atropela.</span>
+      </div>
+      <button class="bt" style="margin-top:9px"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Acrescentar tecido</button>
+    </div>
+
+    <div class="sec">
+      <div class="sec-tit">Aviamentos · por peça</div>
+      ${avi}
+      <button class="bt" style="margin-top:9px"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Acrescentar aviamento</button>
+    </div>
+
+    <div class="sec">
+      <div class="sec-tit">Quanto comprar · simulação com um pedido</div>
+      <div class="sim">
+        <p style="margin:0 0 9px;font-size:11.5px;color:var(--ft-cinza-70)">
+          Grade de exemplo: ${Object.entries(PEDIDO).filter(([,q])=>q).map(([t,q])=>`<b>${t}</b> ${q}`).join(' · ')}
+          — <b>${totalPecas} peças</b>
+        </p>
+        <table>
+          <thead><tr><th>Material</th><th>Por peça (média)</th><th>Total do pedido</th></tr></thead>
+          <tbody>
+            ${porTecido.map(t=>`<tr><td>${t.nome}<br><span style="font-size:10px;color:var(--ft-cinza-40)">${t.parte}</span></td>
+              <td>${f3(t.m/totalPecas)} m</td><td>${f2(t.m)} m</td></tr>`).join('')}
+            ${fi.avi.map(a=>`<tr><td>${a.nome}</td><td>${a.uni==='un'?a.qtd:f2(a.qtd)} ${a.uni}</td>
+              <td>${a.uni==='un'?(a.qtd*totalPecas):f2(a.qtd*totalPecas)} ${a.uni}</td></tr>`).join('')}
+            <tr class="tot"><td>Tecido, somando tudo</td><td>${f3(somaTec/totalPecas)} m</td>
+              <td class="grande">${f2(somaTec)} m</td></tr>
+          </tbody>
+        </table>
+        <p style="margin:9px 0 0;font-size:10.5px;color:var(--ft-cinza-40)">
+          Sem perda de encaixe. Se a fábrica trabalha com uma folga fixa (5%, 8%), ela entra aqui como um
+          campo — me diga o número que vocês usam.
+        </p>
+      </div>
+    </div>`;
+
+  cx.querySelectorAll('.grade input').forEach(inp=>{
+    inp.addEventListener('change',()=>{
+      const v=parseFloat(inp.value.replace(',','.'));
+      if(!isNaN(v))AJUSTES[bdSel+'|'+inp.dataset.t+'|'+inp.dataset.tam]=v;
+      desenhaFicha();
+    });
+  });
+  const esc=cx.querySelector('#escPct');
+  if(esc)esc.addEventListener('change',()=>{ escadaPct=parseFloat(esc.value)||0; desenhaFicha(); });
+}
+document.getElementById('bdLista').addEventListener('click',e=>{
+  const bt=e.target.closest('.grp-bt');
+  if(bt){ const g=bt.parentElement.dataset.g;
+    bdAbertos.has(g)?bdAbertos.delete(g):bdAbertos.add(g); desenhaBanco(); return; }
+  const it=e.target.closest('.ref-item');
+  if(it){ bdSel=it.dataset.ref; desenhaBanco(); }
+});
+document.getElementById('buscaBd').addEventListener('input',desenhaBanco);
+
+/* ---------- tabela de grupos da aba 3 ---------- */
+(function(){
+  const map={};
+  ITENS.forEach(i=>(map[i.grupo]=map[i.grupo]||[]).push(i));
+  document.getElementById('tabelaGrupos').innerHTML=
+    '<table class="grade" style="margin-top:6px">'
+    +'<thead><tr><th style="text-align:left;padding-left:7px">Código</th>'
+    +'<th style="text-align:left;padding-left:7px">Nome que propus</th><th>Peças</th>'
+    +'<th style="text-align:left;padding-left:7px">Exemplo de dentro</th></tr></thead><tbody>'
+    +ORDEM.filter(g=>map[g]).map(g=>`<tr>
+        <td class="rot">${g==='???'?'(sem)':g}</td>
+        <td class="rot" style="font-weight:400">${GRUPOS[g]}</td>
+        <td>${map[g].length}</td>
+        <td class="rot" style="font-weight:400;color:var(--ft-cinza-40);font-size:10px">${map[g][0].nome}</td>
+      </tr>`).join('')
+    +'</tbody></table>';
+})();
+
+/* ---------- abas ---------- */
+document.querySelectorAll('.aba').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.aba').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.tela').forEach(t=>t.classList.toggle('on',t.id==='t-'+b.dataset.t));
+}));
+
+desenhaModal();
+desenhaBanco();
+</script>
+</body>
+</html>

@@ -49,6 +49,16 @@ checa('clicar numa aba troca para ela', r.ativaDepoisDeClicar, 0);
 checa('o × fecha', r.aposFechar, 2);
 
 console.log('\n=== 2. VISUAL DO KIT §08 ===');
+/* ESPERA A ABA ATIVA FICAR VERMELHA ANTES DE MEDIR.
+
+   A barra tem transição, e a aba ativa é pintada por classe. Em bateria,
+   com três navegadores disputando a máquina, a leitura caía ANTES de o
+   estilo assentar e a ativa era medida com a cor da inativa — uma falha
+   que só aparecia junto e passava sozinha. Medido na v3.301. */
+await page.waitForFunction(()=>{
+  const on=document.querySelector('.ft-tab.on');
+  return on && getComputedStyle(on).backgroundColor==='rgb(198, 22, 27)';
+}, null, {timeout:8000}).catch(()=>{});
 r = await page.evaluate(() => {
   const barra = getComputedStyle(document.querySelector('.ft-tabbar'));
   const abas = [...document.querySelectorAll('.ft-tab')];
