@@ -15,7 +15,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1400,height:900}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v291.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v295.html')).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O EDITOR NÃO BRILHA — a animação é só do arquivo ===');
@@ -87,8 +87,30 @@ r=await q.evaluate(async ()=>{
     obs:{ tocando:obs.classList.contains('play-brilhar'), anim:eo.animationName,
           dur:eo.animationDuration, easing:eo.animationTimingFunction,
           vezes:eo.animationIterationCount,
-          temAnel:/rgba\(198, 22, 27, 0\.35\)/.test(eo.boxShadow),
-          guardouASombra:/rgba\(17, 18, 20, 0\.05\)/.test(eo.boxShadow) },
+          /* O ANEL É AMOSTRADO, NÃO FOTOGRAFADO.
+
+             A animação vai de rgba(198,22,27,.35) no 0% e no 45% até
+             rgba(0,0,0,0) no 100%: existe um instante, ao fim de CADA uma
+             das dez voltas, em que o vermelho não está lá. Ler o
+             box-shadow uma vez só é apostar em não cair justamente nele —
+             e em bateria, com três navegadores disputando a máquina, essa
+             aposta se perde. Medido: passava sozinho e falhava junto.
+             Amostrar por uma volta inteira pergunta o que interessa de
+             verdade: o anel vermelho aparece? */
+          temAnel:await (async()=>{
+            for(let i=0;i<40;i++){
+              if(/rgba\(198, 22, 27, 0\.35\)/.test(getComputedStyle(obs).boxShadow))return true;
+              await new Promise(s=>setTimeout(s,30));
+            }
+            return false;
+          })(),
+          guardouASombra:await (async()=>{
+            for(let i=0;i<40;i++){
+              if(/rgba\(17, 18, 20, 0\.05\)/.test(getComputedStyle(obs).boxShadow))return true;
+              await new Promise(s=>setTimeout(s,30));
+            }
+            return false;
+          })() },
     cor:ec?{ tocando:cor.classList.contains('play-pulsar'), anim:ec.animationName,
              dur:ec.animationDuration, easing:ec.animationTimingFunction,
              vezes:ec.animationIterationCount }:null,

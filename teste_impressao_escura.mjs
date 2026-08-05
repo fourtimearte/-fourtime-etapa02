@@ -4,7 +4,7 @@
 import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v291.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v295.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(50)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -82,7 +82,12 @@ const r=await p.evaluate(()=>{
              return cab?getComputedStyle(cab).backgroundColor:null;})() };
 });
 checa('folha branca', r.folha, 'rgb(255, 255, 255)');
-checa('tinta masculina clara', r.generoMasc, 'rgb(227, 238, 251)');
+/* v3.295: no papel quem manda é a PALETA DE IMPRESSÃO, não o :root claro.
+   O que este teste garante continua sendo o mesmo — imprimir do tema escuro
+   sai igual a imprimir do claro (seções 1 e 2) — mas o valor de referência
+   passou a ser o da paleta de papel: a tarja masculina é 40% mais forte.
+   Ver teste_impressao_cores para a paleta inteira. */
+checa('tinta masculina = a da paleta de papel', r.generoMasc, 'rgb(151, 182, 245)');
 /* a linha do documento é UMA só desde a v279: comparar com ela */
 checa('borda da tabela = linha do documento', r.bordaTabela, r.linhaDoDocumento);
 console.log('     '+JSON.stringify(r));
