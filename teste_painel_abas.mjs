@@ -15,7 +15,7 @@
 import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v296.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v297.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(52)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -138,9 +138,9 @@ console.log('     '+JSON.stringify(lidos));
 checa('a lente está desligada', lidos.lente, false);
 checa('  e mesmo assim a maquete mostra o papel',
   [lidos.masc,lidos.fem,lidos.inf],
-  ['rgb(151, 182, 245)','rgb(239, 154, 192)','rgb(143, 193, 186)']);
-checa('  selo e aviso vermelhos', [lidos.selo,lidos.aviso], ['rgb(226, 132, 134)','rgb(226, 132, 134)']);
-checa('  bordas escurecidas', lidos.borda, 'rgb(149, 151, 158)');
+  ['rgb(108, 160, 228)','rgb(254, 144, 193)','rgb(104, 187, 176)']);
+checa('  selo e aviso vermelhos', [lidos.selo,lidos.aviso], ['rgb(254, 57, 57)','rgb(240, 66, 69)']);
+checa('  bordas escurecidas', lidos.borda, 'rgb(186, 186, 186)');
 checa('  e o documento de verdade intocado', lidos.doc, '#E3EEFB');
 
 console.log('\n=== 7. MEXER MUDA A MAQUETE NA HORA, E SÓ ELA ===');

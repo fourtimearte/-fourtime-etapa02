@@ -13,7 +13,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v296.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v297.html')).href);
 await esperaPronto(p);
 await p.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,2600)); });
 
@@ -25,7 +25,11 @@ let r=await p.evaluate(async ()=>{
                   document.querySelector('.ft-menu'),document.querySelector('.ft-tabbar')].filter(Boolean);
   const digital=()=>{ const o=[]; alvo().forEach(raiz=>[raiz,...raiz.querySelectorAll('*')].forEach(el=>{
     const s=getComputedStyle(el);
+    /* borderBottom entrou na v3.297: a barra de aviso só tem o traço de
+       BAIXO (desde a v3.274), então --ed-aviso-bd não aparecia em nenhuma
+       das quatro bordas lidas e o token era dado como morto — estando vivo. */
     o.push(s.color+'|'+s.backgroundColor+'|'+s.borderTopColor+'|'+s.borderLeftColor+'|'
+          +s.borderBottomColor+'|'
           +s.fontSize+'|'+s.fontFamily.slice(0,24)+'|'+s.fontWeight+'|'+s.fontStyle); })); return o; };
   const espera=()=>new Promise(s=>requestAnimationFrame(()=>requestAnimationFrame(s)));
   const raiz=document.documentElement;
@@ -156,7 +160,7 @@ checa('  mas um clique inteiro no fundo ainda fecha', r.depoisDoCliqueReal, fals
 
 console.log('\n=== ACHAR UMA COR NA LISTA ===');
 /* Reclamação real: "o painel não tem as cores de gênero". Tinha — mas a
-   lista de 22 cores rola dentro de uma caixa de 300px e só 9 apareciam,
+   lista de 34 cores rola dentro de uma caixa de 480px e só parte aparecia,
    sem nenhum sinal de que continuava. Agora tem filtro, contador e sombra
    no pé. O teste cobra as três coisas. */
 r=await p.evaluate(async ()=>{
@@ -193,11 +197,16 @@ r=await p.evaluate(async ()=>{
 console.log('     '+JSON.stringify(r));
 checa('a lista de cores rola por dentro', r.rola, true);
 checa('  e avisa que rola (sombra no pé)', r.avisaQueRola, true);
-checa('  o contador diz quantas cores existem', r.conta, '22 cores');
-checa('filtrar por "genero" acha as três', r.porGenero,
-      ['--ft-genero-masc','--ft-genero-fem','--ft-genero-inf']);
-checa('  com acento também', r.porAcento, 3);
-checa('  e por "referencia" também', r.porRef, 3);
+/* v3.297: 22 -> 34. A aba Cores passou a governar os MESMOS objetos da aba
+   Impressão — tarja, borda e texto de cada gênero, mais o selo do layout e
+   a barra de aviso — em vez de só a tarja. */
+checa('  o contador diz quantas cores existem', r.conta, '34 cores');
+checa('filtrar por "genero" acha as nove', r.porGenero,
+      ['--ft-genero-masc','--ft-genero-masc-bd','--ft-genero-masc-tx',
+       '--ft-genero-fem','--ft-genero-fem-bd','--ft-genero-fem-tx',
+       '--ft-genero-inf','--ft-genero-inf-bd','--ft-genero-inf-tx']);
+checa('  com acento também', r.porAcento, 9);
+checa('  e por "referencia" também', r.porRef, 9);
 checa('  filtradas, cabem todas sem rolar', r.todosNaCaixa, true);
 checa('busca sem resultado não quebra', r.nada, 0);
 
