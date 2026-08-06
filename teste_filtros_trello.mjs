@@ -15,7 +15,7 @@ import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 import { writeFileSync } from 'fs';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v302.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v303.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(52)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -62,7 +62,7 @@ const r1=await q.evaluate(()=>({
     fo=document.querySelector('.folha-a4');
     return !!(f&&fo&&(f.compareDocumentPosition(fo)&Node.DOCUMENT_POSITION_FOLLOWING)); })(),
   baixoDentroDaBarraFixa:!!document.querySelector('#ftBarra #ftFiltrosFixo'),
-  grupos:[...new Set([...document.querySelectorAll('#ftFiltros .ft-chip')].map(c=>c.dataset.g))],
+  grupos:[...document.querySelectorAll('#ftFiltros .ft-fsel')].map(c=>c.dataset.g),
   mods:document.querySelectorAll('.lay-modulo').length,
   conta:(document.querySelector('#ftFiltros .ft-fconta')||{}).textContent
 }));
@@ -73,7 +73,7 @@ checa('  e a de baixo mora na barra fixa', r1.baixoDentroDaBarraFixa, true);
 checa('os três grupos de filtro', r1.grupos, ['design','obs','inf']);
 checa('o contador começa sem filtro', r1.conta, r1.mods+' layouts');
 
-/* a contagem de cada chip tem de bater com o documento */
+/* toda opção precisa contar o que existe mesmo no documento */
 const bate=await q.evaluate(()=>{
   const mods=[...document.querySelectorAll('.lay-modulo')];
   const real=(g,v)=>mods.filter(m=>{
@@ -84,20 +84,31 @@ const bate=await q.evaluate(()=>{
     const inf=!!(tab&&(tab.dataset.modo==='infantil'||m.querySelector('tr.tam-infantil')));
     return (v==='com')===inf;
   }).length;
-  return [...document.querySelectorAll('#ftFiltros .ft-chip')]
-    .filter(c=>+c.querySelector('.qt').textContent!==real(c.dataset.g,c.dataset.v))
-    .map(c=>c.dataset.g+':'+c.dataset.v);
+  const ruins=[];
+  [...document.querySelectorAll('#ftFiltros .ft-fsel')].forEach(sel=>{
+    [...sel.options].forEach(o=>{
+      if(!o.value)return;                       /* a opção "Todos" não conta */
+      const n=+(o.textContent.match(/\((\d+)\)$/)||[,'-'])[1];
+      if(n!==real(sel.dataset.g,o.value))ruins.push(sel.dataset.g+':'+o.value);
+    });
+  });
+  return ruins;
 });
-checa('todo chip conta o que existe mesmo', bate, []);
-checa('  e nenhum chip devolve zero',
-  await q.evaluate(()=>[...document.querySelectorAll('#ftFiltros .ft-chip')]
-    .filter(c=>c.querySelector('.qt').textContent==='0').length), 0);
+checa('toda opção conta o que existe mesmo', bate, []);
+checa('  e nenhuma opção devolve zero',
+  await q.evaluate(()=>[...document.querySelectorAll('#ftFiltros .ft-fsel option')]
+    .filter(o=>o.value&&/\(0\)$/.test(o.textContent)).length), 0);
+checa('  toda lista começa com "Todos"',
+  await q.evaluate(()=>[...document.querySelectorAll('#ftFiltros .ft-fsel')]
+    .every(s=>s.options[0].value===''&&s.options[0].textContent==='Todos')), true);
 
 console.log('\n=== 3. APAGA A 20%, E NÃO SOME ===');
 const um=await q.evaluate(async()=>{
-  const c=document.querySelector('#ftFiltros .ft-chip[data-g="design"]');
-  const alvo=c.dataset.v, esperado=+c.querySelector('.qt').textContent;
-  c.click(); await new Promise(s=>setTimeout(s,350));
+  const c=document.querySelector('#ftFiltros .ft-fsel[data-g="design"]');
+  const op=c.options[1];
+  const alvo=op.value, esperado=+(op.textContent.match(/\((\d+)\)$/)||[,0])[1];
+  c.value=alvo; c.dispatchEvent(new Event('change',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,350));
   const mods=[...document.querySelectorAll('.lay-modulo')];
   const ap=mods.filter(m=>m.classList.contains('ft-apagado'));
   return { alvo, esperado, acesos:mods.length-ap.length, apagados:ap.length,
@@ -105,7 +116,8 @@ const um=await q.evaluate(async()=>{
     /* NÃO some: continua ocupando o mesmo espaço */
     aindaVisivel:ap.length?(getComputedStyle(ap[0]).display!=='none'
       && ap[0].getBoundingClientRect().height>10):null,
-    espelho:[...document.querySelectorAll('#ftFiltrosFixo .ft-chip.on')].map(x=>x.dataset.v),
+    espelho:[document.querySelector('#ftFiltrosFixo .ft-fsel[data-g="design"]').value],
+    marcado:document.querySelector('#ftFiltrosFixo .ft-fsel[data-g="design"]').classList.contains('on'),
     conta:document.querySelector('#ftFiltrosFixo .ft-fconta').textContent };
 });
 console.log('     '+JSON.stringify(um));
@@ -115,42 +127,48 @@ checa('  mas continuam ocupando o lugar', um.aindaVisivel, true);
 checa('a outra barra acompanha', um.espelho, [um.alvo]);
 checa('  e mostra a mesma conta', um.conta, um.acesos+' de '+r1.mods+' layouts');
 
-console.log('\n=== 4. DENTRO DO GRUPO SOMA; ENTRE GRUPOS RESTRINGE ===');
+console.log('\n=== 4. CADA CAMPO É ESCOLHA ÚNICA; ENTRE CAMPOS RESTRINGE ===');
 const dois=await q.evaluate(async()=>{
-  const cs=[...document.querySelectorAll('#ftFiltros .ft-chip[data-g="design"]')];
-  const a=+cs[0].querySelector('.qt').textContent;
-  const bq=+cs[1].querySelector('.qt').textContent;
-  cs[1].click(); await new Promise(s=>setTimeout(s,300));
-  const soma=document.querySelectorAll('.lay-modulo:not(.ft-apagado)').length;
-  /* agora um filtro de OUTRO grupo: só pode diminuir */
-  document.querySelector('#ftFiltros .ft-chip[data-g="obs"][data-v="com"]').click();
-  await new Promise(s=>setTimeout(s,300));
+  const sel=document.querySelector('#ftFiltros .ft-fsel[data-g="design"]');
+  const troca=async v=>{ sel.value=v; sel.dispatchEvent(new Event('change',{bubbles:true}));
+    await new Promise(s=>setTimeout(s,280));
+    return document.querySelectorAll('.lay-modulo:not(.ft-apagado)').length; };
+  const n1=await troca(sel.options[1].value);
+  /* trocar a escolha SUBSTITUI: campo não acumula, é escolha única */
+  const n2=await troca(sel.options[2].value);
+  const esperado2=+(sel.options[2].textContent.match(/\((\d+)\)$/)||[,0])[1];
+  /* um filtro de OUTRO campo só pode diminuir */
+  const o=document.querySelector('#ftFiltros .ft-fsel[data-g="obs"]');
+  o.value='com'; o.dispatchEvent(new Event('change',{bubbles:true}));
+  await new Promise(s=>setTimeout(s,280));
   const cruz=document.querySelectorAll('.lay-modulo:not(.ft-apagado)').length;
-  return {a,b:bq,soma,cruz};
+  return {n1,n2,esperado2,cruz};
 });
 console.log('     '+JSON.stringify(dois));
-checa('dois chips do MESMO grupo somam (OU)', dois.soma>=Math.max(dois.a,dois.b), true);
-checa('  e nunca passam da soma dos dois', dois.soma<=dois.a+dois.b, true);
-checa('um chip de OUTRO grupo restringe (E)', dois.cruz<=dois.soma, true);
+checa('trocar a escolha SUBSTITUI, não soma', dois.n2, dois.esperado2);
+checa('outro campo restringe (E)', dois.cruz<=dois.n2, true);
 
 console.log('\n=== 5. LIMPAR, POR QUALQUER UMA DAS BARRAS ===');
 const lim=await q.evaluate(async()=>{
-  const vis=getComputedStyle(document.querySelector('#ftFiltros .ft-flimpa')).display;
+  const vis=getComputedStyle(document.querySelector('#ftFiltros .ft-flimpa')).visibility;
   document.querySelector('#ftFiltrosFixo .ft-flimpa').click();
   await new Promise(s=>setTimeout(s,300));
   return { limparAparece:vis,
     apagados:document.querySelectorAll('.lay-modulo.ft-apagado').length,
-    marcados:document.querySelectorAll('.ft-chip.on').length,
+    marcados:document.querySelectorAll('.ft-fsel.on').length,
+    valores:[...document.querySelectorAll('.ft-fsel')].map(s=>s.value).join('|'),
     conta:document.querySelector('#ftFiltros .ft-fconta').textContent,
-    escondeDeNovo:getComputedStyle(document.querySelector('#ftFiltros .ft-flimpa')).display };
+    escondeDeNovo:getComputedStyle(document.querySelector('#ftFiltros .ft-flimpa')).visibility };
 });
 console.log('     '+JSON.stringify(lim));
-checa('o "limpar" só aparece filtrando', [lim.limparAparece,lim.escondeDeNovo], ['block','none']);
+checa('o "limpar" só aparece filtrando', [lim.limparAparece,lim.escondeDeNovo], ['visible','hidden']);
 checa('limpar pela barra fixa apaga tudo', [lim.apagados,lim.marcados], [0,0]);
+checa('  e todos os campos voltam a "Todos"', lim.valores, '|||||');
 checa('  e o contador volta ao total', lim.conta, r1.mods+' layouts');
 
 console.log('\n=== 6. O PAPEL NÃO TEM FILTRO NEM LAYOUT APAGADO ===');
-await q.evaluate(()=>document.querySelector('#ftFiltros .ft-chip[data-g="design"]').click());
+await q.evaluate(()=>{ const s=document.querySelector('#ftFiltros .ft-fsel[data-g="design"]');
+  s.value=s.options[1].value; s.dispatchEvent(new Event('change',{bubbles:true})); });
 await q.waitForTimeout(300);
 await q.emulateMedia({media:'print'});
 await q.waitForTimeout(500);
@@ -170,7 +188,7 @@ checa('  (a marca continua no DOM: quem volta da impressão volta filtrando)',
   papel.aindaMarcadoNoDOM, true);
 await q.emulateMedia({media:'screen'});
 
-console.log('\n=== 7. A BARRA FIXA COM O CORPO MAIOR ===');
+console.log('\n=== 7. A BARRA FIXA: CORPO MAIOR E CENTRALIZADA ===');
 const cor=await q.evaluate(()=>{
   const g=s=>getComputedStyle(document.querySelector(s));
   return { rotulo:g('#ftBarra .rot').fontSize, valor:g('#ftBarra .val').fontSize,
@@ -182,6 +200,19 @@ checa('rótulo 9 -> 10,5px', cor.rotulo, '10.5px');
 checa('valor 13 -> 15px', cor.valor, '15px');
 checa('pedido 13 -> 15px', cor.pedido, '15px');
 checa('total 12,5 -> 14px', cor.total, '14px');
+const centro=await q.evaluate(()=>{
+  const int=document.querySelector('.ft-barra-int');
+  const r=int.getBoundingClientRect();
+  const itens=[...int.querySelectorAll('.ft-bi')];
+  const e=itens[0].getBoundingClientRect().left-r.left;
+  const d=r.right-itens[itens.length-1].getBoundingClientRect().right;
+  return { just:getComputedStyle(int).justifyContent,
+           /* centrado = a folga da esquerda e a da direita são parecidas */
+           simetrico:Math.abs(e-d)<26, esq:Math.round(e), dir:Math.round(d) };
+});
+console.log('     '+JSON.stringify(centro));
+checa('a barra fixa está centralizada', centro.just, 'center');
+checa('  e as folgas dos dois lados batem', centro.simetrico, true);
 
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro no editor', erE.length, 0);
