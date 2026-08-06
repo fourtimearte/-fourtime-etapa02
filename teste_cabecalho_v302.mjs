@@ -19,7 +19,7 @@
 import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v301.html';
+const ARQ = process.env.FT_ARQ || 'fourtime-editor-v302.html';
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(50)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);

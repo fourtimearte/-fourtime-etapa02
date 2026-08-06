@@ -27,10 +27,11 @@ const SUITES = [
   'teste_faixa_v268', 'teste_botoes_v271', 'teste_abas_v270', 'teste_cab_v269',
   'teste_pop_v274', 'teste_painel_v266', 'teste_kit_v276',
   /* v3.277 — módulo de layout, rodapé, cabeçalho 2+, compressão */
-  'teste_v301_ajustes', 'teste_compat_v301', 'teste_impressao_escura', 'teste_painel_v301',
+  'teste_v302_ajustes', 'teste_compat_v302', 'teste_impressao_escura', 'teste_painel_v302',
   'teste_arquivar_data', 'teste_cnpj', 'teste_brilho_obs', 'teste_cores_grupos',
-  'teste_freio_servidor', 'teste_v301_correcoes', 'teste_cabecalho_v301',
+  'teste_freio_servidor', 'teste_v302_correcoes', 'teste_cabecalho_v302',
   'teste_impressao_cores', 'teste_painel_abas', 'teste_marca_padrao', 'teste_tabela_cantos',
+  'teste_filtros_trello',
   'teste_aviso_versao', 'teste_versao_servidor',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
@@ -54,20 +55,21 @@ const ANTIGAS = [
    compatibilidade (que é onde a versão anterior entra) e o painel. Uns 45s
    em vez de 90s. A bateria inteira é para quando o CÓDIGO muda. */
 const SUBIDA = [
-  'teste_v301_ajustes',      /* o que a versão trouxe                        */
+  'teste_v302_ajustes',      /* o que a versão trouxe                        */
   'teste_arquivar_data',     /* a data de arquivamento: modal, máscara, pasta */
   'teste_cnpj',              /* CNPJ: máscara, duas fontes, ficha se preenche   */
   'teste_brilho_obs',        /* brilhar/pulsar no arquivo do Trello             */
   'teste_cores_grupos',      /* cores por grupo: menu, banco e compatibilidade  */
   'teste_freio_servidor',    /* o catálogo passa, a duplicação continua barrada */
-  'teste_v301_correcoes',    /* CEP após o blur, painel x fonte, visualizador   */
-  'teste_cabecalho_v301',    /* as 12 células do cabeçalho, uma a uma           */
+  'teste_v302_correcoes',    /* CEP após o blur, painel x fonte, visualizador   */
+  'teste_cabecalho_v302',    /* as 12 células do cabeçalho, uma a uma           */
   'teste_impressao_cores',   /* a paleta de papel: só no print, e sincronizada  */
   'teste_painel_abas',       /* as quatro abas, a maquete e o copiar-tudo       */
   'teste_marca_padrao',      /* cada token diz se está no arquivo ou só aqui    */
   'teste_tabela_cantos',     /* os 4 cantos da tabela, com e sem valores        */
-  'teste_compat_v301',       /* aqui a versão anterior entra como origem     */
-  'teste_painel_v301',       /* nenhum token do painel pode ter morrido      */
+  'teste_filtros_trello',    /* filtros do arquivo do Trello + barra fixa       */
+  'teste_compat_v302',       /* aqui a versão anterior entra como origem     */
+  'teste_painel_v302',       /* nenhum token do painel pode ter morrido      */
   'teste_impressao_escura',  /* o documento do cliente e o papel             */
   'teste_aviso_versao', 'teste_versao_servidor',      /* sem isto, ninguém fica sabendo da publicação */
 ];
