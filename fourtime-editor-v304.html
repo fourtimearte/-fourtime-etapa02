@@ -7015,7 +7015,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.301';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.304';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -14397,20 +14397,28 @@ const CSS_BARRA_FIXA=`
   transition:transform .26s cubic-bezier(.16,1,.3,1);
 }
 .ft-barra.on{transform:translateY(0);}
+/* CORPO MAIOR NA BARRA (v3.302, a pedido). Ela nasceu com o corpo de uma
+   legenda — 9px no rótulo e 13px no valor — e é lida a um braço de
+   distância, com a página rolando. Rótulo 9 -> 10,5 e valor 13 -> 15. */
+/* CENTRALIZADA (v3.303, a pedido). Antes os campos começavam na esquerda e
+   o Pedido Nº era empurrado sozinho para a direita com margin-left:auto —
+   num monitor largo sobrava um vão no meio da barra. Agora o conjunto fica
+   centrado e o Pedido continua ao lado, separado pelo filete. */
 .ft-barra-int{
-  max-width:210mm;margin:0 auto;padding:7px 16px;min-height:44px;
-  display:flex;align-items:center;gap:20px;flex-wrap:nowrap;overflow:hidden;
+  max-width:210mm;margin:0 auto;padding:8px 16px;min-height:50px;
+  display:flex;align-items:center;justify-content:center;
+  gap:20px;flex-wrap:nowrap;overflow:hidden;
 }
 .ft-barra .ft-bi{display:flex;flex-direction:column;gap:1px;min-width:0;}
 .ft-barra .rot{
-  font-size:9px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
+  font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
   color:var(--k-subtle);white-space:nowrap;
 }
 .ft-barra .val{
-  font-size:13px;font-weight:500;color:var(--k-text);line-height:1.25;
+  font-size:15px;font-weight:500;color:var(--k-text);line-height:1.25;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.ft-barra .ft-bi.cliente{flex:1 1 auto;min-width:90px;}
+.ft-barra .ft-bi.cliente{flex:0 1 auto;min-width:90px;max-width:230px;}
 .ft-barra .ft-bi.cliente .val{font-weight:600;}
 .ft-barra .ft-bi.vendedor,
 .ft-barra .ft-bi.departamento,
@@ -14419,29 +14427,30 @@ const CSS_BARRA_FIXA=`
 /* números em mono com tabular-nums, como manda o kit */
 .ft-barra .ft-bi.total .val{
   font-family:'IBM Plex Mono',ui-monospace,monospace;
-  font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600;
+  font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;
 }
 .ft-barra .ft-bi.envio .val{
   font-family:'IBM Plex Mono',ui-monospace,monospace;
-  font-variant-numeric:tabular-nums;font-size:12.5px;
+  font-variant-numeric:tabular-nums;font-size:14px;
 }
 .ft-barra .ft-bi.pedido{
-  margin-left:auto;flex:0 0 auto;padding-left:20px;border-left:1px solid var(--k-border);
+  flex:0 0 auto;padding-left:20px;border-left:1px solid var(--k-border);
 }
 .ft-barra .ft-bi.pedido .val{
   font-family:'IBM Plex Mono',ui-monospace,monospace;
   font-variant-numeric:tabular-nums;
-  font-weight:600;font-size:13px;color:var(--k-primary);letter-spacing:.01em;
+  font-weight:600;font-size:15px;color:var(--k-primary);letter-spacing:.01em;
 }
 @media screen and (max-width:820px){
   .ft-barra-int{flex-wrap:wrap;gap:7px 16px;padding:8px 14px;min-height:0;}
-  .ft-barra .ft-bi.cliente{flex:1 1 55%;}
+  .ft-barra-int{justify-content:flex-start;}
+  .ft-barra .ft-bi.cliente{flex:1 1 55%;max-width:none;}
   .ft-barra .ft-bi.pedido{margin-left:auto;padding-left:16px;}
   .ft-barra .ft-bi.vendedor,
   .ft-barra .ft-bi.departamento,
   .ft-barra .ft-bi.envio,
   .ft-barra .ft-bi.total{flex:1 1 auto;max-width:none;}
-  .ft-barra .val{font-size:12.5px;}
+  .ft-barra .val{font-size:14px;}
 }
 /* o papel já tem o cabeçalho em toda folha */
 @media print{ .ft-barra{display:none !important;} }
@@ -14551,6 +14560,241 @@ const BARRA_RUNTIME=`
       });
     },{passive:true});
   }
+})();
+`;
+
+
+/* ================================================================
+   FILTROS DE LAYOUT — SÓ NO HTML EXPORTADO PARA O TRELLO (v3.302)
+
+   Quem abre o arquivo no Trello não está lendo o orçamento inteiro: está
+   procurando UMA coisa — "quais peças vão para o DTF?", "quais têm
+   recado?", "tem grade infantil?". Com dez ou vinte layouts, a resposta é
+   rolar a página inteira e confiar na memória.
+
+   OS QUE NÃO CASAM NÃO SOMEM, FICAM A 20% (a pedido). Esconder mudaria a
+   paginação e a numeração dos layouts, e o documento deixaria de ser o
+   documento; apagando, a folha continua a mesma e o olho encontra o que
+   procura sem perder a noção de onde aquilo está no pedido.
+
+   DUAS BARRAS, UM ESTADO. A de cima, acima da primeira folha, é a que se vê
+   ao abrir. A de baixo mora dentro da barra fixa e só existe quando a
+   página rolou — sem ela, filtrar da metade do documento obrigaria a
+   subir tudo de novo. As duas são a mesma lista e o mesmo estado.
+
+   OS CHIPS SAEM DO DOCUMENTO, não de uma lista fixa: só aparece o que
+   existe neste pedido. Um filtro que devolve zero é ruído.
+
+   NADA DISSO VAI PARA O PAPEL.
+   ================================================================ */
+const CSS_FILTROS=`
+.ft-filtros{
+  --k-surface:#FFFFFF; --k-border:#E4E8ED; --k-text:#161A20; --k-subtle:#68727E;
+  --k-primary:#C6161B; --k-hover:#F2F4F7; --k-campo:#FBFCFD;
+  font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  background:var(--k-surface);border:1px solid var(--k-border);border-radius:12px;
+  box-shadow:0 1px 2px rgba(17,18,20,.05);
+  max-width:210mm;margin:0 auto 10px;
+}
+/* O MIOLO, SEPARADO DA CAIXA (v3.304). Dentro da barra fixa o fundo e o
+   filete têm de atravessar a tela inteira, mas o conteúdo tem de ficar no
+   mesmo bloco de 210mm centrado da linha de dados logo acima. Com a caixa
+   e o miolo no MESMO elemento isso era impossível: ou se centralizava o
+   bloco e o fundo virava uma tira no meio da tela, ou se esticava o fundo
+   e o conteúdo grudava na esquerda — que foi o que aconteceu. */
+.ft-fint{
+  padding:10px 14px;
+  /* TRÊS COLUNAS, e não posicionamento absoluto: com o contador e o botão
+     fora do fluxo, os campos centralizados passavam POR BAIXO deles na
+     largura da barra fixa (210mm). Em grade, o meio recebe só o espaço que
+     sobra e a colisão deixa de ser possível. */
+  display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;
+}
+.ft-fcampos{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;}
+/* CAMPOS DE VERDADE, não pastilhas (v3.303, a pedido). Um <select> nativo:
+   diz sozinho que é escolha única, abre a lista inteira num toque e o
+   teclado funciona sem nada de nosso. */
+.ft-fcampo{display:flex;align-items:center;gap:5px;}
+.ft-fcampo > span{
+  font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--k-subtle);white-space:nowrap;
+}
+.ft-fsel{
+  font:inherit;font-size:13px;font-weight:500;color:var(--k-text);
+  background:var(--k-campo);border:1px solid var(--k-border);border-radius:8px;
+  padding:6px 26px 6px 10px;cursor:pointer;outline:none;min-width:104px;
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2368727E' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 9px center;background-size:13px;
+}
+.ft-fsel:hover{background-color:var(--k-hover);}
+.ft-fsel:focus{border-color:var(--k-primary);box-shadow:0 0 0 3px rgba(198,22,27,.14);}
+/* o campo COM escolha se marca: num monitor cheio de campos, saber quais
+   estão filtrando é a primeira pergunta */
+.ft-fsel.on{border-color:var(--k-primary);background-color:#FDF1F1;color:var(--k-primary);font-weight:600;}
+
+/* LIMPAR À DIREITA. Fica sempre na grade e some por visibility, não por
+   display: com display:none a coluna colapsaria e os campos do meio
+   pulariam de lugar no instante em que se escolhe o primeiro filtro. */
+.ft-flimpa{
+  border:1px solid var(--k-border);border-radius:8px;background:var(--k-surface);
+  font:inherit;font-size:12px;font-weight:600;color:var(--k-subtle);
+  padding:6px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  white-space:nowrap;visibility:hidden;
+}
+.ft-filtros.filtrando .ft-flimpa{visibility:visible;}
+.ft-flimpa:hover{border-color:var(--k-primary);color:var(--k-primary);}
+.ft-flimpa svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;}
+.ft-fconta{
+  font-size:11.5px;color:var(--k-subtle);white-space:nowrap;font-variant-numeric:tabular-nums;
+}
+
+/* O APAGADO. 20% a pedido, e sem transição de posição: a folha não se
+   mexe, só o brilho. */
+.lay-modulo{transition:opacity .18s cubic-bezier(.16,1,.3,1);}
+.lay-modulo.ft-apagado{opacity:.2;}
+
+#ftFiltros{margin-top:14px;}
+.ft-barra .ft-filtros{
+  border:none;border-radius:0;box-shadow:none;margin:0;padding:0;max-width:none;
+  border-top:1px solid var(--k-border);background:#FBFCFD;
+}
+/* CENTRALIZADO IGUAL À LINHA DE DADOS (v3.304, a pedido). Mesmos números do
+   .ft-barra-int: 210mm de largura máxima e margin:0 auto. As duas linhas da
+   barra passam a começar e terminar exatamente na mesma coluna. */
+.ft-barra .ft-filtros .ft-fint{max-width:210mm;margin:0 auto;padding:7px 16px 8px;}
+.ft-barra .ft-filtros .ft-fsel{background-color:#FFFFFF;min-width:98px;padding-right:24px;}
+.ft-barra .ft-filtros .ft-fsel.on{background-color:#FDF1F1;}
+/* na barra fixa o espaço é o mesmo da folha: os rótulos encolhem para os
+   três campos e o botão caberem sem se atropelar */
+.ft-barra .ft-filtros .ft-fint{gap:7px;}
+.ft-barra .ft-filtros .ft-fcampos{gap:8px;}
+.ft-barra .ft-filtros .ft-fconta{font-size:10.5px;}
+.ft-barra .ft-filtros .ft-fcampo{gap:4px;}
+.ft-barra .ft-filtros .ft-fcampo > span{font-size:9.5px;letter-spacing:.04em;}
+.ft-barra .ft-filtros .ft-fsel{font-size:12.5px;padding-top:5px;padding-bottom:5px;}
+.ft-barra .ft-filtros .ft-flimpa{font-size:11.5px;padding:5px 10px;}
+@media screen and (max-width:820px){
+  .ft-filtros{border-radius:0;border-left:0;border-right:0;}
+  .ft-fint{padding:9px 12px;grid-template-columns:1fr auto;}
+  #ftFiltros{margin-top:0;}
+  .ft-fcampos{grid-column:1 / -1;order:-1;justify-content:flex-start;}
+  .ft-fsel{min-width:0;flex:1 1 auto;}
+  .ft-fcampo{flex:1 1 44%;}
+}
+@media print{
+  .ft-filtros{display:none !important;}
+  .lay-modulo,.lay-modulo.ft-apagado{opacity:1 !important;}
+}
+`;
+
+
+const FILTROS_RUNTIME=`
+(function(){
+  var mods=[].slice.call(document.querySelectorAll('.lay-modulo'));
+  if(mods.length<2)return;              /* um layout só não precisa de filtro */
+
+  /* ---- o que cada layout TEM. Lido do documento, não de uma lista à
+     parte: o arquivo é a única fonte da verdade que viaja. ---- */
+  var dados=mods.map(function(m){
+    var tags=[].slice.call(m.querySelectorAll('.design-tag')).map(function(t){
+      return (t.dataset.tag||t.textContent||'').trim();
+    }).filter(Boolean);
+    var tab=m.querySelector('.lay-tabela-mini');
+    /* GRADE INFANTIL: ou a tabela está no modo infantil, ou tem alguma
+       fileira infantil preenchida enquanto está no modo adulto. As duas
+       coisas significam a mesma para quem produz. */
+    var inf=!!(tab&&(tab.dataset.modo==='infantil'||m.querySelector('tr.tam-infantil')));
+    return { el:m, tags:tags, obs:!!m.querySelector('.lay-area.tem-obs'), inf:inf };
+  });
+  var tags=[];
+  dados.forEach(function(d){ d.tags.forEach(function(t){ if(tags.indexOf(t)<0)tags.push(t); }); });
+  tags.sort();
+
+  var estado={design:'',obs:'',inf:''};
+  function conta(g,v){
+    return dados.filter(function(d){
+      if(g==='design')return d.tags.indexOf(v)>=0;
+      if(g==='obs')return v==='com'?d.obs:!d.obs;
+      return v==='com'?d.inf:!d.inf;
+    }).length;
+  }
+  function casa(d){
+    if(estado.design&&d.tags.indexOf(estado.design)<0)return false;
+    if(estado.obs&&estado.obs!==(d.obs?'com':'sem'))return false;
+    if(estado.inf&&estado.inf!==(d.inf?'com':'sem'))return false;
+    return true;
+  }
+  var esc=function(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');};
+  function opcao(g,v,rot){
+    var n=conta(g,v);
+    if(!n)return '';                     /* opção que devolve zero é ruído */
+    return '<option value="'+esc(v)+'">'+esc(rot)+' ('+n+')</option>';
+  }
+  function campo(g,rot,opts){
+    if(!opts)return '';
+    return '<label class="ft-fcampo"><span>'+rot+'</span>'
+      +'<select class="ft-fsel" data-g="'+g+'">'
+      +'<option value="">Todos</option>'+opts+'</select></label>';
+  }
+  var cDesign=campo('design','Design',tags.map(function(t){return opcao('design',t,t);}).join(''));
+  var cObs=campo('obs','Observação',opcao('obs','com','Com')+opcao('obs','sem','Sem'));
+  var cInf=campo('inf','Infantil',opcao('inf','com','Com')+opcao('inf','sem','Sem'));
+  if(!cDesign&&!cObs&&!cInf)return;
+  var corpo='<div class="ft-fint">'
+    +'<span class="ft-fconta"></span>'
+    +'<div class="ft-fcampos">'+cDesign+cObs+cInf+'</div>'
+    +'<button class="ft-flimpa" data-limpa="1" type="button">'
+    +'<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>limpar filtros</button>'
+    +'</div>';
+
+  var cima=document.createElement('div');
+  cima.className='ft-filtros'; cima.id='ftFiltros'; cima.innerHTML=corpo;
+  var folha1=document.querySelector('.folha-a4');
+  if(folha1&&folha1.parentNode)folha1.parentNode.insertBefore(cima,folha1);
+  var baixo=null, barra=document.getElementById('ftBarra');
+  if(barra){
+    baixo=document.createElement('div');
+    baixo.className='ft-filtros'; baixo.id='ftFiltrosFixo'; baixo.innerHTML=corpo;
+    barra.appendChild(baixo);
+  }
+  var barras=[cima,baixo].filter(Boolean);
+
+  function pinta(){
+    var n=0;
+    dados.forEach(function(d){
+      var ok=casa(d);
+      if(ok)n++;
+      d.el.classList.toggle('ft-apagado',!ok);
+    });
+    var ativo=!!(estado.design||estado.obs||estado.inf);
+    barras.forEach(function(b){
+      b.classList.toggle('filtrando',ativo);
+      [].slice.call(b.querySelectorAll('.ft-fsel')).forEach(function(sel){
+        /* as DUAS barras são a mesma escolha: a de baixo tem de nascer (e
+           continuar) com o que foi escolhido na de cima, e vice-versa */
+        if(sel.value!==estado[sel.dataset.g])sel.value=estado[sel.dataset.g];
+        sel.classList.toggle('on',!!estado[sel.dataset.g]);
+      });
+      var cx=b.querySelector('.ft-fconta');
+      if(cx)cx.textContent=ativo
+        ? (n+' de '+dados.length+(dados.length===1?' layout':' layouts'))
+        : (dados.length+' layouts');
+    });
+  }
+  document.addEventListener('change',function(e){
+    var sel=e.target.closest&&e.target.closest('.ft-fsel');
+    if(!sel||!sel.closest('.ft-filtros'))return;
+    estado[sel.dataset.g]=sel.value;
+    pinta();
+  });
+  document.addEventListener('click',function(e){
+    var lim=e.target.closest&&e.target.closest('[data-limpa]');
+    if(!lim||!lim.closest('.ft-filtros'))return;
+    estado={design:'',obs:'',inf:''};
+    pinta();
+  });
+  pinta();
 })();
 `;
 
@@ -14687,6 +14931,7 @@ function gerarHTML(imagens){
     '@media print{.area-paginas{--zoom:1 !important;zoom:1 !important;transform:none !important;}}'+
     CSS_CELULAR+   /* layout empilhado em telas de toque (só no arquivo exportado) */
     CSS_BARRA_FIXA+
+    CSS_FILTROS+      /* os filtros de layout — idem */
     CSS_BRILHO_OBS;   /* o brilho da observação — só existe no arquivo exportado */
   const cab=raiz.querySelector('head');
   if(cab)cab.appendChild(trava);
@@ -14711,7 +14956,10 @@ function gerarHTML(imagens){
   const sc=document.createElement('script');
   sc.textContent='const VIEWER_RUNTIME='+JSON.stringify(VIEWER_RUNTIME)+';(new Function(VIEWER_RUNTIME))();'
     +'const BARRA_RUNTIME='+JSON.stringify(BARRA_RUNTIME)+';(new Function(BARRA_RUNTIME))();'
-    +'const BRILHO_RUNTIME='+JSON.stringify(BRILHO_RUNTIME)+';(new Function(BRILHO_RUNTIME))();';
+    +'const BRILHO_RUNTIME='+JSON.stringify(BRILHO_RUNTIME)+';(new Function(BRILHO_RUNTIME))();'
+    /* os filtros por ÚLTIMO: eles leem a barra fixa já montada e a marca
+       .tem-obs que o clone recebeu */
+    +'const FILTROS_RUNTIME='+JSON.stringify(FILTROS_RUNTIME)+';(new Function(FILTROS_RUNTIME))();';
   body.appendChild(sc);
   return '<!DOCTYPE html>\n'+raiz.outerHTML;
 }
