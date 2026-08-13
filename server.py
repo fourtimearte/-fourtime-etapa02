@@ -80,8 +80,24 @@ FT_SEMENTE = [
 FT_PAPEIS = {
     "admin":      {"orcamento", "clientes", "banco", "banco.editar", "relatorio", "bugs", "admin"},
     "vendedor":   {"orcamento", "clientes", "banco", "banco.editar", "bugs"},
+    # EDITOR (v3.310): monta e altera orcamento, e NAO vende. Nas permissoes
+    # e igual ao vendedor, de proposito: quem escreve um orcamento precisa
+    # cadastrar o tecido, a cor e a referencia que faltarem, senao trava no
+    # meio do trabalho e chama alguem.
+    "editor":     {"orcamento", "clientes", "banco", "banco.editar", "bugs"},
     "financeiro": {"orcamento", "clientes", "banco", "relatorio", "bugs"},
 }
+
+# QUEM APARECE COMO VENDEDOR NO ORCAMENTO.
+#
+# Desde a v3.307 o campo Vendedor nasce com o nome de quem esta logado. Isso
+# fez o relatorio virar dado de verdade, e criou um defeito: quem NAO vende
+# assinava como vendedor. O editor monta orcamento para os outros, e a
+# Dayane e do financeiro; nenhum dos dois e o vendedor daquele pedido.
+#
+# Por isso a diferenca entre "vendedor" e "editor" NAO e uma permissao: os
+# dois podem exatamente as mesmas coisas. A diferenca e esta linha.
+FT_PAPEL_VENDE = {"admin", "vendedor"}
 # Versão MÍNIMA do editor aceita para GRAVAR. Editores antigos têm um banco
 # local possivelmente velho — e a mesclagem ressuscitaria itens já apagados.
 # Ler, qualquer versão pode; gravar, só quem está em dia.
@@ -3598,7 +3614,9 @@ def _limpo(x):
     """O que pode ser dito ao navegador sobre uma pessoa. Sem o hash."""
     return {"u": x.get("u"), "nome": x.get("nome"), "papel": x.get("papel"),
             "ativo": x.get("ativo", True), "trocar": bool(x.get("trocar")),
-            "pode": sorted(FT_PAPEIS.get(x.get("papel", ""), set()))}
+            "pode": sorted(FT_PAPEIS.get(x.get("papel", ""), set())),
+            # o editor usa isto para decidir se preenche o campo Vendedor
+            "vende": x.get("papel") in FT_PAPEL_VENDE}
 
 
 # ---------------- endpoints de login ----------------

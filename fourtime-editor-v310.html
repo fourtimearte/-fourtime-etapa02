@@ -5359,6 +5359,92 @@
     pointer-events:none;background:transparent;border-color:transparent;
   }
 
+
+  /* ================================================================
+     PESSOAS: quem entra no sistema (v3.308)
+     Vive num modal proprio, e nao numa secao do trilho: e coisa de
+     administracao, feita de vez em quando, nao trabalho do dia.
+     ================================================================ */
+  .ft-us-fundo{
+    position:fixed;inset:0;z-index:460;display:grid;place-items:center;padding:22px;
+    background:rgba(17,18,20,.42);backdrop-filter:blur(2px);
+    opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s var(--mov-suave);
+  }
+  .ft-us-fundo.on{opacity:1;visibility:visible;pointer-events:auto;}
+  .ft-us-cx{
+    width:100%;max-width:760px;max-height:86vh;display:flex;flex-direction:column;
+    background:var(--ft-superficie);border:1px solid var(--ft-borda);border-radius:14px;
+    box-shadow:var(--sh-4,0 18px 50px rgba(17,18,20,.22));overflow:hidden;
+    transform:translateY(8px) scale(.99);transition:transform .2s var(--mov-suave);
+  }
+  .ft-us-fundo.on .ft-us-cx{transform:none;}
+  .ft-us-topo{display:flex;align-items:center;gap:10px;padding:14px 16px;
+    border-bottom:1px solid var(--ft-borda);}
+  .ft-us-topo .tit{flex:1;font-size:15px;font-weight:700;color:var(--ft-preto);}
+  .ft-us-corpo{padding:14px 16px 18px;overflow:auto;}
+  .ft-us-aviso{
+    background:#FDF1F1;border:1px solid #F3C9CB;border-radius:10px;padding:10px 12px;
+    font-size:12.5px;line-height:1.5;color:#8E1216;margin-bottom:13px;
+  }
+  .ft-us-linha{
+    display:grid;grid-template-columns:34px 1fr 132px 92px auto;align-items:center;gap:10px;
+    padding:9px 10px;border:1px solid var(--ft-borda);border-radius:10px;margin-bottom:7px;
+    background:var(--ft-superficie-2);
+  }
+  .ft-us-linha.off{opacity:.5;}
+  .ft-us-ini{width:32px;height:32px;border-radius:9px;background:var(--ft-vermelho);color:#fff;
+    display:grid;place-items:center;font-size:13.5px;font-weight:700;}
+  .ft-us-linha.off .ft-us-ini{background:var(--ft-cinza-40);}
+  .ft-us-nome{display:flex;flex-direction:column;min-width:0;line-height:1.3;}
+  .ft-us-nome b{font-size:13.5px;font-weight:600;color:var(--ft-preto);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ft-us-nome span{font-size:11.5px;color:var(--ft-cinza-40);font-variant-numeric:tabular-nums;}
+  .ft-us-nome .eu{color:var(--ft-vermelho);font-weight:600;}
+  .ft-us-linha select,.ft-us-linha input{
+    height:32px;padding:0 9px;font:inherit;font-size:12.5px;color:var(--ft-preto);
+    border:1px solid var(--ft-borda);border-radius:8px;background:var(--ft-superficie);outline:none;
+  }
+  .ft-us-linha select:focus,.ft-us-linha input:focus{border-color:var(--ft-vermelho);}
+  .ft-us-bts{display:flex;gap:6px;}
+  .ft-us-bt{
+    height:32px;padding:0 10px;border:1px solid var(--ft-borda);border-radius:8px;
+    background:var(--ft-superficie);font:inherit;font-size:12px;font-weight:600;
+    color:var(--ft-cinza-40);cursor:pointer;white-space:nowrap;
+  }
+  .ft-us-bt:hover{border-color:var(--ft-vermelho);color:var(--ft-vermelho);}
+  .ft-us-bt.perigo:hover{background:#FDF1F1;}
+  .ft-us-troca{
+    grid-column:1 / -1;display:flex;gap:8px;align-items:center;
+    padding-top:9px;margin-top:2px;border-top:1px dashed var(--ft-borda);
+  }
+  .ft-us-troca input{flex:1;}
+  .ft-us-troca .dica{font-size:11.5px;color:var(--ft-cinza-40);}
+  .ft-us-nova{
+    margin-top:14px;padding:13px;border:1px dashed var(--ft-borda);border-radius:11px;
+    display:grid;grid-template-columns:1fr 1fr 132px auto;gap:9px;align-items:end;
+  }
+  .ft-us-nova label{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:700;
+    letter-spacing:.05em;text-transform:uppercase;color:var(--ft-cinza-40);}
+  .ft-us-nova input,.ft-us-nova select{
+    height:34px;padding:0 10px;font:inherit;font-size:13px;color:var(--ft-preto);
+    border:1px solid var(--ft-borda);border-radius:8px;background:var(--ft-superficie);outline:none;
+    text-transform:none;letter-spacing:0;font-weight:400;
+  }
+  .ft-us-nova button{
+    height:34px;padding:0 15px;border:1px solid var(--ft-vermelho);border-radius:8px;
+    background:var(--ft-vermelho);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  }
+  .ft-us-msg{font-size:12.5px;line-height:1.45;margin-top:11px;min-height:17px;}
+  .ft-us-msg[data-tipo="erro"]{color:var(--ft-vermelho);font-weight:600;}
+  .ft-us-msg[data-tipo="ok"]{color:#17803D;font-weight:600;}
+  .ft-us-msg[data-tipo="esperando"]{color:var(--ft-cinza-40);}
+  .ft-us-pe{font-size:11.5px;color:var(--ft-cinza-40);line-height:1.55;margin-top:12px;}
+  @media (max-width:720px){
+    .ft-us-linha{grid-template-columns:34px 1fr;row-gap:8px;}
+    .ft-us-linha select,.ft-us-linha .ft-us-bts{grid-column:2;}
+    .ft-us-nova{grid-template-columns:1fr;}
+  }
+
   /* ---- minha conta, dentro do modal de login ---- */
   .ft-conta{display:grid;gap:14px;}
   .ft-conta-topo{display:flex;align-items:center;gap:11px;}
@@ -6126,6 +6212,18 @@
       </button>
     </div>
     <div class="ft-login-corpo" id="ftLoginCorpo"></div>
+  </div>
+</div>
+<div class="ft-us-fundo" id="ftUsersFundo">
+  <div class="ft-us-cx">
+    <div class="ft-us-topo">
+      <span class="tit">Pessoas</span>
+      <button class="ft-login-x" id="ftUsersX" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="ft-us-corpo" id="ftUsersCorpo"></div>
   </div>
 </div>
 <div class="ft-notif-wrap" id="ftNotifWrap">
@@ -7135,7 +7233,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.307';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.310';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -13071,9 +13169,23 @@ const REL={ dados:null, fora:new Set(), carregando:false,
    O "tipo" classifica pelo que o pedido TEM: mix é quem tem layout com
    sublimação junto de outra técnica; sublimação e personalizado são os
    demais, pelo lado em que o valor caiu. */
+/* o vendedor de um pedido é o que vem ANTES da barra: o que vem depois é
+   quem montou. Fora do editor (arquivo aberto sozinho) a função de assinar
+   pode não existir, então a divisão é feita aqui mesmo. */
+function relVendedorDe(x){
+  /* "*Dani" é a Dani. O asterisco diz que um editor montou em nome dela, e
+     não muda de quem é a venda: se agrupasse diferente, o relatório
+     partiria a venda da Dani em duas linhas. Fora do editor esta função
+     pode não existir, então a limpeza é repetida aqui. */
+  return String((x&&x.vendedor)||'').replace(/^[\s*]+/,'').split('/')[0].trim();
+}
 function relPassa(x){
   const f=REL.filtro;
-  if(f.vendedor && (x.vendedor||'')!==f.vendedor)return false;
+  /* COMPARA SÓ QUEM VENDEU (v3.310). Desde que o editor assina depois do
+     vendedor ("Dani / Patrícia"), comparar a linha inteira separaria a Dani
+     dela mesma em dois vendedores, e o relatório voltaria a mentir — que é
+     exatamente o que o preenchimento automático veio resolver. */
+  if(f.vendedor && relVendedorDe(x)!==f.vendedor)return false;
   if(f.cliente){
     const alvo=(x.cliente||'').toLowerCase();
     if(alvo.indexOf(f.cliente.toLowerCase())<0)return false;
@@ -13575,7 +13687,9 @@ function relLigaControles(){
   const fv=pg.querySelector('#relFVend'), fd=pg.querySelector('#relDia');
   const fc=pg.querySelector('#relFCli'),  ft=pg.querySelector('#relFTipo');
   if(fv){
-    const vends=[...new Set(itens.map(x=>(x.vendedor||'').trim()).filter(Boolean))].sort();
+    /* a lista traz VENDEDORES, não assinaturas: "Dani" aparece uma vez,
+       tenha ela vendido sozinha ou com alguém montando junto */
+    const vends=[...new Set(itens.map(relVendedorDe).filter(Boolean))].sort();
     opts(fv,vends,REL.filtro.vendedor,null,'Todos');
     fv.onchange=()=>{ REL.filtro.vendedor=fv.value; relDesenha(); };
   }
@@ -14491,7 +14605,7 @@ nomeArquivo=nomeArquivoSeguro;
    SALVAR HTML — documento limpo (sem nada do editor), com o
    visualizador de imagem ainda funcionando
    ================================================================ */
-const CSS_CELULAR="\n/* ================================================================\n   CELULAR — só no HTML exportado. Não afeta o editor nem a impressão.\n\n   Critério: LARGURA, e só. Antes eram duas condições juntas (tela estreita\n   E ponteiro grosso), e bastava uma falhar para o arquivo cair no layout\n   A4 e transbordar no celular. E falhava mesmo: no modo \"site para\n   computador\" o Chrome do Android finge ter 980px de tela E reporta\n   ponteiro de mouse — as duas de uma vez. Em WebView e em telas com\n   caneta o ponteiro também não é grosso.\n   O 'screen' NÃO é decoração: uma folha A4 tem 794px de largura em CSS,\n   e na impressão o viewport passa a ser o PAPEL. Sem o 'screen', 794px\n   cabe em 820px e o layout de celular era aplicado à impressão — foi\n   exatamente isso que quebrou a arte de DTF. O 'pointer:coarse' antigo\n   escondia esse risco por acidente (papel não tem dedo); o 'screen'\n   resolve de propósito, e sem depender do tipo de ponteiro.\n\n   A folha deixa de ser A4 e vira um fluxo vertical:\n     cabeçalho -> [ L-NN + referência -> imagem -> tecido -> cor ->\n     design -> tabela -> observações ] por layout -> rodapé.\n   ================================================================ */\n/* A logo horizontal fica escondida no DESKTOP.\n   Precisa vencer a regra .logo-box img{display:block} do editor, que é MAIS\n   específica — por isso o seletor completo + !important. Sem isso ela vazava\n   para o documento normal, sobreposta à logo vertical. */\n.logo-box img.logo-h{display:none !important;}\n@media screen and (max-width:820px){\n  html,body{background:#fff !important;}\n  .app{padding:0 !important;display:block !important;}\n  .casca{border-radius:0 !important;box-shadow:none !important;border:0 !important;display:block !important;}\n  .area-paginas{\n    padding:10px !important;display:block !important;\n    max-height:none !important;height:auto !important;overflow:visible !important;\n    zoom:1 !important;\n    /* ESTE era o defeito: a .area-paginas carrega uma largura FIXA de\n       calc(210mm + 56px) (~850px), colocada para o motor de zoom manter a\n       casca estável. A folha obedecia o width:100% daqui de baixo, mas o\n       contêiner dela não — e 850px numa tela de 384px empurram a página\n       inteira para o lado. Era por isso que o orçamento aparecia cortado\n       nas laterais mesmo com todo o resto do layout de celular valendo. */\n    width:auto !important;min-width:0 !important;max-width:100% !important;\n  }\n  /* ---------- SOLTAR A CORRENTE INTEIRA ----------\n     No desktop a casca ocupa a tela e a rolagem acontece DENTRO da área de\n     páginas: por isso html/body têm height:100% e a casca tem\n     overflow:hidden. No celular o documento vira um fluxo vertical e cresce\n     muito além de uma tela — se esses limites continuarem valendo, a página\n     abre e NÃO ROLA, porque o conteúdo é recortado pela casca antes de\n     poder rolar. Liberar só a .area-paginas não bastava: era preciso soltar\n     todos os pais dela, até o body. */\n  html,body{height:auto !important;min-height:100% !important;overflow-x:clip !important;}\n  .app,.casca,.ft-doc-coluna{\n    width:auto !important;min-width:0 !important;max-width:100% !important;\n    overflow:visible !important;height:auto !important;min-height:0 !important;\n  }\n  .folha-a4{\n    width:100% !important;min-width:0 !important;min-height:0 !important;\n    border:0 !important;border-radius:0 !important;box-shadow:none !important;\n    padding:0 0 10px !important;margin:0 !important;\n  }\n\n  /* ---------- LOGO no topo, centralizada ----------\n     Desde a v269 a logo do cabeçalho JÁ É a horizontal, então aqui não há\n     mais troca de imagem: é a mesma, só recentralizada e sem a moldura da\n     célula. A regra da .logo-h fica porque arquivos exportados por versões\n     anteriores (que injetavam uma segunda imagem) continuam abrindo. */\n  .doc-header{display:block !important;border:0 !important;}\n  .logo-box{\n    padding:12px 0 14px !important;display:block !important;text-align:center !important;\n    border:0 !important;border-bottom:1px solid var(--ft-borda) !important;\n    background:none !important;cursor:default !important;\n  }\n  .logo-box img{\n    display:block !important;height:auto !important;\n    width:auto !important;max-width:58% !important;max-height:32px !important;\n    object-fit:contain !important;position:static !important;\n    margin:0 auto !important;\n  }\n  .logo-box img.logo-h{display:none !important;}   /* a 2ª cópia dos arquivos antigos */\n\n  /* ---------- cabeçalho em 2 colunas ----------\n     No A4 são 4 colunas x 3 fileiras; no celular vira uma grade de 2, e a\n     célula dividida (Pedido | Envio) volta a ser duas células normais. */\n  .doc-header{display:grid !important;grid-template-columns:1fr 1fr !important;\n    grid-auto-rows:auto !important;}   /* o 1fr do A4 igualava as fileiras à da logo e abria um vão embaixo dela */\n  .logo-box{grid-column:1 / -1 !important;}\n  .hd-col{display:contents !important;}\n  .hd-campo{\n    border:0 !important;\n    border-bottom:1px solid var(--ft-borda) !important;\n    padding:8px 10px !important;min-height:40px !important;\n    flex-direction:column !important;align-items:flex-start !important;\n    justify-content:center !important;gap:2px !important;\n  }\n  .hd-campo:nth-of-type(odd){border-right:1px solid var(--ft-borda) !important;}\n  .hd-dupla{flex-direction:row !important;padding:0 !important;}\n  .hd-meia{padding:8px 10px !important;}\n  .hd-label{font-size:9px !important;}\n  .hd-oculto{display:none !important;}\n\n  /* barra de aviso e cabeçalho repetido das páginas 2+ não entram no celular */\n  .warn-bar,.warn-clone,.folha-logo,.folha-topo{display:none !important;}\n\n  /* ---------- ANOTAÇÕES ----------\n     Elas são posicionadas em coordenadas ABSOLUTAS da folha A4. No celular\n     o conteúdo é reordenado e a folha muda de tamanho — não existe posição\n     correta para elas. Em vez de mostrá-las erradas (apontando para o lugar\n     errado), somem. Um selo avisa que o orçamento tem marcações.        */\n  .anota{display:none !important;}\n  .folha-a4.tem-anotacoes::before{\n    content:\"Este orçamento tem marcações feitas à mão. Abra no computador para vê-las.\";\n    display:block;margin:10px 0 0;padding:9px 11px;\n    border:1px solid var(--ft-vermelho);border-radius:6px;\n    background:rgba(198,22,27,.06);color:var(--ft-vermelho);\n    font-size:11.5px;font-weight:600;line-height:1.35;\n  }\n\n  /* ---------- módulo de layout: tudo empilhado ---------- */\n  .lay-modulo{\n    display:flex !important;flex-direction:column !important;gap:10px !important;\n    margin-top:18px !important;padding-top:16px !important;\n    border-top:0 !important;\n  }\n  .folha-a4 .lay-modulo:first-of-type{border-top:0 !important;margin-top:8px !important;padding-top:0 !important;}\n  .lay-esq,.lay-ficha{display:contents !important;}\n\n  /* a ordem pedida (os blocos da ficha não têm classe: vão por posição) */\n  .lay-esq > .lay-topo       {order:1 !important;}\n  .lay-esq > .lay-img        {order:2 !important;}\n  .lay-ficha > *:nth-child(1){order:3 !important;}   /* tecidos      */\n  .lay-ficha > *:nth-child(2){order:4 !important;}   /* cor          */\n  .lay-ficha > *:nth-child(3){order:5 !important;}   /* design       */\n  .lay-ficha > *:nth-child(4){order:6 !important;}   /* tabela       */\n  .lay-ficha > *:nth-child(5){order:7 !important;}   /* observações  */\n  /* o modo \"sem dinheiro\" reposiciona a ficha num grid: aqui isso não vale */\n  body.sem-dinheiro .lay-ficha > *{grid-column:auto !important;grid-row:auto !important;}\n\n  .lay-topo{display:flex !important;align-items:center !important;gap:8px !important;}\n  .lay-btn{min-width:44px !important;height:32px !important;font-size:13px !important;}\n  .lay-esq .lay-img,\n  .lay-esq .lay-img.com-img{\n    height:auto !important;min-height:0 !important;border-radius:6px !important;align-self:auto !important;\n  }\n  .lay-img img{max-height:none !important;width:100% !important;height:auto !important;}\n\n  /* ---------- campos: texto CENTRALIZADO na caixa ----------\n     O VILÃO era uma altura INLINE: o autoAltura() grava style.height no\n     textarea, calculada com a fonte de 11px do desktop, e essa altura vai\n     congelada para o arquivo exportado. No celular a fonte é 14px e o texto\n     não cabe nela — nenhum align-items conserta isso. É preciso SOLTAR a\n     altura (height:auto) para o campo voltar a se medir sozinho.          */\n  .ft-combo-caixa{\n    min-height:48px !important;height:auto !important;\n    align-items:center !important;          /* era flex-start: o texto colava no topo */\n    padding:8px 10px !important;\n  }\n  .ft-combo textarea{\n    height:auto !important;min-height:0 !important;   /* mata a altura inline do desktop */\n    font-size:14px !important;line-height:1.35 !important;\n    padding:0 !important;margin:0 !important;\n    align-self:center !important;\n  }\n  .ft-combo-rotulo{\n    font-size:10px !important;align-self:center !important;\n    padding:0 6px 0 0 !important;line-height:1.35 !important;\n  }\n  .cor-sw{align-self:center !important;margin:0 6px 0 0 !important;}\n  .ft-combo-abrir{align-self:center !important;}\n\n  /* ---------- DESIGN: as tags não podem colar na borda ---------- */\n  .design-caixa{\n    align-items:center !important;min-height:52px !important;height:auto !important;\n    padding:10px 12px !important;                  /* era 1.1mm: as tags encostavam */\n  }\n  .design-wrap{gap:7px !important;align-items:center !important;}\n  .design-grupo{gap:5px !important;}\n  .design-tag{font-size:11px !important;padding:5px 9px !important;}\n  .dtf-tok{font-size:10px !important;}\n\n  /* ---------- tabela: TAM e QTD com a MESMA largura ---------- */\n  .lay-tabela-mini{\n    --tp:2.8mm !important; --tf:14px !important; --tlh:1.5 !important;\n    width:100% !important;table-layout:fixed !important;\n  }\n  body.sem-dinheiro .lay-tabela-mini{width:100% !important;}\n  body.sem-dinheiro .lay-tabela-mini th,\n  body.sem-dinheiro .lay-tabela-mini td{width:50% !important;text-align:center !important;}\n  .lay-tabela-mini th,.lay-tabela-mini td{white-space:nowrap !important;}\n\n  .lay-area{\n    height:auto !important;min-height:60px !important;      /* solta a altura do desktop */\n    font-size:14px !important;line-height:1.4 !important;padding:10px 12px !important;\n  }\n\n  /* ---------- paginação CENTRALIZADA entre as páginas ---------- */\n  .pagina-num{\n    width:100% !important;justify-content:center !important;text-align:center !important;\n    padding:14px 0 !important;font-size:10px !important;\n    border-top:1px solid var(--ft-borda) !important;\n    margin-top:10px !important;\n  }\n  .pagina-num:last-of-type{border-top:0 !important;}\n\n  /* ---------- rodapé: endereço numa caixa, PEÇAS grande e centralizado ---------- */\n  .doc-rodape{\n    order:99 !important;margin-top:22px !important;padding-top:0 !important;\n    border-top:0 !important;\n  }\n  .doc-rodape-linha{display:none !important;}\n  .doc-rodape-grid{\n    display:flex !important;flex-direction:column !important;\n    gap:12px !important;align-items:stretch !important;\n  }\n  /* o endereço ganha borda, como você pediu */\n  .rodape-endereco{\n    display:flex !important;align-items:center !important;justify-content:center !important;\n    text-align:center !important;gap:6px !important;\n    border:1px solid var(--ft-borda) !important;border-radius:6px !important;\n    padding:10px 12px !important;\n    font-size:9.5px !important;line-height:1.45 !important;\n  }\n  .rodape-endereco svg{flex:0 0 auto !important;width:12px !important;height:12px !important;}\n  /* PEÇAS: fonte no DOBRO e centralizado */\n  .rodape-totais{\n    display:flex !important;flex-direction:column !important;\n    align-items:center !important;justify-content:center !important;gap:4px !important;\n  }\n  .rodape-tot{\n    display:flex !important;align-items:baseline !important;\n    justify-content:center !important;gap:8px !important;\n  }\n  .rodape-tot .rt-label{font-size:16px !important;}   /* era 8px  */\n  .rodape-tot .rt-valor{font-size:26px !important;}   /* era 13px */\n  .rodape-clone{display:none !important;}\n}\n";
+const CSS_CELULAR="\n/* ================================================================\n   CELULAR — só no HTML exportado. Não afeta o editor nem a impressão.\n\n   Critério: LARGURA, e só. Antes eram duas condições juntas (tela estreita\n   E ponteiro grosso), e bastava uma falhar para o arquivo cair no layout\n   A4 e transbordar no celular. E falhava mesmo: no modo \"site para\n   computador\" o Chrome do Android finge ter 980px de tela E reporta\n   ponteiro de mouse — as duas de uma vez. Em WebView e em telas com\n   caneta o ponteiro também não é grosso.\n   O 'screen' NÃO é decoração: uma folha A4 tem 794px de largura em CSS,\n   e na impressão o viewport passa a ser o PAPEL. Sem o 'screen', 794px\n   cabe em 820px e o layout de celular era aplicado à impressão — foi\n   exatamente isso que quebrou a arte de DTF. O 'pointer:coarse' antigo\n   escondia esse risco por acidente (papel não tem dedo); o 'screen'\n   resolve de propósito, e sem depender do tipo de ponteiro.\n\n   A folha deixa de ser A4 e vira um fluxo vertical:\n     cabeçalho -> [ L-NN + referência -> imagem -> tecido -> cor ->\n     design -> tabela -> observações ] por layout -> rodapé.\n   ================================================================ */\n/* A logo horizontal fica escondida no DESKTOP.\n   Precisa vencer a regra .logo-box img{display:block} do editor, que é MAIS\n   específica — por isso o seletor completo + !important. Sem isso ela vazava\n   para o documento normal, sobreposta à logo vertical. */\n.logo-box img.logo-h{display:none !important;}\n@media screen and (max-width:820px){\n  html,body{background:#fff !important;}\n  .app{padding:0 !important;display:block !important;}\n  .casca{border-radius:0 !important;box-shadow:none !important;border:0 !important;display:block !important;}\n  .area-paginas{\n    padding:10px !important;display:block !important;\n    max-height:none !important;height:auto !important;overflow:visible !important;\n    zoom:1 !important;\n    /* ESTE era o defeito: a .area-paginas carrega uma largura FIXA de\n       calc(210mm + 56px) (~850px), colocada para o motor de zoom manter a\n       casca estável. A folha obedecia o width:100% daqui de baixo, mas o\n       contêiner dela não — e 850px numa tela de 384px empurram a página\n       inteira para o lado. Era por isso que o orçamento aparecia cortado\n       nas laterais mesmo com todo o resto do layout de celular valendo. */\n    width:auto !important;min-width:0 !important;max-width:100% !important;\n  }\n  /* ---------- SOLTAR A CORRENTE INTEIRA ----------\n     No desktop a casca ocupa a tela e a rolagem acontece DENTRO da área de\n     páginas: por isso html/body têm height:100% e a casca tem\n     overflow:hidden. No celular o documento vira um fluxo vertical e cresce\n     muito além de uma tela — se esses limites continuarem valendo, a página\n     abre e NÃO ROLA, porque o conteúdo é recortado pela casca antes de\n     poder rolar. Liberar só a .area-paginas não bastava: era preciso soltar\n     todos os pais dela, até o body. */\n  html,body{height:auto !important;min-height:100% !important;overflow-x:clip !important;}\n  .app,.casca,.ft-doc-coluna{\n    width:auto !important;min-width:0 !important;max-width:100% !important;\n    overflow:visible !important;height:auto !important;min-height:0 !important;\n  }\n  .folha-a4{\n    width:100% !important;min-width:0 !important;min-height:0 !important;\n    border:0 !important;border-radius:0 !important;box-shadow:none !important;\n    padding:0 0 10px !important;margin:0 !important;\n  }\n\n  /* ---------- LOGO no topo, centralizada ----------\n     Desde a v269 a logo do cabeçalho JÁ É a horizontal, então aqui não há\n     mais troca de imagem: é a mesma, só recentralizada e sem a moldura da\n     célula. A regra da .logo-h fica porque arquivos exportados por versões\n     anteriores (que injetavam uma segunda imagem) continuam abrindo. */\n  .doc-header{display:block !important;border:0 !important;}\n  .logo-box{\n    padding:12px 0 14px !important;display:block !important;text-align:center !important;\n    border:0 !important;border-bottom:1px solid var(--ft-borda) !important;\n    background:none !important;cursor:default !important;\n  }\n  .logo-box img{\n    display:block !important;height:auto !important;\n    width:auto !important;max-width:58% !important;max-height:32px !important;\n    object-fit:contain !important;position:static !important;\n    margin:0 auto !important;\n  }\n  .logo-box img.logo-h{display:none !important;}   /* a 2ª cópia dos arquivos antigos */\n\n  /* ---------- cabeçalho em 2 colunas ----------\n     No A4 são 4 colunas x 3 fileiras; no celular vira uma grade de 2, e a\n     célula dividida (Pedido | Envio) volta a ser duas células normais. */\n  .doc-header{display:grid !important;grid-template-columns:1fr 1fr !important;\n    grid-auto-rows:auto !important;}   /* o 1fr do A4 igualava as fileiras à da logo e abria um vão embaixo dela */\n  .logo-box{grid-column:1 / -1 !important;}\n  .hd-col{display:contents !important;}\n  .hd-campo{\n    border:0 !important;\n    border-bottom:1px solid var(--ft-borda) !important;\n    padding:8px 10px !important;min-height:40px !important;\n    flex-direction:column !important;align-items:flex-start !important;\n    justify-content:center !important;gap:2px !important;\n  }\n  .hd-campo:nth-of-type(odd){border-right:1px solid var(--ft-borda) !important;}\n  .hd-dupla{flex-direction:row !important;padding:0 !important;}\n  .hd-meia{padding:8px 10px !important;}\n  .hd-label{font-size:9px !important;}\n  .hd-oculto{display:none !important;}\n\n  /* barra de aviso e cabeçalho repetido das páginas 2+ não entram no celular */\n  .warn-bar,.warn-clone,.folha-logo,.folha-topo{display:none !important;}\n\n  /* ---------- ANOTAÇÕES ----------\n     Elas são posicionadas em coordenadas ABSOLUTAS da folha A4. No celular\n     o conteúdo é reordenado e a folha muda de tamanho — não existe posição\n     correta para elas. Em vez de mostrá-las erradas (apontando para o lugar\n     errado), somem. Um selo avisa que o orçamento tem marcações.        */\n  .anota{display:none !important;}\n  .folha-a4.tem-anotacoes::before{\n    content:\"Este orçamento tem marcações feitas à mão. Abra no computador para vê-las.\";\n    display:block;margin:10px 0 0;padding:9px 11px;\n    border:1px solid var(--ft-vermelho);border-radius:6px;\n    background:rgba(198,22,27,.06);color:var(--ft-vermelho);\n    font-size:11.5px;font-weight:600;line-height:1.35;\n  }\n\n  /* ---------- módulo de layout: tudo empilhado ---------- */\n  .lay-modulo{\n    display:flex !important;flex-direction:column !important;gap:10px !important;\n    margin-top:18px !important;padding-top:16px !important;\n    border-top:0 !important;\n  }\n  .folha-a4 .lay-modulo:first-of-type{border-top:0 !important;margin-top:8px !important;padding-top:0 !important;}\n  .lay-esq,.lay-ficha{display:contents !important;}\n\n  /* a ordem pedida (os blocos da ficha não têm classe: vão por posição) */\n  .lay-esq > .lay-topo       {order:1 !important;}\n  .lay-esq > .lay-img        {order:2 !important;}\n  .lay-ficha > *:nth-child(1){order:3 !important;}   /* tecidos      */\n  .lay-ficha > *:nth-child(2){order:4 !important;}   /* cor          */\n  .lay-ficha > *:nth-child(3){order:5 !important;}   /* design       */\n  .lay-ficha > *:nth-child(4){order:6 !important;}   /* tabela       */\n  .lay-ficha > *:nth-child(5){order:7 !important;}   /* observações  */\n  /* o modo \"sem dinheiro\" reposiciona a ficha num grid: aqui isso não vale */\n  body.sem-dinheiro .lay-ficha > *{grid-column:auto !important;grid-row:auto !important;}\n\n  .lay-topo{display:flex !important;align-items:center !important;gap:8px !important;}\n  .lay-btn{min-width:44px !important;height:32px !important;font-size:13px !important;}\n  .lay-esq .lay-img,\n  .lay-esq .lay-img.com-img{\n    height:auto !important;min-height:0 !important;border-radius:6px !important;align-self:auto !important;\n  }\n  .lay-img img{max-height:none !important;width:100% !important;height:auto !important;}\n\n  /* ---------- campos: texto CENTRALIZADO na caixa ----------\n     O VILÃO era uma altura INLINE: o autoAltura() grava style.height no\n     textarea, calculada com a fonte de 11px do desktop, e essa altura vai\n     congelada para o arquivo exportado. No celular a fonte é 14px e o texto\n     não cabe nela — nenhum align-items conserta isso. É preciso SOLTAR a\n     altura (height:auto) para o campo voltar a se medir sozinho.          */\n  .ft-combo-caixa{\n    min-height:48px !important;height:auto !important;\n    align-items:center !important;          /* era flex-start: o texto colava no topo */\n    padding:8px 10px !important;\n  }\n  .ft-combo textarea{\n    height:auto !important;min-height:0 !important;   /* mata a altura inline do desktop */\n    font-size:14px !important;line-height:1.35 !important;\n    padding:0 !important;margin:0 !important;\n    align-self:center !important;\n  }\n  .ft-combo-rotulo{\n    font-size:10px !important;align-self:center !important;\n    padding:0 6px 0 0 !important;line-height:1.35 !important;\n  }\n  .cor-sw{align-self:center !important;margin:0 6px 0 0 !important;}\n  .ft-combo-abrir{align-self:center !important;}\n\n  /* ---------- DESIGN: as tags não podem colar na borda ---------- */\n  .design-caixa{\n    align-items:center !important;min-height:52px !important;height:auto !important;\n    padding:10px 12px !important;                  /* era 1.1mm: as tags encostavam */\n  }\n  .design-wrap{gap:7px !important;align-items:center !important;}\n  .design-grupo{gap:5px !important;}\n  .design-tag{font-size:11px !important;padding:5px 9px !important;}\n  .dtf-tok{font-size:10px !important;}\n\n  /* ---------- tabela: TAM e QTD com a MESMA largura ---------- */\n  .lay-tabela-mini{\n    --tp:2.8mm !important; --tf:14px !important; --tlh:1.5 !important;\n    width:100% !important;table-layout:fixed !important;\n  }\n  body.sem-dinheiro .lay-tabela-mini{width:100% !important;}\n  body.sem-dinheiro .lay-tabela-mini th,\n  body.sem-dinheiro .lay-tabela-mini td{width:50% !important;text-align:center !important;}\n  .lay-tabela-mini th,.lay-tabela-mini td{white-space:nowrap !important;}\n\n  .lay-area{\n    height:auto !important;min-height:60px !important;      /* solta a altura do desktop */\n    font-size:14px !important;line-height:1.4 !important;padding:10px 12px !important;\n  }\n\n  /* ---------- paginação CENTRALIZADA entre as páginas ---------- */\n  .pagina-num{\n    width:100% !important;justify-content:center !important;text-align:center !important;\n    padding:14px 0 !important;font-size:10px !important;\n    border-top:1px solid var(--ft-borda) !important;\n    margin-top:10px !important;\n  }\n  .pagina-num:last-of-type{border-top:0 !important;}\n\n  /* ---------- rodapé: endereço numa caixa, PEÇAS grande e centralizado ---------- */\n  .doc-rodape{\n    order:99 !important;margin-top:22px !important;padding-top:0 !important;\n    border-top:0 !important;\n  }\n  .doc-rodape-linha{display:none !important;}\n  .doc-rodape-grid{\n    display:flex !important;flex-direction:column !important;\n    gap:12px !important;align-items:stretch !important;\n  }\n  /* o endereço ganha borda, como você pediu */\n  .rodape-endereco{\n    display:flex !important;align-items:center !important;justify-content:center !important;\n    text-align:center !important;gap:6px !important;\n    border:1px solid var(--ft-borda) !important;border-radius:6px !important;\n    padding:10px 12px !important;\n    font-size:9.5px !important;line-height:1.45 !important;\n  }\n  .rodape-endereco svg{flex:0 0 auto !important;width:12px !important;height:12px !important;}\n  /* PEÇAS: fonte no DOBRO e centralizado */\n  .rodape-totais{\n    display:flex !important;flex-direction:column !important;\n    align-items:center !important;justify-content:center !important;gap:4px !important;\n  }\n  .rodape-tot{\n    align-items:baseline !important;\n    justify-content:center !important;gap:8px !important;\n  }\n  /* O DINHEIRO VAZAVA AQUI (v3.309).\n     Esta regra tinha display:flex !important. Um !important vence qualquer\n     regra sem !important, por mais especifica que seja, e as duas linhas que\n     escondem valor no modo sem dinheiro nao tem !important:\n         body.sem-dinheiro .rodape-tot.geral{display:none;}\n         .doc-rodape .rodape-tot.rt-sub-box{display:none;}\n     Resultado: no celular o TOTAL em R$ reaparecia num orcamento que devia\n     ir para a producao sem valor nenhum. O display saiu daqui (a regra do\n     editor ja poe .rodape-tot em flex) e as duas que escondem sao\n     reafirmadas abaixo, com a mesma forca. */\n  body.sem-dinheiro .doc-rodape .rodape-tot.geral{display:none !important;}\n  .doc-rodape .rodape-tot.rt-sub-box{display:none !important;}\n  body.tem-ajustes:not(.sem-dinheiro) .doc-rodape .rodape-tot.rt-sub-box{display:flex !important;}\n  .rodape-tot .rt-label{font-size:16px !important;}   /* era 8px  */\n  .rodape-tot .rt-valor{font-size:26px !important;}   /* era 13px */\n  .rodape-clone{display:none !important;}\n}\n";
 
 
 /* ================================================================
@@ -14608,15 +14722,31 @@ const CSS_BARRA_FIXA=`
   font-weight:600;font-size:15px;color:var(--k-primary);letter-spacing:.01em;
 }
 @media screen and (max-width:820px){
-  .ft-barra-int{flex-wrap:wrap;gap:7px 16px;padding:8px 14px;min-height:0;}
-  .ft-barra-int{justify-content:flex-start;}
-  .ft-barra .ft-bi.cliente{flex:1 1 55%;max-width:none;}
-  .ft-barra .ft-bi.pedido{margin-left:auto;padding-left:16px;}
-  .ft-barra .ft-bi.vendedor,
-  .ft-barra .ft-bi.departamento,
-  .ft-barra .ft-bi.envio,
-  .ft-barra .ft-bi.total{flex:1 1 auto;max-width:none;}
+  /* TRÊS COLUNAS, DUAS LINHAS, SEMPRE (v3.309).
+
+     Era flex-wrap:wrap, e a quebra dependia da largura do TEXTO: um cliente
+     de nome curto cabia em três por linha; um de nome longo empurrava o
+     Pedido Nº para uma terceira linha sozinho. A barra mudava de altura
+     conforme o orçamento, e num celular cada linha extra come uma faixa de
+     tela que já é pequena.
+
+     São seis campos. Numa grade de três colunas eles caem em duas linhas
+     exatas, e o desenho para de depender do conteúdo. */
+  .ft-barra-int{
+    display:grid;grid-template-columns:repeat(3,1fr);
+    align-items:center;gap:6px 12px;padding:8px 14px;min-height:0;
+    flex-wrap:nowrap;overflow:hidden;
+  }
+  .ft-barra .ft-bi{min-width:0;flex:none;max-width:none;}
+  /* o filete que separa o Pedido no desktop não faz sentido numa grade:
+     ali ele vira um risco solto no meio da segunda linha */
+  .ft-barra .ft-bi.pedido{margin-left:0;padding-left:0;border-left:0;}
   .ft-barra .val{font-size:14px;}
+  /* com a coluna estreita, nome longo corta com reticências em vez de
+     empurrar a grade inteira */
+  .ft-barra .rot,.ft-barra .val{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;
+  }
 }
 /* o papel já tem o cabeçalho em toda folha */
 @media print{ .ft-barra{display:none !important;} }
@@ -14781,6 +14911,10 @@ const CSS_FILTROS=`
    diz sozinho que é escolha única, abre a lista inteira num toque e o
    teclado funciona sem nada de nosso. */
 .ft-fcampo{display:flex;align-items:center;gap:5px;}
+/* O RÓTULO AO LADO DO CAMPO SAIU (v3.309): a opção vazia do select agora
+   diz "Design", "Observação", "Infantil". Manter os dois seria repetir a
+   mesma palavra duas vezes, uma ao lado da outra. A regra fica porque
+   arquivos exportados por versões anteriores ainda trazem o <span>. */
 .ft-fcampo > span{
   font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
   color:var(--k-subtle);white-space:nowrap;
@@ -14831,15 +14965,66 @@ const CSS_FILTROS=`
 .ft-barra .ft-filtros .ft-fint{max-width:210mm;margin:0 auto;padding:7px 16px 8px;}
 .ft-barra .ft-filtros .ft-fsel{background-color:#FFFFFF;min-width:98px;padding-right:24px;}
 .ft-barra .ft-filtros .ft-fsel.on{background-color:#FDF1F1;}
-/* na barra fixa o espaço é o mesmo da folha: os rótulos encolhem para os
-   três campos e o botão caberem sem se atropelar */
+/* na barra fixa o espaço é o mesmo da folha: os campos encolhem para os três
+   e o botão caberem sem se atropelar */
 .ft-barra .ft-filtros .ft-fint{gap:7px;}
 .ft-barra .ft-filtros .ft-fcampos{gap:8px;}
 .ft-barra .ft-filtros .ft-fconta{font-size:10.5px;}
 .ft-barra .ft-filtros .ft-fcampo{gap:4px;}
-.ft-barra .ft-filtros .ft-fcampo > span{font-size:9.5px;letter-spacing:.04em;}
 .ft-barra .ft-filtros .ft-fsel{font-size:12.5px;padding-top:5px;padding-bottom:5px;}
 .ft-barra .ft-filtros .ft-flimpa{font-size:11.5px;padding:5px 10px;}
+
+/* ================================================================
+   OS FILTROS EM UMA LINHA SÓ, COM CARROSSEL  (v3.309)
+
+   No celular a barra tinha três rótulos e três campos, e quebrava em duas
+   ou três linhas. Somada ao cabeçalho, ela comia metade da tela antes de
+   qualquer orçamento aparecer.
+
+   A saída não é encolher a fonte até caber: é aceitar que não cabe e deixar
+   a linha ROLAR de lado. Contador, campos e o limpar viram um trilho só,
+   sempre de uma linha, com deslize horizontal.
+
+   Duas coisas fazem isso não virar armadilha:
+     · o trilho tem imã (scroll-snap), então o dedo para em cima de um campo
+       inteiro e nunca no meio de dois;
+     · a borda direita ganha um esmaecimento enquanto houver campo escondido.
+       O editor apaga TODA barra de rolagem (*{scrollbar-width:none}), então
+       sem esse sinal não haveria nada dizendo que a linha continua. Foi
+       exatamente assim que o "Dia 11" sumiu do relatório na v3.306.
+   ================================================================ */
+@media screen and (max-width:820px){
+  .ft-barra .ft-filtros .ft-fint{
+    display:flex;align-items:center;gap:7px;flex-wrap:nowrap;
+    overflow-x:auto;overflow-y:hidden;
+    scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+    -webkit-overflow-scrolling:touch;
+    padding:7px 14px 8px;
+    /* o esmaecimento da ponta: some sozinho quando a rolagem chega ao fim,
+       porque a máscara acompanha o conteúdo (local) e a ponta não (scroll) */
+    -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 26px),transparent);
+    mask-image:linear-gradient(to right,#000 calc(100% - 26px),transparent);
+  }
+  .ft-barra .ft-filtros .ft-fint > *{flex:0 0 auto;scroll-snap-align:start;}
+  .ft-barra .ft-filtros .ft-fcampos{
+    display:flex;flex-wrap:nowrap;gap:7px;justify-content:flex-start;
+  }
+  .ft-barra .ft-filtros .ft-fcampo{flex:0 0 auto;}
+  .ft-barra .ft-filtros .ft-fsel{
+    min-width:0;width:auto;font-size:13px;
+    padding:7px 26px 7px 11px;   /* alvo de toque: 34px de altura */
+  }
+  .ft-barra .ft-filtros .ft-fconta{font-size:11px;padding-right:2px;}
+  /* aqui o limpar SOME de verdade em vez de ficar invisível ocupando lugar:
+     num trilho que rola, espaço reservado é espaço roubado */
+  .ft-barra .ft-filtros .ft-flimpa{display:none;}
+  .ft-barra .ft-filtros.filtrando .ft-flimpa{display:inline-flex;visibility:visible;}
+  /* o texto do botão não cabe; fica só o X, com área de toque de verdade */
+  .ft-barra .ft-filtros .ft-flimpa{
+    font-size:0;padding:0;width:34px;height:34px;justify-content:center;gap:0;
+  }
+  .ft-barra .ft-filtros .ft-flimpa svg{width:14px;height:14px;}
+}
 @media screen and (max-width:820px){
   .ft-filtros{border-radius:0;border-left:0;border-right:0;}
   .ft-fint{padding:9px 12px;grid-template-columns:1fr auto;}
@@ -14897,15 +15082,25 @@ const FILTROS_RUNTIME=`
     if(!n)return '';                     /* opção que devolve zero é ruído */
     return '<option value="'+esc(v)+'">'+esc(rot)+' ('+n+')</option>';
   }
+  /* O RÓTULO MORA DENTRO DO CAMPO (v3.309).
+     Antes cada select vinha com um <span> ao lado dizendo DESIGN,
+     OBSERVAÇÃO, INFANTIL. Três rótulos mais três campos não cabem numa
+     linha de celular, e era isso que empurrava a barra para duas e três
+     linhas. Agora a opção vazia É o rótulo: o campo diz "Design" enquanto
+     nada estiver escolhido.
+
+     E as opções passam a se descrever sozinhas: "Com observação" em vez de
+     "Com". Sem isso, tirar o rótulo cobraria um preço — dois campos
+     mostrando "Com" e "Sem" lado a lado, sem dizer com o quê. */
   function campo(g,rot,opts){
     if(!opts)return '';
-    return '<label class="ft-fcampo"><span>'+rot+'</span>'
+    return '<label class="ft-fcampo">'
       +'<select class="ft-fsel" data-g="'+g+'">'
-      +'<option value="">Todos</option>'+opts+'</select></label>';
+      +'<option value="">'+rot+'</option>'+opts+'</select></label>';
   }
   var cDesign=campo('design','Design',tags.map(function(t){return opcao('design',t,t);}).join(''));
-  var cObs=campo('obs','Observação',opcao('obs','com','Com')+opcao('obs','sem','Sem'));
-  var cInf=campo('inf','Infantil',opcao('inf','com','Com')+opcao('inf','sem','Sem'));
+  var cObs=campo('obs','Observação',opcao('obs','com','Com observação')+opcao('obs','sem','Sem observação'));
+  var cInf=campo('inf','Infantil',opcao('inf','com','Com infantil')+opcao('inf','sem','Sem infantil'));
   if(!cDesign&&!cObs&&!cInf)return;
   var corpo='<div class="ft-fint">'
     +'<span class="ft-fconta"></span>'
@@ -16602,6 +16797,10 @@ function FT_CONTA_HTML(){
       <button class="salvar" id="ftCtSalvar" type="button">Trocar senha</button>
       <button class="sair" id="ftCtSair" type="button">Sair</button>
     </div>
+    ${(FT_EU.pode||[]).indexOf('admin')>=0
+      ? `<div class="ft-conta-linha"></div>
+         <button class="sair" id="ftCtPessoas" type="button"
+                 style="width:100%">Administrar pessoas</button>` : ''}
     <div class="ft-login-msg" id="ftLoginMsg"></div>
   </div>`;
 }
@@ -16615,6 +16814,8 @@ function loginAbre(){
     const tit=document.querySelector('#ftLoginFundo .ft-login-topo .tit');
     if(tit)tit.textContent='Minha conta';
     cx.querySelector('#ftCtSair').onclick=()=>ftSair();
+    const bp=cx.querySelector('#ftCtPessoas');
+    if(bp)bp.onclick=()=>{ loginFecha(); ftUsersAbre(); };
     cx.querySelector('#ftCtSalvar').onclick=async()=>{
       const a=cx.querySelector('#ftCtAtual').value;
       const n=cx.querySelector('#ftCtNova').value;
@@ -16875,7 +17076,7 @@ window.ftLoginEntra=ftLoginEntra;
    chama o endereço na mão, e é lá que a porta tem de estar. As duas coisas
    existem porque servem a propósitos diferentes.
    ================================================================ */
-let FT_EU={u:'',nome:'',papel:'',pode:[],trocar:false,carregado:false,login:true};
+let FT_EU={u:'',nome:'',papel:'',pode:[],vende:true,trocar:false,carregado:false,login:true};
 function euPode(p){ return !FT_EU.carregado || FT_EU.pode.indexOf(p)>=0; }
 
 async function ftEuCarrega(){
@@ -16935,19 +17136,96 @@ function ftEuNoRodape(){
     +'<span class="txt"><b>'+bdEsc(FT_EU.nome)+'</b><i>'+bdEsc(FT_EU.papel)+'</i></span>';
 }
 
-/* O VENDEDOR PASSA A SER QUEM ESTÁ LOGADO (v3.307). O campo continua
-   editável: quem monta um orçamento no lugar de um colega precisa poder
-   dizer isso. O que muda é o padrão, e é ele que faz o relatório valer. */
-function ftVendedorPadrao(){
+/* ================================================================
+   QUEM ASSINA O CAMPO VENDEDOR  (v3.307, corrigido na v3.310)
+
+   Na v3.307 o campo passou a nascer com o nome de quem está logado. Foi o
+   que fez o Relatório de Pedidos virar dado de verdade, em vez de depender
+   de alguém digitar o próprio nome certo.
+
+   E criou um problema: nem todo mundo que MONTA um orçamento VENDE. A
+   Patrícia monta para os vendedores; o Financeiro não vende nenhum. Com a
+   regra da v3.307 os dois assinavam como vendedores, e o relatório passava
+   a mentir com a mesma convicção com que antes acertava.
+
+   A regra agora tem dois casos:
+
+     quem vende (admin, vendedor)
+         o campo nasce com o nome dela, como era.
+
+     quem NÃO vende (editor, financeiro)
+         o campo nasce com o nome dela, e quando o vendedor é escolhido ele
+         entra NA FRENTE:            "Dani / Patrícia"
+         vendeu ------^      ^------ montou
+
+   Por que na frente e não atrás: o campo se chama Vendedor. Quem lê o
+   orçamento, o cliente ou a produção, procura ali quem vendeu. O nome de
+   quem montou é rastro, e rastro vem depois.
+
+   A junção é IDEMPOTENTE: escolher outro vendedor troca o primeiro nome e
+   não empilha assinaturas. Sem isso, três trocas de vendedor deixariam
+   "Dani / Kev / Lucas / Patrícia" no papel.
+   ================================================================ */
+/* A MARCA DO EDITOR É UM ASTERISCO, e não o nome dele (a pedido).
+
+   A primeira versão escrevia "Dani / Patrícia". Funcionava, e custava caro
+   em todo lugar que trata o campo como um NOME: relatório, filtro,
+   agrupamento, lista de vendedores do banco. Cada um desses precisaria
+   saber desfazer a junção, e bastaria um esquecer para a venda da Dani
+   sair partida em duas.
+
+   Com o asterisco o campo continua sendo UM nome:
+
+        *Dani
+        ^ montado por um editor, em nome da Dani
+
+   O que se perde: o nome de quem montou não fica gravado. O que se ganha:
+   nada mais no sistema precisa aprender a ler duas pessoas num campo de
+   uma. */
+const FT_MARCA_EDITOR='*';
+
+/* o nome do vendedor, limpo. Tira o asterisco e também o formato antigo
+   com barra, para orçamentos escritos à mão não escaparem do agrupamento */
+function ftSoOVendedor(txt){
+  return String(txt||'').replace(/^[\s*]+/,'').split('/')[0].trim();
+}
+
+function ftVendedorAssina(){
   if(!FT_EU.carregado||!FT_EU.nome)return;
   const c=document.querySelector('input[data-h="vendedor"]');
-  if(c&&!c.value.trim()){
-    c.value=FT_EU.nome;
+  if(!c)return;
+  const poe=v=>{ if(c.value===v)return;
+    c.value=v;
     c.dispatchEvent(new Event('input',{bubbles:true}));
     c.dispatchEvent(new Event('change',{bubbles:true}));
+  };
+  if(FT_EU.vende!==false){                 /* vende: o próprio nome, limpo */
+    if(!c.value.trim())poe(FT_EU.nome.trim());
+    return;
   }
+  /* não vende: marca o vendedor escolhido. Campo vazio continua vazio —
+     um asterisco sozinho não diria nada a ninguém. */
+  const vend=ftSoOVendedor(c.value);
+  poe(vend ? (FT_MARCA_EDITOR+vend) : '');
 }
+window.ftVendedorAssina=ftVendedorAssina;
+/* o nome antigo continua valendo: ele é chamado no arranque */
+function ftVendedorPadrao(){ ftVendedorAssina(); }
 window.ftVendedorPadrao=ftVendedorPadrao;
+
+/* Reaplica quando o campo é EDITADO, e só no change (blur ou escolha na
+   lista): no input, a cada tecla, a junção lutaria com quem está digitando.
+   Um guarda impede a volta pelo evento que a própria função dispara. */
+let _ftAssinando=false;
+(function ligaAssinatura(){
+  document.addEventListener('change',e=>{
+    const c=e.target;
+    if(!c||c.dataset===undefined||c.dataset.h!=='vendedor')return;
+    if(_ftAssinando||!FT_EU.carregado||FT_EU.vende!==false)return;
+    _ftAssinando=true;
+    try{ ftVendedorAssina(); } finally{ setTimeout(()=>{_ftAssinando=false;},0); }
+  },true);
+})();
 
 async function ftSair(){
   try{ await fetch('/api/auth/sair',{method:'POST',credentials:'same-origin'}); }catch(e){}
@@ -16965,6 +17243,205 @@ async function ftTrocaSenha(atual,nova){
   return true;
 }
 window.ftTrocaSenha=ftTrocaSenha;
+
+/* ================================================================
+   PESSOAS: A TELA DE ADMINISTRAÇÃO (v3.308)
+
+   Na v3.307 os sete usuários nasceram semeados no código e não havia como
+   mexer neles sem uma versão minha. Aqui a administração passa a ser sua.
+
+   O que ela faz, e por que cada um está aqui:
+     criar          uma pessoa nova entra sem depender de deploy;
+     RENOMEAR       o usuário de verdade, levando senha e papel junto. Criar
+                    outra conta e desativar a antiga pareceria a mesma coisa
+                    e não é: mandaria a pessoa de volta para a senha de
+                    partida e apagaria o histórico dela;
+     papel          promover e rebaixar sem mexer no resto;
+     desativar      quem sai da empresa perde a entrada, e o cadastro fica
+                    (apagar perderia o rastro de quem fez o quê);
+     redefinir      quem esqueceu a senha volta para a de partida, com troca
+                    obrigatória no próximo acesso.
+
+   E um aviso que só existe por causa de um risco real: se o Drive recusar a
+   gravação, os usuários ficam só no disco do Render, que é efêmero, e um
+   reinício devolveria todo mundo para a senha de partida sem ninguém
+   perceber. O servidor confere lendo de volta; se não bater, esta tela diz.
+   ================================================================ */
+let FT_US={lista:[],papeis:[],fonte:'',driveLigado:false,driveOk:null,
+           senhaInicial:'',renomeando:''};
+
+async function ftUsersApi(corpo){
+  const o=corpo
+    ? {method:'POST',credentials:'same-origin',
+       headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)}
+    : {credentials:'same-origin'};
+  const r=await fetch('/api/auth/usuarios',o);
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.detail||('Erro '+r.status));
+  return d;
+}
+
+function ftUsersDiz(tipo,txt){
+  const m=document.getElementById('ftUsersMsg');
+  if(!m)return; m.dataset.tipo=tipo||''; m.textContent=txt||'';
+}
+
+async function ftUsersAbre(){
+  const cx=document.getElementById('ftUsersCorpo');
+  if(!cx)return;
+  document.getElementById('ftUsersFundo').classList.add('on');
+  cx.innerHTML='<div class="ft-us-msg" data-tipo="esperando">Carregando…</div>';
+  try{
+    const d=await ftUsersApi(null);
+    FT_US.lista=d.usuarios||[]; FT_US.papeis=d.papeis||[];
+    FT_US.fonte=d.fonte||''; FT_US.driveLigado=!!d.driveLigado; FT_US.driveOk=d.driveOk;
+    FT_US.senhaInicial=d.senhaInicial||'';
+    FT_US.renomeando='';
+    ftUsersDesenha();
+  }catch(e){
+    cx.innerHTML='<div class="ft-us-msg" data-tipo="erro">'+bdEsc(e.message)+'</div>';
+  }
+}
+function ftUsersFecha(){
+  const f=document.getElementById('ftUsersFundo');
+  if(f)f.classList.remove('on');
+}
+window.ftUsersAbre=ftUsersAbre; window.ftUsersFecha=ftUsersFecha;
+
+function ftUsersDesenha(){
+  const cx=document.getElementById('ftUsersCorpo');
+  if(!cx)return;
+  const eu=(FT_EU&&FT_EU.u)||'';
+  const opc=(sel)=>FT_US.papeis.map(p=>
+    '<option value="'+p+'"'+(p===sel?' selected':'')+'>'+p+'</option>').join('');
+
+  let aviso='';
+  if(FT_US.driveLigado && FT_US.driveOk===false){
+    aviso='<div class="ft-us-aviso"><b>A lista de pessoas não foi confirmada no Drive.</b><br>'
+      +'Ela está valendo, mas só no disco do servidor, que é apagado a cada reinício. '
+      +'Se ficar assim, num reinício todo mundo volta para a senha de partida. '
+      +'Confira se a pasta do banco continua compartilhada com a conta de serviço como Editor.</div>';
+  }
+
+  const linhas=FT_US.lista.map(x=>{
+    const ini=(x.nome||x.u||'?').trim().charAt(0).toUpperCase();
+    const souEu=(x.u===eu);
+    const renomeando=(FT_US.renomeando===x.u);
+    return '<div class="ft-us-linha'+(x.ativo?'':' off')+'" data-u="'+bdEsc(x.u)+'">'
+      +'<div class="ft-us-ini">'+bdEsc(ini)+'</div>'
+      +'<div class="ft-us-nome"><b>'+bdEsc(x.nome||x.u)+'</b>'
+      +'<span>@'+bdEsc(x.u)+(souEu?' <i class="eu">(você)</i>':'')
+      +(x.trocar?' · senha de partida':'')
+      /* a consequência do papel, dita onde o papel é escolhido: quem não
+         vende não assina o campo Vendedor do orçamento. Sem esta linha, a
+         diferença entre "vendedor" e "editor" ficaria invisível na tela em
+         que ela é decidida. */
+      +(x.vende===false?' · marca o vendedor com *':'')+'</span></div>'
+      +'<select data-acao="papel"'+(souEu?' title="Você não perde o próprio acesso por engano"':'')+'>'
+      +opc(x.papel)+'</select>'
+      +'<button class="ft-us-bt" data-acao="ativo">'+(x.ativo?'Desativar':'Reativar')+'</button>'
+      +'<div class="ft-us-bts">'
+      +'<button class="ft-us-bt" data-acao="renomear">Renomear</button>'
+      +'<button class="ft-us-bt perigo" data-acao="resetar">Redefinir senha</button>'
+      +'</div>'
+      +(renomeando
+        ? '<div class="ft-us-troca">'
+          +'<span class="dica">Novo usuário:</span>'
+          +'<input data-campo="novo" value="'+bdEsc(x.u)+'" spellcheck="false" autocapitalize="none">'
+          +'<button class="ft-us-bt" data-acao="renomear-ok">Salvar</button>'
+          +'<button class="ft-us-bt" data-acao="renomear-nao">Cancelar</button>'
+          +'<span class="dica">A senha e o papel vão junto. A pessoa entra de novo.</span>'
+          +'</div>'
+        : '')
+      +'</div>';
+  }).join('');
+
+  cx.innerHTML=aviso+linhas
+    +'<div class="ft-us-nova">'
+    +'<label>Nome<input id="ftUsNome" placeholder="Maria"></label>'
+    +'<label>Usuário<input id="ftUsU" placeholder="maria" spellcheck="false" autocapitalize="none"></label>'
+    +'<label>Acesso<select id="ftUsPapel">'+opc('vendedor')+'</select></label>'
+    +'<button id="ftUsCriar" type="button">Adicionar</button>'
+    +'</div>'
+    +'<div class="ft-us-msg" id="ftUsersMsg"></div>'
+    /* a senha de partida vem do SERVIDOR, e nao escrita aqui: este arquivo
+       e publico ate para quem nao entrou */
+    +'<div class="ft-us-pe">Quem entra pela primeira vez, ou tem a senha redefinida, '
+    +'usa <b>'+bdEsc(FT_US.senhaInicial||'a senha de partida')+'</b> '
+    +'e precisa criar uma senha antes de o editor abrir.<br>'
+    +'Desativar não apaga: o cadastro fica, para o histórico de quem fez o quê continuar fazendo sentido.</div>';
+
+  cx.querySelectorAll('.ft-us-linha').forEach(l=>{
+    const u=l.dataset.u;
+    const sel=l.querySelector('select[data-acao="papel"]');
+    if(sel)sel.onchange=()=>ftUsersFaz({acao:'papel',u:u,papel:sel.value});
+    l.querySelectorAll('button[data-acao]').forEach(b=>{
+      const a=b.dataset.acao;
+      b.onclick=()=>{
+        if(a==='renomear'){ FT_US.renomeando=u; ftUsersDesenha();
+          const i=document.querySelector('.ft-us-linha[data-u="'+u+'"] input[data-campo="novo"]');
+          if(i){i.focus();i.select();} return; }
+        if(a==='renomear-nao'){ FT_US.renomeando=''; ftUsersDesenha(); return; }
+        if(a==='renomear-ok'){
+          const i=l.querySelector('input[data-campo="novo"]');
+          ftUsersFaz({acao:'renomear',u:u,novo:(i?i.value:'').trim().toLowerCase()});
+          return; }
+        if(a==='ativo'){
+          const x=FT_US.lista.find(y=>y.u===u);
+          ftUsersFaz({acao:'ativo',u:u,ativo:!(x&&x.ativo)}); return; }
+        if(a==='resetar')ftUsersFaz({acao:'resetar',u:u});
+      };
+    });
+    const inp=l.querySelector('input[data-campo="novo"]');
+    if(inp)inp.onkeydown=e=>{ if(e.key==='Enter'){e.preventDefault();
+      ftUsersFaz({acao:'renomear',u:u,novo:inp.value.trim().toLowerCase()}); } };
+  });
+
+  const cri=document.getElementById('ftUsCriar');
+  if(cri)cri.onclick=()=>{
+    const nome=document.getElementById('ftUsNome').value.trim();
+    const u=document.getElementById('ftUsU').value.trim().toLowerCase();
+    const papel=document.getElementById('ftUsPapel').value;
+    if(!u){ ftUsersDiz('erro','Escolha o nome de usuário.'); return; }
+    ftUsersFaz({acao:'criar',u:u,nome:nome||u,papel:papel});
+  };
+}
+
+async function ftUsersFaz(corpo){
+  ftUsersDiz('esperando','Salvando…');
+  try{
+    const d=await ftUsersApi(corpo);
+    FT_US.lista=d.usuarios||FT_US.lista;
+    FT_US.renomeando='';
+    ftUsersDesenha();
+    if(corpo.acao==='renomear'){
+      ftUsersDiz('ok','Agora é @'+corpo.novo+'.'
+        +(d.euMesmo?'' : ' A pessoa precisa entrar de novo.'));
+      if(d.euMesmo && typeof ftEuCarrega==='function')ftEuCarrega();
+    }
+    else if(corpo.acao==='criar')ftUsersDiz('ok','Pronto. A senha de partida é '+(FT_US.senhaInicial||'a de sempre')+'.');
+    else if(corpo.acao==='resetar')ftUsersDiz('ok','Senha redefinida para '+(FT_US.senhaInicial||'a de partida')+'.');
+    else ftUsersDiz('ok','Salvo.');
+    /* a conferência do Drive pode ter mudado com esta gravação */
+    try{ const d2=await ftUsersApi(null);
+      FT_US.driveOk=d2.driveOk; FT_US.fonte=d2.fonte;
+      const m=document.getElementById('ftUsersMsg');
+      const txt=m?m.textContent:'', tp=m?m.dataset.tipo:'';
+      ftUsersDesenha(); ftUsersDiz(tp,txt);
+    }catch(e){}
+  }catch(e){ ftUsersDiz('erro',e.message); }
+}
+
+(function ligaUsers(){
+  const x=document.getElementById('ftUsersX');
+  if(x)x.onclick=ftUsersFecha;
+  const f=document.getElementById('ftUsersFundo');
+  if(f)f.addEventListener('mousedown',e=>{ if(e.target===f)ftUsersFecha(); });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&f&&f.classList.contains('on'))ftUsersFecha();
+  });
+})();
+
 
 (function ligaEu(){
   const vai=async()=>{ await ftEuCarrega(); setTimeout(ftVendedorPadrao,400); };
