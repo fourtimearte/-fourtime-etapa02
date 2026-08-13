@@ -3689,9 +3689,31 @@
     transition:transform var(--mov-rapido) var(--mov-suave);}
   .ft-dd.aberto .ft-dd-bt{border-color:var(--ft-vermelho);box-shadow:0 0 0 3px var(--ft-anel);}
   .ft-dd.aberto .ft-dd-bt svg{transform:rotate(180deg);}
+  /* ALTURA E ROLAGEM DO MENU (v3.306)
+
+     Nasceu com max-height:240px fixo. Um item mede 31px, então cabiam SETE
+     e nada mais. Num filtro de dia com nove opções, "Dia 11" e "Dia 12"
+     ficavam abaixo do corte, e a barra de rolagem do Chrome tem 2px de
+     largura e some quando não se está rolando: a lista simplesmente
+     parecia terminar no Dia 10. Foi assim que dois dias inteiros do
+     relatório "sumiram" sem nada estar errado no relatório.
+
+     Duas correções. A altura agora é calculada no abre(), pelo espaço que
+     existe na tela — num monitor comum um mês inteiro cabe de uma vez. E
+     quando ainda assim sobrar lista, ela AVISA: sombra em cima e embaixo
+     pelo truque de background-attachment:local, que anda sozinho com a
+     rolagem, sem uma linha de JavaScript. */
   .ft-dd-menu{
     position:fixed;z-index:430;display:none;
-    max-height:240px;overflow:auto;padding:5px;
+    max-height:240px;overflow:auto;overscroll-behavior:contain;padding:5px;
+    /* AQUI A BARRA APARECE, e é exceção de propósito. Lá em cima o editor
+       apaga TODA barra de rolagem do aplicativo (`*{scrollbar-width:none}`),
+       o que é bonito numa página e péssimo numa lista curta: foi por isso
+       que o Dia 11 não tinha como ser percebido. Neste menu a barra volta.
+       Precisa ser pelas propriedades padrão, não pelas ::-webkit-*: no
+       Chrome, com scrollbar-width definido em qualquer ancestral, as regras
+       webkit são ignoradas. */
+    scrollbar-width:thin;scrollbar-color:var(--ft-borda) transparent;
     background:var(--ft-superficie);border:1px solid var(--ft-borda);
     /* era --r-md (8px) do kit; na v3.275 todo o r-md do app virou r-sm.
        Continua sendo o flutuante de raio menor, porque nasce colado no
@@ -3709,6 +3731,30 @@
   .ft-dd-op:hover{background:var(--ft-hover);}
   .ft-dd-op.on{color:var(--ft-vermelho);font-weight:600;}
   .ft-dd-op.on::after{content:'✓';margin-left:auto;}
+  /* a barra de rolagem precisa ser VISTA. A do sistema tem 2px e desaparece
+     parada; esta tem 10 e fica. */
+  .ft-dd-menu::-webkit-scrollbar{width:10px;}
+  .ft-dd-menu::-webkit-scrollbar-track{background:transparent;}
+  .ft-dd-menu::-webkit-scrollbar-thumb{
+    background:var(--ft-borda);border-radius:8px;
+    border:3px solid transparent;background-clip:content-box;
+  }
+  .ft-dd-menu::-webkit-scrollbar-thumb:hover{background-clip:content-box;background-color:var(--ft-cinza-40);}
+  /* SOMBRA DE "TEM MAIS". Os dois primeiros gradientes são a cor do menu e
+     andam COM o conteúdo (local); os dois radiais ficam parados (scroll).
+     Onde há conteúdo escondido, o branco saiu de baixo e a sombra aparece.
+     No topo e na base ao mesmo tempo, sem JavaScript nenhum. */
+  .ft-dd-menu.rolavel{
+    background-image:
+      linear-gradient(var(--ft-superficie) 34%, rgba(255,255,255,0)),
+      linear-gradient(rgba(255,255,255,0), var(--ft-superficie) 66%),
+      radial-gradient(farthest-side at 50% 0, rgba(17,18,20,.16), rgba(17,18,20,0)),
+      radial-gradient(farthest-side at 50% 100%, rgba(17,18,20,.16), rgba(17,18,20,0));
+    background-position:0 0, 0 100%, 0 0, 0 100%;
+    background-repeat:no-repeat;
+    background-size:100% 30px, 100% 30px, 100% 11px, 100% 11px;
+    background-attachment:local, local, scroll, scroll;
+  }
   @media print{ .ft-dd-menu{display:none !important;} }
 
   /* ================================================================
@@ -5260,10 +5306,84 @@
     background:var(--ft-vermelho);border-color:var(--ft-vermelho);color:#fff;
   }
   .ft-login-corpo #ftSyncBtn:hover{filter:brightness(1.07);color:#fff;}
+  .ft-login-corpo #ftSyncBtn:disabled{opacity:.6;cursor:progress;}
+  /* sair do modo admin não é a ação principal: perde o vermelho cheio */
+  .ft-login-corpo #ftSyncBtn.sair{
+    background:var(--ft-superficie-2);color:var(--ft-cinza-40);
+    border-color:var(--ft-borda);font-weight:600;
+  }
+  .ft-login-corpo #ftSyncBtn.sair:hover{
+    background:var(--ft-hover-2);color:var(--ft-vermelho);border-color:var(--ft-vermelho);
+  }
+  /* A RESPOSTA DO LOGIN (v3.305). Sem esta linha, senha certa e senha
+     errada davam a mesma tela: nada. */
+  .ft-login-msg{
+    font-size:12.5px;line-height:1.4;min-height:0;margin-top:-4px;
+  }
+  .ft-login-msg:empty{display:none;}
+  .ft-login-msg[data-tipo="erro"]{color:var(--ft-vermelho);font-weight:600;}
+  .ft-login-msg[data-tipo="ok"]{color:#17803D;font-weight:600;}
+  .ft-login-msg[data-tipo="esperando"]{color:var(--ft-cinza-40);}
   .ft-login-rot{
     font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ft-cinza-40);margin-bottom:-6px;
   }
+
+  /* ================================================================
+     QUEM ESTA USANDO (v3.307)
+     ================================================================ */
+  .ft-eu-chip{
+    display:flex;align-items:center;gap:9px;width:100%;padding:7px 8px;margin-bottom:6px;
+    background:transparent;border:1px solid transparent;border-radius:9px;
+    cursor:pointer;text-align:left;color:var(--mn-fg);font:inherit;
+  }
+  .ft-eu-chip:hover{background:var(--mn-hover);border-color:var(--mn-borda,transparent);}
+  .ft-eu-chip .ini{
+    flex:0 0 26px;height:26px;border-radius:8px;background:var(--ft-vermelho);color:#fff;
+    display:grid;place-items:center;font-size:12.5px;font-weight:700;
+  }
+  .ft-eu-chip .txt{display:flex;flex-direction:column;min-width:0;line-height:1.2;}
+  .ft-eu-chip .txt b{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ft-eu-chip .txt i{font-size:10px;font-style:normal;opacity:.65;text-transform:uppercase;letter-spacing:.05em;}
+  body.menu-fechado .ft-eu-chip .txt{display:none;}
+
+  /* FINANCEIRO VE O BANCO, MAS NAO MEXE. Some o que cria e o que apaga; o
+     que resta e consulta. A tranca de verdade esta no servidor: isto aqui e
+     para nao oferecer um botao que vai ser recusado. */
+  body.sem-banco-editar #bdPage .bd-novo-linha,
+  body.sem-banco-editar #bdPage .bd-add-btn,
+  body.sem-banco-editar #bdPage .bd-item-del,
+  body.sem-banco-editar #bdPage .bd-lat-arq{display:none !important;}
+  body.sem-banco-editar #bdPage .bd-item-input,
+  body.sem-banco-editar #bdPage .bd-cor-pick{
+    pointer-events:none;background:transparent;border-color:transparent;
+  }
+
+  /* ---- minha conta, dentro do modal de login ---- */
+  .ft-conta{display:grid;gap:14px;}
+  .ft-conta-topo{display:flex;align-items:center;gap:11px;}
+  .ft-conta-ini{
+    flex:0 0 40px;height:40px;border-radius:12px;background:var(--ft-vermelho);color:#fff;
+    display:grid;place-items:center;font-size:17px;font-weight:700;
+  }
+  .ft-conta-nome{display:flex;flex-direction:column;line-height:1.25;}
+  .ft-conta-nome b{font-size:15px;font-weight:600;color:var(--ft-preto);}
+  .ft-conta-nome span{font-size:11.5px;color:var(--ft-cinza-40);text-transform:uppercase;letter-spacing:.05em;}
+  .ft-conta-linha{height:1px;background:var(--ft-borda);}
+  .ft-conta input{
+    width:100%;height:38px;padding:0 11px;font:inherit;font-size:13.5px;color:var(--ft-preto);
+    border:1.5px solid var(--ft-borda);border-radius:9px;background:var(--ft-superficie-2);outline:none;
+  }
+  .ft-conta input:focus{border-color:var(--ft-vermelho);}
+  .ft-conta .rot{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ft-cinza-40);margin-bottom:5px;}
+  .ft-conta .campo{display:block;}
+  .ft-conta .bts{display:flex;gap:9px;}
+  .ft-conta button{height:38px;border-radius:9px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .ft-conta .salvar{flex:1;background:var(--ft-vermelho);border:1px solid var(--ft-vermelho);color:#fff;}
+  .ft-conta .sair{background:var(--ft-superficie-2);border:1px solid var(--ft-borda);color:var(--ft-cinza-40);}
+  .ft-conta .sair:hover{border-color:var(--ft-vermelho);color:var(--ft-vermelho);}
+
 
   /* ================================================================
      SEÇÃO CLIENTES (v4.3)
@@ -7015,7 +7135,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.304';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.307';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -7273,7 +7393,12 @@ function syncDatalists(){
 /* Servidor padrão da Fourtime: o editor já abre conectado, sem ninguém digitar nada.
    Os campos do Banco de Dados continuam editáveis (para apontar a outro servidor). */
 const FT_SERVIDOR_PADRAO='https://fourtime-etapa02.onrender.com';
-const FT_TOKEN_PADRAO='2026@Fourtime';
+/* O TOKEN DA EQUIPE SAIU DAQUI (v3.307).
+   Ele ficava escrito nesta linha, dentro de um arquivo que o servidor
+   entregava a qualquer um que abrisse o endereco. Ou seja: a chave da
+   empresa estava publicada. Quem entra agora e a SESSAO, num cookie que o
+   navegador manda sozinho e que nenhum JavaScript le. */
+const FT_TOKEN_PADRAO='';
 const FT_SYNC={
   url:(localStorage.getItem('ft_sync_url')||FT_SERVIDOR_PADRAO).replace(/\/+$/,''),
   token:localStorage.getItem('ft_sync_token')||FT_TOKEN_PADRAO,
@@ -10871,6 +10996,18 @@ function ftDropdown(sel){
      zoom o alcança e as coordenadas de tela valem literalmente. Ao fechar
      ele volta para dentro do .ft-dd — assim não sobra menu órfão no body
      quando a lista de clientes/endereços é redesenhada. */
+  /* ---- ALTURA PELO ESPAÇO QUE HÁ (v3.306) -----------------------------
+     O max-height era 240px fixo no CSS. Com item de 31px isso são SETE
+     opções e ponto final: num filtro de dia com nove, as duas últimas
+     ficavam fora da vista, e como a barra de rolagem do Chrome tem 2px e
+     some quando parada, a lista parecia acabar ali. Foi exatamente assim
+     que "Dia 11" e "Dia 12" sumiram do filtro do relatório enquanto os
+     pedidos dos dias 11 e 12 estavam na tabela, logo ao lado.
+
+     Agora o menu mede o espaço livre acima e abaixo do campo, escolhe o
+     lado mais folgado e usa a altura que tiver. Num monitor comum um mês
+     inteiro de dias cabe de uma vez. Se ainda sobrar lista, a classe
+     .rolavel liga a sombra que avisa que há mais. */
   function abre(){
     monta();
     document.body.appendChild(menu);          /* fora do zoom da lateral */
@@ -10879,8 +11016,25 @@ function ftDropdown(sel){
     const r = bt.getBoundingClientRect();
     menu.style.width = Math.max(140, Math.round(r.width)) + 'px';
     menu.style.left = Math.round(r.left) + 'px';
+
+    const folga = 12, minimo = 132;
+    const abaixo = innerHeight - r.bottom - folga - 4;
+    const acima  = r.top - folga - 4;
+    /* desce por padrão; só sobe quando embaixo não cabe e em cima cabe mais */
+    const desce = abaixo >= acima || abaixo >= menu.scrollHeight;
+    const espaco = Math.max(minimo, Math.round(desce ? abaixo : acima));
+    menu.style.maxHeight = espaco + 'px';
+
     const alt = menu.offsetHeight || 200;
-    menu.style.top = (r.bottom + alt > innerHeight - 12 ? Math.max(8, r.top - alt - 4) : r.bottom + 4) + 'px';
+    menu.style.top = (desce ? (r.bottom + 4) : Math.max(folga, r.top - alt - 4)) + 'px';
+
+    /* sobrou lista? então ela tem de dizer isso */
+    menu.classList.toggle('rolavel', menu.scrollHeight > menu.clientHeight + 1);
+    /* e o que está escolhido tem de estar à vista ao abrir */
+    const marcado = menu.querySelector('.ft-dd-op.on');
+    if(marcado && menu.scrollHeight > menu.clientHeight + 1){
+      try{ marcado.scrollIntoView({block:'nearest'}); }catch(e){}
+    }
   }
   function fecha(){
     dd.classList.remove('aberto');
@@ -10899,8 +11053,15 @@ function ftDropdown(sel){
   });
   addEventListener('resize', fecha, {passive:true});
   /* um menu fixo não acompanha a rolagem do painel: em vez de flutuar
-     solto longe do campo, ele fecha */
-  addEventListener('scroll', fecha, {passive:true, capture:true});
+     solto longe do campo, ele fecha.
+
+     MENOS quando quem rolou foi o PRÓPRIO menu (v3.306). Agora que a lista
+     pode ser mais alta que a tela, rolar dentro dela é uso normal — e com
+     o listener em captura, esse scroll subia e fechava o menu na cara de
+     quem estava procurando o Dia 31. Pior: o scrollIntoView que leva o item
+     marcado para a vista fechava o menu no instante em que ele abria. */
+  addEventListener('scroll', e => { if(e.target !== menu) fecha(); },
+                   {passive:true, capture:true});
 
   new MutationObserver(mostra).observe(sel, {childList:true, subtree:true});
   sel.addEventListener('change', mostra);
@@ -13754,7 +13915,12 @@ window.relAlternar=relAlternar;
 function relAtualizaAcesso(){
   const item=document.getElementById('miRel');
   if(!item)return;
-  const pode=!!(FT_SYNC.on&&FT_SYNC.ehAdmin);
+  /* v3.307: quem decide agora e o PAPEL da pessoa, nao o token de admin.
+     Vendedor nao ve Relatorios; Financeiro ve. Enquanto o /api/auth/eu nao
+     respondeu, vale a regra antiga, para nao piscar. */
+  const pode=(typeof FT_EU==='object'&&FT_EU.carregado)
+    ? (FT_EU.pode.indexOf('relatorio')>=0)
+    : !!(FT_SYNC.on&&FT_SYNC.ehAdmin);
   item.style.display=pode?'':'none';
   if(!pode&&relAberto)relAlternar(false);
 }
@@ -16404,9 +16570,72 @@ const FT_LOGIN_HTML=()=>`<div class="bd-sync">
         <button id="ftDbImp" title="Carregar um banco de dados de um arquivo .ftdb">Importar DB</button>
         <input type="file" id="ftDbFile" accept=".ftdb,.json,application/json" style="display:none">
       </div>`;
+/* ================================================================
+   O MODAL VIROU "MINHA CONTA" (v3.307)
+
+   Ele nasceu para digitar o token de administrador, quando "admin" era uma
+   senha que qualquer um podia colar. Agora quem entrou tem nome e papel, e o
+   que falta aqui e o que e da pessoa: trocar a propria senha e sair.
+
+   O caminho antigo continua vivo logo abaixo, e nao por descuido: quando o
+   editor e aberto de um arquivo, ou quando a chave de emergencia desliga o
+   login no Render, nao ha sessao nenhuma, e o token volta a ser a unica
+   forma de administrar.
+   ================================================================ */
+function FT_CONTA_HTML(){
+  const ini=(FT_EU.nome||'?').trim().charAt(0).toUpperCase();
+  return `<div class="ft-conta">
+    <div class="ft-conta-topo">
+      <div class="ft-conta-ini">${bdEsc(ini)}</div>
+      <div class="ft-conta-nome"><b>${bdEsc(FT_EU.nome||FT_EU.u)}</b>
+        <span>${bdEsc(FT_EU.papel||'')}</span></div>
+    </div>
+    <div class="ft-conta-linha"></div>
+    <label class="campo"><div class="rot">Senha atual</div>
+      <input id="ftCtAtual" type="password" autocomplete="current-password"></label>
+    <label class="campo"><div class="rot">Nova senha</div>
+      <input id="ftCtNova" type="password" autocomplete="new-password"
+             placeholder="pelo menos 8 caracteres"></label>
+    <label class="campo"><div class="rot">Repita a nova senha</div>
+      <input id="ftCtNova2" type="password" autocomplete="new-password"></label>
+    <div class="bts">
+      <button class="salvar" id="ftCtSalvar" type="button">Trocar senha</button>
+      <button class="sair" id="ftCtSair" type="button">Sair</button>
+    </div>
+    <div class="ft-login-msg" id="ftLoginMsg"></div>
+  </div>`;
+}
+
 function loginAbre(){
   const cx=document.getElementById('ftLoginCorpo');
   if(!cx)return;
+  /* com sessao de verdade, o modal e a conta da pessoa */
+  if(FT_EU.carregado && FT_EU.login && FT_EU.u){
+    cx.innerHTML=FT_CONTA_HTML();
+    const tit=document.querySelector('#ftLoginFundo .ft-login-topo .tit');
+    if(tit)tit.textContent='Minha conta';
+    cx.querySelector('#ftCtSair').onclick=()=>ftSair();
+    cx.querySelector('#ftCtSalvar').onclick=async()=>{
+      const a=cx.querySelector('#ftCtAtual').value;
+      const n=cx.querySelector('#ftCtNova').value;
+      const n2=cx.querySelector('#ftCtNova2').value;
+      const bt=cx.querySelector('#ftCtSalvar');
+      if(!a){ ftLoginDiz(cx,'erro','Digite a senha atual.'); return; }
+      if(n!==n2){ ftLoginDiz(cx,'erro','As duas senhas novas não são iguais.'); return; }
+      if(n.length<8){ ftLoginDiz(cx,'erro','A nova senha precisa de pelo menos 8 caracteres.'); return; }
+      bt.disabled=true; ftLoginDiz(cx,'esperando','Trocando…');
+      try{
+        await ftTrocaSenha(a,n);
+        ftLoginDiz(cx,'ok','Senha trocada.');
+        cx.querySelector('#ftCtAtual').value='';
+        cx.querySelector('#ftCtNova').value='';
+        cx.querySelector('#ftCtNova2').value='';
+      }catch(e){ ftLoginDiz(cx,'erro',e.message); }
+      finally{ bt.disabled=false; }
+    };
+    document.getElementById('ftLoginFundo').classList.add('on');
+    return;
+  }
   cx.innerHTML=FT_LOGIN_HTML();
   /* Reordena o que sobrou numa forma de login: estado, rótulo, senha,
      entrar e sincronizar. O HTML de origem é a barra antiga, pensada para
@@ -16427,19 +16656,322 @@ function loginAbre(){
       rot.className='ft-login-rot'; rot.textContent='Acesso';
       b.insertBefore(rot,senha);
     }
-    /* entrar com Enter, como em qualquer login */
+    /* A LINHA QUE FALA (v3.305). Antes, senha errada e senha certa davam
+       exatamente a mesma tela: nada. Agora toda tentativa termina numa
+       frase. */
+    if(!b.querySelector('#ftLoginMsg')){
+      const m=document.createElement('div');
+      m.className='ft-login-msg'; m.id='ftLoginMsg';
+      const bt=b.querySelector('#ftSyncBtn');
+      if(bt&&bt.nextSibling)b.insertBefore(m,bt.nextSibling); else b.appendChild(m);
+    }
+    /* entrar com Enter, como em qualquer login. Vai DIRETO para a
+       autenticação: clicar no #ftSyncBtn levava ao botão de conexão, que
+       nesta altura está escrito "Conectado" e cujo trabalho é DESCONECTAR. */
     if(senha&&!senha._ftEnter){
       senha._ftEnter=true;
       senha.addEventListener('keydown',e=>{
-        if(e.key==='Enter'){e.preventDefault();const bt=b.querySelector('#ftSyncBtn'); if(bt)bt.click();}
+        if(e.key==='Enter'){e.preventDefault();ftLoginEntra(cx);}
       });
     }
   }
   /* religa os campos: são elementos novos a cada abertura */
-  if(typeof bdLigaSync==='function')bdLigaSync();
+  bdLigaSync(cx);
+  /* no modal o botão é ENTRAR, não conectar: o endereço e o token da equipe
+     estão escondidos e não mudam, o que a pessoa veio fazer aqui é logar */
+  const bt=cx.querySelector('#ftSyncBtn');
+  if(bt)bt.onclick=()=>ftLoginEntra(cx);
+  ftLoginPinta(cx);
   if(typeof ftSyncPinta==='function')ftSyncPinta();
   document.getElementById('ftLoginFundo').classList.add('on');
+  const s=cx.querySelector('#ftSyncAdmin');
+  if(s)setTimeout(()=>{try{s.focus();s.select();}catch(e){}},60);
 }
+
+/* ================================================================
+   LIGAR OS CAMPOS DE SINCRONIZAÇÃO  (bdLigaSync)  — v3.305
+
+   ESTA FUNÇÃO NÃO EXISTIA. O modal de login a chamava desde a v4.2 assim:
+
+       if(typeof bdLigaSync==='function')bdLigaSync();
+
+   e o `typeof` engolia a ausência em silêncio: sem erro no console, sem
+   nada. O resultado é que NENHUM campo do modal tinha comportamento. O
+   botão Conectar não tinha onclick, o campo de senha não tinha onchange, e
+   a senha digitada nunca saía do campo.
+
+   A ligação de verdade morava dentro do bdRender(), procurando os campos
+   com pg.querySelector() — mas a barra tinha saído da página do Banco de
+   Dados justamente para virar este modal. Todos aqueles querySelector
+   passaram a devolver null, e ninguém percebeu porque cada um deles está
+   protegido por um `if`.
+
+   Por que só apareceu agora: quem já tinha logado antes da mudança carrega
+   a senha no localStorage e entra sozinho. Em máquina nova não havia
+   caminho nenhum para se tornar admin.
+
+   Recebe a RAIZ porque os mesmos ids podem existir em dois lugares.
+   ================================================================ */
+function bdLigaSync(raiz){
+  const r=raiz||document;
+  const q=s=>r.querySelector(s);
+  const sUrl=q('#ftSyncUrl'), sTok=q('#ftSyncToken'), sAdm=q('#ftSyncAdmin');
+  if(sUrl)sUrl.onchange=()=>{FT_SYNC.url=sUrl.value.trim().replace(/\/+$/,'');ftSyncSalvaCfg();};
+  if(sTok)sTok.onchange=()=>{FT_SYNC.token=sTok.value.trim();ftSyncSalvaCfg();};
+  /* o campo de senha guarda o que foi digitado ao sair dele, mas NÃO tenta
+     autenticar sozinho: quem autentica é o botão ou o Enter, senão sair do
+     campo com meia senha já dispararia "senha incorreta" na cara da pessoa */
+  if(sAdm)sAdm.onchange=()=>{};
+  const sBtn=q('#ftSyncBtn');
+  if(sBtn)sBtn.onclick=async()=>{
+    if(FT_SYNC.on){ ftSyncDesconectar(); if(typeof bdRender==='function')bdRender(); return; }
+    if(sUrl)FT_SYNC.url=sUrl.value.trim().replace(/\/+$/,'');
+    if(sTok)FT_SYNC.token=sTok.value.trim();
+    ftSyncSalvaCfg();
+    if(!FT_SYNC.url){alert('Informe o endereço do servidor.');return;}
+    const ok=await ftSyncConectar();
+    if(typeof bdRender==='function')bdRender();
+    if(!ok)alert('Não foi possível conectar. Verifique o endereço e o token.');
+  };
+  const sAg=q('#ftSyncAgora');
+  if(sAg)sAg.onclick=async()=>{
+    if(!FT_SYNC.on){alert('Conecte-se ao servidor primeiro.');return;}
+    if(await ftSyncPull()&&typeof bdRender==='function')bdRender();
+  };
+  const eBtn=q('#ftDbExp'); if(eBtn)eBtn.onclick=ftExportarDB;
+  const iBtn=q('#ftDbImp'), iFile=q('#ftDbFile');
+  if(iBtn&&iFile){
+    iBtn.onclick=()=>iFile.click();
+    iFile.onchange=()=>{if(iFile.files&&iFile.files[0])ftImportarDB(iFile.files[0]);iFile.value='';};
+  }
+}
+window.bdLigaSync=bdLigaSync;
+
+/* ---- a frase que o modal devolve ---- */
+function ftLoginDiz(raiz,tipo,texto){
+  const m=(raiz||document).querySelector('#ftLoginMsg');
+  if(!m)return;
+  m.dataset.tipo=tipo||''; m.textContent=texto||'';
+}
+/* ---- botão e crachá de acordo com quem está logado ---- */
+function ftLoginPinta(raiz){
+  const r=raiz||document;
+  const bt=r.querySelector('#ftSyncBtn');
+  const papel=r.querySelector('.bd-sync-papel');
+  if(bt){
+    bt.textContent=FT_SYNC.ehAdmin?'Sair do modo administrador':'Entrar';
+    bt.classList.toggle('sair',!!FT_SYNC.ehAdmin);
+  }
+  if(papel){
+    papel.dataset.admin=FT_SYNC.ehAdmin?'1':'0';
+    papel.textContent=FT_SYNC.on?(FT_SYNC.ehAdmin?'ADMIN':'só leitura + adição'):'desconectado';
+  }
+}
+/* ---- redesenha o que muda de cara conforme o acesso ---- */
+function ftLoginRedesenha(){
+  try{ if(typeof bdRender==='function'){const pg=document.getElementById('bdPage');
+        if(pg&&pg.classList.contains('on'))bdRender();} }catch(e){}
+  try{ if(typeof bdLatDesenha==='function')bdLatDesenha(); }catch(e){}
+  try{ if(window.relAtualizaAcesso)relAtualizaAcesso(); }catch(e){}
+}
+
+/* ================================================================
+   ENTRAR COMO ADMINISTRADOR  — v3.305
+
+   Confere a senha no servidor e DIZ o resultado. Cada saída tem a sua
+   frase, porque "não aconteceu nada" é o pior retorno possível num login:
+
+     sem senha        -> pede a senha
+     sem conexão      -> é do servidor, não da senha
+     401 no /sou-admin-> o token da EQUIPE está errado, não a senha do admin
+     admin=false      -> a senha está errada, e ela não fica guardada
+     admin=true       -> entrou, e o modal se fecha sozinho
+
+   Senha errada não é gravada no localStorage: senão a próxima abertura do
+   editor já nasceria mandando uma senha inválida em todo cabeçalho.
+   ================================================================ */
+let _ftEntrando=false;
+async function ftLoginEntra(raiz){
+  const r=raiz||document;
+  const campo=r.querySelector('#ftSyncAdmin');
+  const bt=r.querySelector('#ftSyncBtn');
+  if(!campo||_ftEntrando)return;
+
+  /* já é admin: o botão vira a saída */
+  if(FT_SYNC.ehAdmin&&campo.value.trim()===(FT_SYNC.admin||'')){
+    FT_SYNC.admin=''; FT_SYNC.ehAdmin=false; ftSyncSalvaCfg();
+    campo.value='';
+    ftLoginPinta(r); ftLoginRedesenha();
+    ftLoginDiz(r,'ok','Saiu do modo administrador.');
+    return;
+  }
+
+  const senha=campo.value.trim();
+  if(!senha){ ftLoginDiz(r,'erro','Digite a senha de administrador.'); campo.focus(); return; }
+
+  _ftEntrando=true;
+  if(bt)bt.disabled=true;
+  ftLoginDiz(r,'esperando','Conferindo…');
+  const guardada=FT_SYNC.admin;
+  try{
+    FT_SYNC.admin=senha;
+    if(!FT_SYNC.on){
+      const conectou=await ftSyncConectar();
+      if(!conectou){
+        FT_SYNC.admin=guardada;
+        ftLoginDiz(r,'erro','Sem conexão com o servidor. A senha não pôde ser conferida.');
+        return;
+      }
+    }
+    const resp=await ftSyncFetch('/api/db/sou-admin');
+    if(resp.status===401){
+      FT_SYNC.admin=guardada;
+      ftLoginDiz(r,'erro','O token da equipe está inválido. Fale com o administrador.');
+      return;
+    }
+    if(!resp.ok){
+      FT_SYNC.admin=guardada;
+      ftLoginDiz(r,'erro','O servidor não respondeu ('+resp.status+'). Tente de novo.');
+      return;
+    }
+    const j=await resp.json();
+    if(!j.admin_configurado){
+      FT_SYNC.admin=guardada;
+      ftLoginDiz(r,'erro','Este servidor está sem senha de administrador configurada.');
+      return;
+    }
+    FT_SYNC.ehAdmin=!!j.admin;
+    if(FT_SYNC.ehAdmin){
+      ftSyncSalvaCfg();
+      ftLoginPinta(r); ftLoginRedesenha();
+      ftLoginDiz(r,'ok','Entrou como administrador.');
+      setTimeout(()=>{ if(!_ftEntrando)loginFecha(); },1000);
+    }else{
+      FT_SYNC.admin='';            /* não guarda senha errada */
+      ftSyncSalvaCfg();
+      ftLoginPinta(r);
+      ftLoginDiz(r,'erro','Senha de administrador incorreta.');
+      try{campo.focus();campo.select();}catch(e){}
+    }
+  }catch(e){
+    FT_SYNC.admin=guardada;
+    ftLoginDiz(r,'erro','Não deu para falar com o servidor. Verifique a internet.');
+  }finally{
+    _ftEntrando=false;
+    if(bt)bt.disabled=false;
+  }
+}
+window.ftLoginEntra=ftLoginEntra;
+
+/* ================================================================
+   QUEM ESTÁ USANDO  (v3.307)
+
+   O editor deixou de ser público. O servidor só o entrega a quem tem sessão,
+   e diz, em /api/auth/eu, quem é a pessoa e o que ela pode.
+
+   O QUE ESTA PARTE FAZ E O QUE ELA NÃO FAZ. Ela esconde o que a pessoa não
+   pode usar. Ela NÃO é a segurança: quem recusa de verdade é o servidor, em
+   cada endereço. Esconder botão é conforto, não tranca — quem quiser burlar
+   chama o endereço na mão, e é lá que a porta tem de estar. As duas coisas
+   existem porque servem a propósitos diferentes.
+   ================================================================ */
+let FT_EU={u:'',nome:'',papel:'',pode:[],trocar:false,carregado:false,login:true};
+function euPode(p){ return !FT_EU.carregado || FT_EU.pode.indexOf(p)>=0; }
+
+async function ftEuCarrega(){
+  try{
+    const r=await fetch('/api/auth/eu',{credentials:'same-origin'});
+    if(!r.ok)return false;
+    const d=await r.json();
+    FT_EU=Object.assign({carregado:true,login:d.login!==false},d.usuario||{});
+    FT_EU.pode=FT_EU.pode||[];
+    ftAplicaAcesso();
+    return true;
+  }catch(e){
+    /* aberto de arquivo, ou servidor fora: segue como sempre foi. Não é
+       brecha — sem servidor não há dado nenhum para proteger aqui. */
+    return false;
+  }
+}
+window.ftEuCarrega=ftEuCarrega;
+
+/* o que sumir da tela, e o que sobra */
+function ftAplicaAcesso(){
+  if(!FT_EU.carregado)return;
+  const secs={orcamento:'orcamento',relatorio:'relatorio',clientes:'clientes',
+              banco:'banco',bugs:'bugs'};
+  document.querySelectorAll('.ft-rail-bt').forEach(b=>{
+    const perm=secs[b.dataset.sec];
+    if(perm && !euPode(perm))b.hidden=true;
+  });
+  /* Financeiro vê o banco, mas não mexe. A classe liga as regras que somem
+     com o "Adicionar", com o lápis e com o campo de cor. */
+  document.body.classList.toggle('sem-banco-editar',
+    euPode('banco') && !euPode('banco.editar'));
+  document.body.classList.toggle('sem-admin-pessoa', !euPode('admin'));
+  /* se a pessoa estiver numa seção que não é dela, volta para o editor */
+  if(typeof FT_SEC==='string' && secs[FT_SEC] && !euPode(secs[FT_SEC])
+     && typeof ftSecao==='function')ftSecao('orcamento');
+  ftEuNoRodape();
+  if(typeof relAtualizaAcesso==='function')relAtualizaAcesso();
+}
+window.ftAplicaAcesso=ftAplicaAcesso;
+
+/* o nome de quem está usando, no pé do trilho: numa máquina compartilhada,
+   saber em nome de quem se está salvando é o mínimo */
+function ftEuNoRodape(){
+  const pe=document.querySelector('.ft-rail-pe');
+  if(!pe||!FT_EU.carregado||!FT_EU.nome)return;
+  let el=document.getElementById('ftEuChip');
+  if(!el){
+    el=document.createElement('button');
+    el.id='ftEuChip'; el.className='ft-eu-chip'; el.type='button';
+    el.title='Minha conta';
+    el.onclick=()=>{ if(typeof loginAbre==='function')loginAbre(); };
+    pe.insertBefore(el,pe.firstChild);
+  }
+  const ini=(FT_EU.nome||'?').trim().charAt(0).toUpperCase();
+  el.innerHTML='<span class="ini">'+ini+'</span>'
+    +'<span class="txt"><b>'+bdEsc(FT_EU.nome)+'</b><i>'+bdEsc(FT_EU.papel)+'</i></span>';
+}
+
+/* O VENDEDOR PASSA A SER QUEM ESTÁ LOGADO (v3.307). O campo continua
+   editável: quem monta um orçamento no lugar de um colega precisa poder
+   dizer isso. O que muda é o padrão, e é ele que faz o relatório valer. */
+function ftVendedorPadrao(){
+  if(!FT_EU.carregado||!FT_EU.nome)return;
+  const c=document.querySelector('input[data-h="vendedor"]');
+  if(c&&!c.value.trim()){
+    c.value=FT_EU.nome;
+    c.dispatchEvent(new Event('input',{bubbles:true}));
+    c.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+}
+window.ftVendedorPadrao=ftVendedorPadrao;
+
+async function ftSair(){
+  try{ await fetch('/api/auth/sair',{method:'POST',credentials:'same-origin'}); }catch(e){}
+  location.replace('/');
+}
+window.ftSair=ftSair;
+
+/* trocar a própria senha, de dentro do editor */
+async function ftTrocaSenha(atual,nova){
+  const r=await fetch('/api/auth/senha',{method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({atual:atual,nova:nova})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.detail||'Não consegui trocar a senha.');
+  return true;
+}
+window.ftTrocaSenha=ftTrocaSenha;
+
+(function ligaEu(){
+  const vai=async()=>{ await ftEuCarrega(); setTimeout(ftVendedorPadrao,400); };
+  if(document.readyState!=='loading')setTimeout(vai,120);
+  else addEventListener('DOMContentLoaded',()=>setTimeout(vai,120));
+})();
+
 function loginFecha(){
   const f=document.getElementById('ftLoginFundo');
   if(f)f.classList.remove('on');
@@ -17624,41 +18156,17 @@ function bdRender(){
 
   /* ---- sincronização / exportar / importar ---- */
   ftSyncStatus(FT_SYNC.estado,FT_SYNC.msg);
-  const sUrl=pg.querySelector('#ftSyncUrl'), sTok=pg.querySelector('#ftSyncToken');
-  if(sUrl)sUrl.onchange=()=>{FT_SYNC.url=sUrl.value.trim().replace(/\/+$/,'');ftSyncSalvaCfg();};
-  if(sTok)sTok.onchange=()=>{FT_SYNC.token=sTok.value.trim();ftSyncSalvaCfg();};
-  const sAdm=pg.querySelector('#ftSyncAdmin');
-  if(sAdm)sAdm.onchange=async()=>{
-    FT_SYNC.admin=sAdm.value.trim(); ftSyncSalvaCfg();
-    if(FT_SYNC.on){ await ftSyncConfereAdmin(); bdRender(); }
-  };
+  /* UMA LIGAÇÃO SÓ, PARA OS DOIS LUGARES (v3.305). Aqui existia uma cópia
+     inteira do código de ligação, escrita com pg.querySelector(). Quando a
+     barra saiu desta página para virar o modal de login, todos aqueles
+     querySelector viraram null e o código morreu sem avisar — cada um está
+     protegido por um `if`. A ligação agora é uma função só, que recebe a
+     raiz; se a barra voltar para esta página, volta funcionando. */
+  bdLigaSync(pg);
   /* esconde os botões de apagar para quem não é admin */
   pg.classList.toggle('sem-admin', FT_SYNC.on && !FT_SYNC.ehAdmin);
   bdDevolveFoco(_bdFoco);          /* devolve o cursor a quem estava digitando */
   _bdFoco=null;
-  const sBtn=pg.querySelector('#ftSyncBtn');
-  if(sBtn)sBtn.onclick=async()=>{
-    if(FT_SYNC.on){ftSyncDesconectar();bdRender();return;}
-    if(sUrl)FT_SYNC.url=sUrl.value.trim().replace(/\/+$/,'');
-    if(sTok)FT_SYNC.token=sTok.value.trim();
-    ftSyncSalvaCfg();
-    if(!FT_SYNC.url){alert('Informe o endereço do servidor.');return;}
-    const ok=await ftSyncConectar();
-    bdRender();
-    if(!ok)alert('Não foi possível conectar. Verifique o endereço e o token.');
-  };
-  const sAg=pg.querySelector('#ftSyncAgora');
-  if(sAg)sAg.onclick=async()=>{
-    if(!FT_SYNC.on){alert('Conecte-se ao servidor primeiro.');return;}
-    const ok=await ftSyncPull();
-    if(ok)bdRender();
-  };
-  const eBtn=pg.querySelector('#ftDbExp'); if(eBtn)eBtn.onclick=ftExportarDB;
-  const iBtn=pg.querySelector('#ftDbImp'), iFile=pg.querySelector('#ftDbFile');
-  if(iBtn&&iFile){
-    iBtn.onclick=()=>iFile.click();
-    iFile.onchange=()=>{if(iFile.files&&iFile.files[0])ftImportarDB(iFile.files[0]);iFile.value='';};
-  }
   pg.querySelectorAll('.bd-cat').forEach(b=>{
     b.onclick=()=>{bdCat=b.dataset.cat;bdBusca='';bdRender();};
   });

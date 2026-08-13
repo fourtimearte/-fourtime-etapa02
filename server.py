@@ -16,7 +16,7 @@
 #  Se existir um arquivo editor*.html na mesma pasta, ele é
 #  servido em "/" — editor completamente online.
 # ============================================================
-import os, re, json, glob, sqlite3, threading, hashlib, uuid, copy
+import os, re, json, glob, sqlite3, threading, hashlib, uuid, copy, hmac, time, secrets
 from datetime import datetime, timezone
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -26,6 +26,62 @@ FT_TOKEN = os.environ.get("FT_TOKEN", "fourtime2026")
 # Token do ADMIN: só quem tem este pode APAGAR ou RENOMEAR itens do banco.
 # Sem ele, o servidor MESCLA tudo — ninguém consegue destruir o trabalho alheio.
 FT_ADMIN_TOKEN = os.environ.get("FT_ADMIN_TOKEN", "").strip()
+
+# ============================================================
+#  LOGIN POR PESSOA  (v3.307)
+#
+#  Antes: o editor era servido para QUALQUER UM que abrisse o
+#  endereco, e a chave da equipe estava escrita dentro do HTML
+#  (FT_TOKEN_PADRAO). Ou seja, quem abriu o link uma vez ficou
+#  com a chave para sempre.
+#
+#  Agora: cada pessoa tem usuario e senha, e a sessao vive num
+#  cookie assinado. O X-FT-Token deixa de abrir portas.
+#
+#  FT_SEGREDO      assina o cookie. Se nao existir, e derivado do
+#                  FT_ADMIN_TOKEN (que NAO e publico) para a sessao
+#                  sobreviver a reinicio sem exigir configuracao nova.
+#  FT_SESSAO_DIAS  quanto tempo a pessoa fica logada. Padrao 30.
+#  FT_LOGIN_DESLIGADO=1  DESLIGA o login e volta ao comportamento
+#                  antigo. E a chave de emergencia: se algo der
+#                  errado numa segunda de manha, um clique no painel
+#                  do Render devolve o sistema para todo mundo.
+# ============================================================
+FT_SESSAO_DIAS = int(os.environ.get("FT_SESSAO_DIAS", "30") or 30)
+FT_LOGIN_DESLIGADO = os.environ.get("FT_LOGIN_DESLIGADO", "").strip().lower() in ("1", "sim", "true", "on")
+FT_SEGREDO = os.environ.get("FT_SEGREDO", "").strip()
+COOKIE_SESSAO = "ft_sessao"
+
+# Senhas de PARTIDA. Nenhuma delas sobrevive ao primeiro acesso: enquanto a
+# pessoa nao trocar, o servidor nao entrega o editor (ver "precisaTrocar").
+SENHA_INICIAL_ADMIN  = os.environ.get("FT_SENHA_ADMIN_INICIAL",  "21560110")
+SENHA_INICIAL_EQUIPE = os.environ.get("FT_SENHA_EQUIPE_INICIAL", "2026@Fourtime")
+
+# A equipe, como o Henrique passou. Isto so e usado UMA vez, para semear.
+# Depois disso quem manda e a lista gravada.
+FT_SEMENTE = [
+    ("henrique", "Henrique", "admin",      SENHA_INICIAL_ADMIN),
+    ("dani",     "Dani",     "admin",      SENHA_INICIAL_ADMIN),
+    ("kev",      "Kev",      "vendedor",   SENHA_INICIAL_EQUIPE),
+    ("patricia", "Patricia", "vendedor",   SENHA_INICIAL_EQUIPE),
+    ("lucas",    "Lucas",    "vendedor",   SENHA_INICIAL_EQUIPE),
+    ("fabricio", "Fabricio", "vendedor",   SENHA_INICIAL_EQUIPE),
+    ("dayane",   "Dayane",   "financeiro", SENHA_INICIAL_EQUIPE),
+]
+
+# O QUE CADA PAPEL PODE. E uma lista de permissoes, nao de telas: a tela
+# esconde o botao, mas quem recusa de verdade e o servidor, aqui.
+#   orcamento     o editor de orcamentos
+#   clientes      a secao de clientes
+#   banco         VER o banco (tecidos, cores, referencias)
+#   banco.editar  MEXER no banco (adicionar e alterar)
+#   relatorio     a secao de relatorios
+#   admin         apagar, renomear, padronizar mes, administrar usuarios
+FT_PAPEIS = {
+    "admin":      {"orcamento", "clientes", "banco", "banco.editar", "relatorio", "bugs", "admin"},
+    "vendedor":   {"orcamento", "clientes", "banco", "banco.editar", "bugs"},
+    "financeiro": {"orcamento", "clientes", "banco", "relatorio", "bugs"},
+}
 # Versão MÍNIMA do editor aceita para GRAVAR. Editores antigos têm um banco
 # local possivelmente velho — e a mesclagem ressuscitaria itens já apagados.
 # Ler, qualquer versão pode; gravar, só quem está em dia.
@@ -72,6 +128,9 @@ def init_db():
             nome TEXT NOT NULL,
             data TEXT NOT NULL,
             atualizado TEXT)""")
+        c.execute("""CREATE TABLE IF NOT EXISTS usuarios(
+            u TEXT PRIMARY KEY,
+            json TEXT NOT NULL)""")
         if not c.execute("SELECT 1 FROM banco WHERE id=1").fetchone():
             c.execute("INSERT INTO banco(id,rev,data,atualizado) VALUES(1,0,'{}',?)",
                       (agora(),))
@@ -81,9 +140,44 @@ def agora():
     return datetime.now(timezone.utc).isoformat()
 
 def exige_token(req: Request):
-    tok = req.headers.get("X-FT-Token", "")
-    if tok != FT_TOKEN:
-        raise HTTPException(status_code=401, detail="Token inválido")
+    """Quem pode falar com a API.
+
+       Era a comparacao de um token compartilhado, que estava impresso dentro
+       do HTML servido publicamente. Agora e a SESSAO da pessoa. O nome da
+       funcao ficou para nao reescrever as quarenta chamadas espalhadas pelo
+       arquivo; o que ela faz mudou por inteiro.
+
+       Com FT_LOGIN_DESLIGADO=1 ela volta a ser o que era. E a saida de
+       emergencia, e existe de proposito."""
+    if FT_LOGIN_DESLIGADO:
+        # A CHAVE DE EMERGENCIA deixa o sistema ABERTO, e nao "com o token de
+        # antes". Tem de ser assim: o editor novo nao carrega mais o token da
+        # equipe (ele era publico, era esse o problema), entao exigir o token
+        # aqui deixaria todo mundo de fora justamente no momento em que a
+        # chave foi usada para colocar todo mundo de volta.
+        return None
+    u = usuario_da_req(req)
+    if not u:
+        raise HTTPException(status_code=401, detail="Sessão expirada. Faça login de novo.")
+    # A TROCA OBRIGATORIA E DE VERDADE. Enquanto a senha de partida estiver de
+    # pe, nenhuma outra rota responde. Se a trava vivesse so na tela de login,
+    # bastaria digitar o endereco da API para contornar.
+    if u.get("trocar"):
+        raise HTTPException(status_code=403,
+            detail="Troque a senha de partida para continuar.")
+    return u
+
+
+def exige_pode(req: Request, permissao: str):
+    """Recusa quem nao tem a permissao. Esconder o botao na tela nao basta:
+       sem isto, bastaria chamar o endereco na mao."""
+    if FT_LOGIN_DESLIGADO:
+        return None
+    u = exige_token(req)
+    if not pode(u, permissao):
+        raise HTTPException(status_code=403,
+            detail="Seu acesso (%s) não inclui isto." % (u or {}).get("papel", "?"))
+    return u
 
 @app.on_event("startup")
 def _startup():
@@ -512,6 +606,15 @@ def _recado_inchou(c):
 
 
 def eh_admin(request: Request) -> bool:
+    """Quem pode apagar e renomear.
+
+       Com login ligado quem manda e o PAPEL da pessoa. O X-FT-Admin continua
+       valendo como porta dos fundos: se o login quebrar, ainda ha um caminho
+       para operar o servidor."""
+    if not FT_LOGIN_DESLIGADO:
+        u = usuario_da_req(request)
+        if u and pode(u, "admin"):
+            return True
     if not FT_ADMIN_TOKEN:
         return False
     return request.headers.get("X-FT-Admin", "").strip() == FT_ADMIN_TOKEN
@@ -557,15 +660,39 @@ def _guarda_cache(rev, dados):
     except Exception:
         pass
 
+# CATEGORIAS QUE SAO "O BANCO". As demais (clientes, bugs) todo mundo que
+# entra pode gravar, porque cadastrar cliente e relatar bug e o trabalho de
+# qualquer um. Quem nao tem "banco.editar" simplesmente nao mexe nestas.
+CATEGORIAS_DO_BANCO = ("tecidos", "cores", "referencias", "fichas", "departamentos",
+                       "embalagens", "vendedores", "entregas", "pagamentos", "grupos")
+
+
+def _so_o_que_pode_gravar(dados, usuario):
+    """Tira do pacote as categorias que esta pessoa nao pode alterar.
+
+       Descarta em silencio, e nao recusa a gravacao inteira, de proposito: o
+       Financeiro salva um cliente e o banco dela vai junto no mesmo pacote,
+       como vai o de todo mundo. Recusar tudo faria ela nao conseguir salvar
+       cliente nenhum; recusar so o que nao e dela deixa o trabalho passar."""
+    if FT_LOGIN_DESLIGADO or not usuario or pode(usuario, "banco.editar"):
+        return dados, []
+    limpo = dict(dados)
+    tirados = [c for c in CATEGORIAS_DO_BANCO if c in limpo]
+    for c in tirados:
+        limpo.pop(c, None)
+    return limpo, tirados
+
+
 @app.put("/api/db")
 async def gravar_db(request: Request):
-    exige_token(request)
+    eu = exige_token(request)
     _backup_se_for_a_hora()   # o primeiro salvamento do dia guarda o banco
     exige_editor_atual(request)          # editor velho não grava (ressuscitaria itens)
     corpo = await request.json()
     dados = corpo.get("data")
     if not isinstance(dados, dict):
         raise HTTPException(status_code=400, detail="Campo 'data' inválido")
+    dados, _tirados = _so_o_que_pode_gravar(dados, eu)
 
     remocoes = corpo.get("remocoes") or {}
     # campos esvaziados de propósito (ver aplica_limpezas). Não exige admin:
@@ -919,8 +1046,15 @@ def le_banco_drive():
 
 def grava_banco_drive(rev, data):
     global _db_drive_id
-    corpo = json.dumps({"rev": rev, "data": data, "atualizado": agora()},
-                       ensure_ascii=False).encode("utf-8")
+    # OS USUARIOS VAO JUNTO, e nao dentro de "data" (v3.307).
+    # "data" e o banco que o navegador recebe inteiro; os usuarios ficam
+    # IRMAOS dele, no topo do arquivo, e por isso nunca saem daqui. Sem esta
+    # linha, a primeira gravacao do banco apagaria a lista de gente.
+    pacote = {"rev": rev, "data": data, "atualizado": agora()}
+    us = _usuarios_para_gravar()
+    if us is not None:
+        pacote["usuarios"] = us
+    corpo = json.dumps(pacote, ensure_ascii=False).encode("utf-8")
     fid = _acha_arquivo_banco()
     if fid:
         # atualiza o conteúdo (o Drive guarda o histórico de versões — dá para restaurar)
@@ -2786,6 +2920,7 @@ def ft_relatorio_lista(request: Request, ano: int = 0, mes: int = 0, dia: int = 
        É o primeiro passo do carregamento em lotes: com esta lista o editor
        sabe quantos são e pode mostrar um progresso verdadeiro, em vez de um
        'aguarde' sem fim."""
+    exige_pode(request, "relatorio")   # v3.307: vendedor nao ve relatorio
     exige_token(request)
     exige_editor_atual(request)
     exige_orcamentos()
@@ -2808,6 +2943,7 @@ async def ft_relatorio_lote(request: Request):
 
        O editor chama isto várias vezes, um lote de cada vez, e vai somando —
        assim a barra de progresso anda de verdade a cada resposta."""
+    exige_pode(request, "relatorio")   # v3.307: vendedor nao ve relatorio
     exige_token(request)
     exige_editor_atual(request)
     exige_orcamentos()
@@ -2853,6 +2989,7 @@ def ft_relatorio(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
        Sem 'dia', é o mês inteiro. A leitura é feita aqui e não no navegador
        porque são dezenas de arquivos: uma resposta em vez de dezenas de
        viagens."""
+    exige_pode(request, "relatorio")   # v3.307: vendedor nao ve relatorio
     exige_token(request)
     exige_editor_atual(request)          # relatório é coisa de administrador
     exige_orcamentos()
@@ -2917,6 +3054,7 @@ def ft_relatorio(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
 @app.get("/api/ft/relatorio-periodos")
 def ft_relatorio_periodos(request: Request, ano: int = 0, mes: int = 0):
     """Que anos, meses e dias existem — para preencher os seletores sem chute."""
+    exige_pode(request, "relatorio")   # v3.307: vendedor nao ve relatorio
     exige_token(request)
     exige_editor_atual(request)
     exige_orcamentos()
@@ -2978,6 +3116,7 @@ def _rel_nome_arquivo(ano, mes, dia=0):
 @app.post("/api/ft/relatorio-guardar")
 async def ft_relatorio_guardar(request: Request):
     """Guarda o relatório recém-gerado, para não ser preciso refazê-lo."""
+    exige_pode(request, "relatorio")   # v3.307: vendedor nao ve relatorio
     exige_token(request)
     exige_editor_atual(request)
     exige_orcamentos()
@@ -3038,6 +3177,7 @@ async def ft_relatorio_guardar(request: Request):
 @app.get("/api/ft/relatorio-guardado")
 def ft_relatorio_guardado(request: Request, ano: int = 0, mes: int = 0, dia: int = 0):
     """O último relatório guardado de um período, se houver."""
+    exige_pode(request, "relatorio")   # v3.307: vendedor nao ve relatorio
     exige_token(request)
     exige_editor_atual(request)
     exige_orcamentos()
@@ -3244,8 +3384,491 @@ def db_backups(request: Request):
         raise HTTPException(status_code=500, detail=str(e)[:200])
 
 
+
+# ============================================================
+#  LOGIN: GUARDA, SENHA, SESSAO  (v3.307)
+#
+#  ONDE OS USUARIOS MORAM. Dentro do fourtime-banco.json, no Drive, numa
+#  chave IRMA de "data". Isso importa: "data" e o banco que vai inteiro para
+#  o navegador de todo mundo; "usuarios" fica de fora e nunca sai daqui.
+#
+#  Nao criei arquivo separado de proposito. A service account do Google NAO
+#  CONSEGUE CRIAR arquivos no Drive (contas de servico nao tem cota; ver o
+#  aviso do grava_banco_drive). Um arquivo novo exigiria o Henrique cria-lo a
+#  mao antes de qualquer um conseguir entrar, e login que depende de um passo
+#  manual para funcionar no primeiro dia e login que trava a empresa.
+#
+#  O sqlite continua sendo o espelho local, como ja e para o banco: se o
+#  Drive estiver fora do ar, ninguem fica trancado do lado de fora.
+# ============================================================
+_usuarios_cache = None          # lista de dicts; None = ainda nao lida
+_usuarios_lock = threading.Lock()
+
+
+def _senha_guarda(senha):
+    """scrypt, da biblioteca padrao do Python: nada novo para instalar no
+       Render. Sal proprio por pessoa, entao duas senhas iguais nao produzem
+       o mesmo registro."""
+    sal = secrets.token_hex(16)
+    h = hashlib.scrypt(senha.encode("utf-8"), salt=bytes.fromhex(sal),
+                       n=16384, r=8, p=1, dklen=32).hex()
+    return "scrypt$16384$8$1$%s$%s" % (sal, h)
+
+
+def _senha_confere(guardado, senha):
+    try:
+        _, n, r, p, sal, h = (guardado or "").split("$")
+        calc = hashlib.scrypt(senha.encode("utf-8"), salt=bytes.fromhex(sal),
+                              n=int(n), r=int(r), p=int(p), dklen=32).hex()
+        return hmac.compare_digest(calc, h)     # comparacao de tempo constante
+    except Exception:
+        return False
+
+
+def _semear():
+    """A equipe inicial. So roda quando nao ha lista nenhuma."""
+    return [{"u": u, "nome": nome, "papel": papel, "ativo": True,
+             "senha": _senha_guarda(sen), "trocar": True, "criadoEm": agora()}
+            for (u, nome, papel, sen) in FT_SEMENTE]
+
+
+def _usuarios_do_local():
+    try:
+        with conn() as c:
+            linhas = c.execute("SELECT json FROM usuarios").fetchall()
+        return [json.loads(l["json"]) for l in linhas] or None
+    except Exception:
+        return None
+
+
+def _usuarios_no_local(lista):
+    try:
+        with conn() as c:
+            c.execute("DELETE FROM usuarios")
+            for x in lista:
+                c.execute("INSERT INTO usuarios(u,json) VALUES(?,?)",
+                          (x["u"], json.dumps(x, ensure_ascii=False)))
+    except Exception:
+        pass
+
+
+def usuarios_ler(forcar=False):
+    global _usuarios_cache
+    if _usuarios_cache is not None and not forcar:
+        return _usuarios_cache
+    with _usuarios_lock:
+        if _usuarios_cache is not None and not forcar:
+            return _usuarios_cache
+        lista = None
+        if drive_ligado():
+            try:
+                d = le_banco_drive()
+                if d and isinstance(d.get("usuarios"), list) and d["usuarios"]:
+                    lista = d["usuarios"]
+            except Exception:
+                lista = None
+        if lista is None:
+            lista = _usuarios_do_local()
+        if not lista:
+            lista = _semear()
+            _usuarios_cache = lista
+            _usuarios_no_local(lista)
+            try:
+                usuarios_gravar(lista)      # sobe a semente para o Drive
+            except Exception:
+                pass
+            return _usuarios_cache
+        _usuarios_cache = lista
+        _usuarios_no_local(lista)
+        return _usuarios_cache
+
+
+def _usuarios_para_gravar():
+    """O que o grava_banco_drive deve carregar junto. None quando a lista
+       ainda nem foi lida, para nunca gravar uma lista vazia por cima de uma
+       cheia."""
+    return _usuarios_cache
+
+
+def usuarios_gravar(lista):
+    """Grava a lista nos dois lugares. No Drive ela viaja junto do banco,
+       porque e o mesmo arquivo."""
+    global _usuarios_cache
+    _usuarios_cache = lista
+    _usuarios_no_local(lista)
+    if not drive_ligado():
+        return
+    with _db_lock:
+        atual = None
+        try:
+            atual = le_banco_drive()
+        except Exception:
+            atual = None
+        rev = (atual or {}).get("rev", 0)
+        data = (atual or {}).get("data", {})
+        grava_banco_drive(rev, data)
+
+
+def acha_usuario(u):
+    u = (u or "").strip().lower()
+    for x in usuarios_ler():
+        if x.get("u") == u:
+            return x
+    return None
+
+
+def pode(usuario, permissao):
+    if not usuario:
+        return False
+    return permissao in FT_PAPEIS.get(usuario.get("papel", ""), set())
+
+
+# ---------------- sessao ----------------
+def _segredo():
+    if FT_SEGREDO:
+        return FT_SEGREDO.encode("utf-8")
+    # Deriva do token de admin, que NAO e publico (o da equipe esta impresso
+    # no HTML). Assim a sessao sobrevive a reinicio sem exigir configuracao
+    # nova no Render no dia da estreia.
+    return ("ft-sessao|" + (FT_ADMIN_TOKEN or FT_TOKEN)).encode("utf-8")
+
+
+def sessao_cria(u, dias=None):
+    exp = int(time.time()) + int((dias or FT_SESSAO_DIAS)) * 86400
+    msg = "%s|%d" % (u, exp)
+    assin = hmac.new(_segredo(), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+    return msg + "|" + assin
+
+
+def sessao_le(valor):
+    """Devolve o nome de usuario, ou None. Sem tabela de sessao: a assinatura
+       e a prova. Por isso reiniciar o servidor nao desloga ninguem."""
+    try:
+        u, exp, assin = (valor or "").split("|")
+        msg = "%s|%s" % (u, exp)
+        certo = hmac.new(_segredo(), msg.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(certo, assin):
+            return None
+        if int(exp) < int(time.time()):
+            return None
+        return u
+    except Exception:
+        return None
+
+
+def usuario_da_req(req: Request):
+    """A pessoa por tras da requisicao, ou None."""
+    nome = sessao_le(req.cookies.get(COOKIE_SESSAO, ""))
+    if not nome:
+        return None
+    x = acha_usuario(nome)
+    if not x or not x.get("ativo", True):
+        return None
+    return x
+
+
+def _poe_cookie(resp: Response, valor, dias=None):
+    resp.set_cookie(COOKIE_SESSAO, valor, max_age=int((dias or FT_SESSAO_DIAS)) * 86400,
+                    httponly=True, secure=True, samesite="lax", path="/")
+
+
+def _limpo(x):
+    """O que pode ser dito ao navegador sobre uma pessoa. Sem o hash."""
+    return {"u": x.get("u"), "nome": x.get("nome"), "papel": x.get("papel"),
+            "ativo": x.get("ativo", True), "trocar": bool(x.get("trocar")),
+            "pode": sorted(FT_PAPEIS.get(x.get("papel", ""), set()))}
+
+
+# ---------------- endpoints de login ----------------
+@app.post("/api/auth/login")
+async def auth_login(request: Request):
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    u = str(corpo.get("usuario") or "").strip().lower()
+    senha = str(corpo.get("senha") or "")
+    x = acha_usuario(u)
+    # A MESMA resposta para usuario que nao existe e senha errada: dizer qual
+    # dos dois falhou entrega metade da informacao a quem esta tentando.
+    if not x or not x.get("ativo", True) or not _senha_confere(x.get("senha"), senha):
+        time.sleep(0.4)          # atraso de proposito, contra tentativa em massa
+        raise HTTPException(status_code=401, detail="Usuário ou senha incorretos.")
+    resp = JSONResponse({"ok": True, "usuario": _limpo(x)})
+    _poe_cookie(resp, sessao_cria(x["u"]))
+    return resp
+
+
+@app.post("/api/auth/sair")
+def auth_sair():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(COOKIE_SESSAO, path="/")
+    return resp
+
+
+@app.get("/api/auth/eu")
+def auth_eu(request: Request):
+    if FT_LOGIN_DESLIGADO:
+        return {"ok": True, "login": False,
+                "usuario": {"u": "", "nome": "", "papel": "admin",
+                            "trocar": False, "pode": sorted(FT_PAPEIS["admin"])}}
+    x = usuario_da_req(request)
+    if not x:
+        raise HTTPException(status_code=401, detail="Sem sessão.")
+    return {"ok": True, "login": True, "usuario": _limpo(x)}
+
+
+@app.post("/api/auth/senha")
+async def auth_senha(request: Request):
+    """Trocar a propria senha. Exige a atual, mesmo quando e a de partida:
+       sem isso, um computador deixado aberto vira uma conta roubada."""
+    x = usuario_da_req(request)
+    if not x:
+        raise HTTPException(status_code=401, detail="Sem sessão.")
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    atual = str(corpo.get("atual") or "")
+    nova = str(corpo.get("nova") or "")
+    if not _senha_confere(x.get("senha"), atual):
+        time.sleep(0.4)
+        raise HTTPException(status_code=401, detail="A senha atual está incorreta.")
+    erro = _senha_fraca(nova)
+    if erro:
+        raise HTTPException(status_code=400, detail=erro)
+    if _senha_confere(x.get("senha"), nova):
+        raise HTTPException(status_code=400, detail="A senha nova tem de ser diferente da atual.")
+    lista = [dict(y) for y in usuarios_ler()]
+    for y in lista:
+        if y["u"] == x["u"]:
+            y["senha"] = _senha_guarda(nova)
+            y["trocar"] = False
+            y["senhaEm"] = agora()
+    usuarios_gravar(lista)
+    resp = JSONResponse({"ok": True})
+    _poe_cookie(resp, sessao_cria(x["u"]))     # renova, para nao cair no meio
+    return resp
+
+
+def _senha_fraca(s):
+    """Regra curta de proposito. Senha comprida e melhor que senha cheia de
+       simbolo que a pessoa anota num papel colado no monitor."""
+    s = s or ""
+    if len(s) < 8:
+        return "A senha precisa ter pelo menos 8 caracteres."
+    if s.strip() == "":
+        return "A senha não pode ser só espaços."
+    if s in (SENHA_INICIAL_ADMIN, SENHA_INICIAL_EQUIPE):
+        return "Essa é a senha de partida. Escolha uma sua."
+    if s.lower() in ("12345678", "123456789", "senha123", "fourtime", "fourtime2026"):
+        return "Essa senha é fácil demais de adivinhar."
+    return ""
+
+
+# ---------------- administracao de usuarios ----------------
+@app.get("/api/auth/usuarios")
+def auth_usuarios(request: Request):
+    exige_pode(request, "admin")
+    return {"ok": True, "usuarios": [_limpo(x) for x in usuarios_ler()],
+            "papeis": sorted(FT_PAPEIS.keys())}
+
+
+@app.post("/api/auth/usuarios")
+async def auth_usuarios_grava(request: Request):
+    """Criar, alterar, desativar e resetar senha. So admin."""
+    eu = exige_pode(request, "admin")
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    acao = str(corpo.get("acao") or "").strip()
+    alvo = str(corpo.get("u") or "").strip().lower()
+    lista = [dict(y) for y in usuarios_ler()]
+    achado = next((y for y in lista if y["u"] == alvo), None)
+
+    if acao == "criar":
+        if not re.fullmatch(r"[a-z0-9._-]{3,20}", alvo):
+            raise HTTPException(status_code=400,
+                detail="Usuário: de 3 a 20 caracteres, só letras minúsculas, números, ponto, hífen.")
+        if achado:
+            raise HTTPException(status_code=400, detail="Já existe alguém com esse usuário.")
+        papel = str(corpo.get("papel") or "vendedor")
+        if papel not in FT_PAPEIS:
+            raise HTTPException(status_code=400, detail="Papel desconhecido.")
+        senha = str(corpo.get("senha") or SENHA_INICIAL_EQUIPE)
+        lista.append({"u": alvo, "nome": str(corpo.get("nome") or alvo).strip(),
+                      "papel": papel, "ativo": True, "senha": _senha_guarda(senha),
+                      "trocar": True, "criadoEm": agora()})
+    elif not achado:
+        raise HTTPException(status_code=404, detail="Não achei esse usuário.")
+    elif acao == "papel":
+        papel = str(corpo.get("papel") or "")
+        if papel not in FT_PAPEIS:
+            raise HTTPException(status_code=400, detail="Papel desconhecido.")
+        # NAO deixar a empresa sem admin: e assim que se fica trancado do lado de fora
+        if achado["papel"] == "admin" and papel != "admin" and _quantos_admins(lista) <= 1:
+            raise HTTPException(status_code=400,
+                detail="Este é o último administrador. Promova outra pessoa antes.")
+        achado["papel"] = papel
+    elif acao == "nome":
+        achado["nome"] = str(corpo.get("nome") or achado["nome"]).strip()
+    elif acao == "ativo":
+        lig = bool(corpo.get("ativo"))
+        if not lig and achado["u"] == (eu or {}).get("u"):
+            raise HTTPException(status_code=400, detail="Não dá para desativar você mesmo.")
+        if not lig and achado["papel"] == "admin" and _quantos_admins(lista) <= 1:
+            raise HTTPException(status_code=400, detail="Este é o último administrador.")
+        achado["ativo"] = lig
+    elif acao == "resetar":
+        senha = str(corpo.get("senha") or SENHA_INICIAL_EQUIPE)
+        achado["senha"] = _senha_guarda(senha)
+        achado["trocar"] = True         # a pessoa troca no proximo acesso
+    else:
+        raise HTTPException(status_code=400, detail="Ação desconhecida.")
+
+    usuarios_gravar(lista)
+    return {"ok": True, "usuarios": [_limpo(x) for x in usuarios_ler()]}
+
+
+def _quantos_admins(lista):
+    return sum(1 for y in lista if y.get("papel") == "admin" and y.get("ativo", True))
+
+
+
+# ============================================================
+#  A PORTA  (v3.307)
+#  Sem sessao valida, "/" devolve esta pagina em vez do editor. Ela e escrita
+#  aqui dentro, e nao num arquivo ao lado, porque um arquivo pode faltar num
+#  deploy e a porta ficaria sem fechadura.
+# ============================================================
+PAGINA_LOGIN = """<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fourtime - Entrar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{--vm:#C6161B;--pt:#161A20;--cz:#68727E;--bd:#E4E8ED;--sf:#FFFFFF;--fd:#F2F4F7;}
+  body{min-height:100vh;display:grid;place-items:center;background:var(--fd);
+       font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+       color:var(--pt);padding:20px;}
+  .cx{width:100%;max-width:380px;background:var(--sf);border:1px solid var(--bd);
+      border-radius:14px;box-shadow:0 10px 34px rgba(17,18,20,.08);padding:30px 28px 26px;}
+  .marca{font-size:21px;font-weight:700;letter-spacing:.14em;color:var(--vm);text-align:center;}
+  .sub{font-size:12.5px;color:var(--cz);text-align:center;margin-top:5px;margin-bottom:24px;}
+  label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;
+        text-transform:uppercase;color:var(--cz);margin:0 0 6px;}
+  input{width:100%;height:44px;padding:0 13px;font:inherit;font-size:14.5px;color:var(--pt);
+        background:#FBFCFD;border:1.5px solid var(--bd);border-radius:10px;outline:none;}
+  input:focus{border-color:var(--vm);box-shadow:0 0 0 3px rgba(198,22,27,.13);}
+  .campo{margin-bottom:15px;}
+  button{width:100%;height:44px;border:1px solid var(--vm);border-radius:10px;background:var(--vm);
+         color:#fff;font:inherit;font-size:14.5px;font-weight:600;cursor:pointer;margin-top:5px;}
+  button:hover{filter:brightness(1.07);}
+  button:disabled{opacity:.6;cursor:progress;}
+  .msg{font-size:12.5px;line-height:1.45;margin-top:13px;min-height:17px;}
+  .msg.erro{color:var(--vm);font-weight:600;}
+  .msg.ok{color:#17803D;font-weight:600;}
+  .msg.info{color:var(--cz);}
+  .aviso{background:#FDF1F1;border:1px solid #F3C9CB;border-radius:10px;padding:11px 13px;
+         font-size:12.5px;line-height:1.5;color:#8E1216;margin-bottom:19px;}
+  .pe{margin-top:20px;font-size:11.5px;color:var(--cz);text-align:center;line-height:1.5;}
+  .oculto{display:none;}
+</style></head><body>
+<div class="cx">
+  <div class="marca">FOURTIME</div>
+  <div class="sub" id="sub">Entre para usar o editor de orçamentos</div>
+
+  <form id="fLogin" autocomplete="on">
+    <div class="campo"><label for="u">Usuário</label>
+      <input id="u" name="username" autocomplete="username" autocapitalize="none"
+             spellcheck="false" autofocus></div>
+    <div class="campo"><label for="s">Senha</label>
+      <input id="s" name="password" type="password" autocomplete="current-password"></div>
+    <button id="bt" type="submit">Entrar</button>
+    <div class="msg" id="m"></div>
+  </form>
+
+  <form id="fTroca" class="oculto" autocomplete="on">
+    <div class="aviso"><b>Troque a senha para continuar.</b><br>
+      A senha de partida é a mesma para várias pessoas e já foi compartilhada.
+      Enquanto ela não for trocada, o editor não abre.</div>
+    <div class="campo"><label for="n1">Nova senha</label>
+      <input id="n1" type="password" autocomplete="new-password"></div>
+    <div class="campo"><label for="n2">Repita a nova senha</label>
+      <input id="n2" type="password" autocomplete="new-password"></div>
+    <button id="bt2" type="submit">Salvar e entrar</button>
+    <div class="msg" id="m2">Pelo menos 8 caracteres.</div>
+  </form>
+
+  <div class="pe">Esqueceu a senha? Peça a um administrador para redefinir.</div>
+</div>
+<script>
+(function(){
+  var fL=document.getElementById('fLogin'), fT=document.getElementById('fTroca');
+  var m=document.getElementById('m'), m2=document.getElementById('m2');
+  var bt=document.getElementById('bt'), bt2=document.getElementById('bt2');
+  var atual='';
+  function diz(el,tipo,txt){ el.className='msg '+tipo; el.textContent=txt; }
+
+  fL.addEventListener('submit', async function(e){
+    e.preventDefault();
+    var u=document.getElementById('u').value.trim();
+    var s=document.getElementById('s').value;
+    if(!u||!s){ diz(m,'erro','Preencha usuário e senha.'); return; }
+    bt.disabled=true; diz(m,'info','Entrando...');
+    try{
+      var r=await fetch('/api/auth/login',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({usuario:u,senha:s})});
+      var d=await r.json().catch(function(){return {};});
+      if(!r.ok){ diz(m,'erro',d.detail||'Não consegui entrar.'); return; }
+      atual=s;
+      if(d.usuario && d.usuario.trocar){
+        document.getElementById('sub').textContent='Olá, '+(d.usuario.nome||u)+'. Falta um passo.';
+        fL.className='oculto'; fT.className='';
+        setTimeout(function(){document.getElementById('n1').focus();},60);
+        return;
+      }
+      diz(m,'ok','Pronto. Abrindo o editor...');
+      location.replace('/');
+    }catch(err){ diz(m,'erro','Sem conexão com o servidor.'); }
+    finally{ bt.disabled=false; }
+  });
+
+  fT.addEventListener('submit', async function(e){
+    e.preventDefault();
+    var a=document.getElementById('n1').value, b=document.getElementById('n2').value;
+    if(a!==b){ diz(m2,'erro','As duas senhas não são iguais.'); return; }
+    if(a.length<8){ diz(m2,'erro','Pelo menos 8 caracteres.'); return; }
+    bt2.disabled=true; diz(m2,'info','Salvando...');
+    try{
+      var r=await fetch('/api/auth/senha',{method:'POST',credentials:'same-origin',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({atual:atual,nova:a})});
+      var d=await r.json().catch(function(){return {};});
+      if(!r.ok){ diz(m2,'erro',d.detail||'Não consegui trocar.'); return; }
+      diz(m2,'ok','Senha trocada. Abrindo o editor...');
+      location.replace('/');
+    }catch(err){ diz(m2,'erro','Sem conexão com o servidor.'); }
+    finally{ bt2.disabled=false; }
+  });
+})();
+</script></body></html>"""
+
+
 @app.get("/")
-def raiz():
+def raiz(request: Request):
+    # A PORTA (v3.307). Sem sessao, o editor nem sai do servidor. Antes ele
+    # era entregue a qualquer um que soubesse o endereco, com a chave da
+    # equipe escrita dentro.
+    _eu = None if FT_LOGIN_DESLIGADO else usuario_da_req(request)
+    if not FT_LOGIN_DESLIGADO and (not _eu or _eu.get("trocar")):
+        # sem sessao, OU com a senha de partida ainda de pe
+        return Response(PAGINA_LOGIN, media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
     p = _editor_path()
     if p:
         # SEM CACHE: o navegador não pode servir uma versão velha do editor.
