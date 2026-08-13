@@ -15,7 +15,8 @@
         desde que eu olhei", e nao "o que e recente";
      3. a leitura e incremental: o que ja foi lido e nao mudou nao e aberto
         de novo;
-     4. o que sobrou da semana passada sem finalizar desce como atrasado;
+     4. o que sobrou da semana passada sem finalizar cai na SEGUNDA desta,
+        primeiro da fila e com tarja, e entra na conta do dia;
      5. quem so olha nao arrasta nem troca etapa;
      6. arrastar muda o dia de verdade, com as tres pecas da animacao;
      7. a folha A4 pagina medindo, como o mockup 2 provou: ate 24 pedidos em
@@ -194,9 +195,22 @@ await p.evaluate(() => {
 });
 checa('a tela avisa que ha coisa nao salva',
   await p.evaluate(() => !!document.querySelector('.atv-selo.sujo')), true);
-await p.evaluate(() => atvSalva());
-await p.waitForTimeout(700);
+/* O BOTAO, E NAO A FUNCAO. Chamar atvSalva() na mao provaria que a funcao
+   funciona, que nunca foi a duvida. O que quebrou de verdade foi o caminho
+   do clique ate o aviso na tela. */
+await p.click('#miAtvSalvar');
+await p.waitForTimeout(900);
 checa('salvou', await p.evaluate(() => !!ATV.salvoEm), true);
+checa('  e a tela AVISA que salvou',
+  await p.evaluate(() => {
+    const t = document.body.textContent;
+    return t.includes('Planejamento salvo') || !!document.querySelector('.atv-selo.salvo');
+  }), true);
+await p.evaluate(() => { if (window.ftStatus) ftStatus.fecha(); });
+await p.waitForTimeout(400);
+checa('  e o selo de salvo fica na tela depois do aviso fechar',
+  await p.evaluate(() => (document.querySelector('.atv-selo.salvo') || {}).textContent || ''),
+  'salvo ' + await p.evaluate(() => atvQuando(ATV.salvoEm)));
 checa('  e o aviso de nao salvo sumiu',
   await p.evaluate(() => !!document.querySelector('.atv-selo.sujo')), false);
 checa('  o arquivo da semana guardou o plano e a etapa',
@@ -269,7 +283,7 @@ await p.evaluate(() => atvGera());
 await p.waitForTimeout(1000);
 checa('  so o arquivo que mudou e reaberto', DRIVE.aberturas, ['ID00000004xx']);
 
-console.log('\n=== 8. O QUE SOBROU DA SEMANA PASSADA DESCE COMO ATRASADO ===');
+console.log('\n=== 8. O QUE SOBROU DA SEMANA PASSADA CAI NA SEGUNDA ===');
 DRIVE.semanas['2026-08-10'] = { semana: '2026-08-10',
   salvoEm: '2026-08-15T12:00:00.000Z', vistos: {},
   linhas: [{ id: 'IDVELHO001xx', pedido: 'PD004000', cliente: 'ATRASADO SA',
@@ -278,17 +292,36 @@ DRIVE.semanas['2026-08-10'] = { semana: '2026-08-10',
            { id: 'IDVELHO002xx', pedido: 'PD004001', cliente: 'ENTREGUE SA',
              entrega: '13/08/2026', plan: '2026-08-13', etapa: 'finalizado',
              sub: 30, per: 0, total: 30, chegouEm: '2026-08-10T10:00:00.000Z' }] };
+const segundaAntes = await p.evaluate(() =>
+  atvSoma(ATV.linhas.filter(l => l.plan === '2026-08-17')));
 await p.evaluate(() => atvGera());
 await p.waitForTimeout(1200);
-r = await p.evaluate(() => ({
-  temAtraso: !!document.querySelector('.atv-dia.atraso'),
-  noAtraso: [...document.querySelectorAll('.atv-dia.atraso .atv-linha')].map(l => l.dataset.id),
-  total: ATV.linhas.length,
-}));
-console.log('     ' + JSON.stringify(r));
-checa('o dia de atrasados aparece', r.temAtraso, true);
-checa('  com o que nao foi finalizado', r.noAtraso, ['IDVELHO001xx']);
-checa('  e o finalizado NAO desce', r.total, 9);
+r = await p.evaluate(() => {
+  const seg = document.querySelector('.atv-dia[data-dia="2026-08-17"]');
+  const velho = ATV.linhas.find(l => l.id === 'IDVELHO001xx') || {};
+  return {
+    grupoAtraso: document.querySelectorAll('.atv-dia[data-dia="atraso"]').length,
+    plan: velho.plan, tarja: !!velho.atrasado,
+    /* PRIMEIRO DA FILA: o que atrasou sai antes do que nasceu no dia */
+    primeiro: seg.querySelector('.atv-linha').dataset.id,
+    temTarja: !!seg.querySelector('.atv-linha .atv-atraso'),
+    noCabecalho: (seg.querySelector('.atv-dia-cab .atv-atraso') || {}).textContent || '',
+    somaSegunda: atvSoma(ATV.linhas.filter(l => l.plan === '2026-08-17')),
+    total: ATV.linhas.length,
+  };
+});
+console.log('     antes a segunda somava ' + segundaAntes + '; ' + JSON.stringify(r));
+checa('nao existe mais um grupo de atrasados a parte', r.grupoAtraso, 0);
+checa('o atrasado foi para a segunda', r.plan, '2026-08-17');
+checa('  com a tarja de atrasado', [r.tarja, r.temTarja], [true, true]);
+checa('  e primeiro da fila do dia', r.primeiro, 'IDVELHO001xx');
+checa('  o cabecalho do dia avisa', r.noCabecalho, '1 da semana passada');
+/* O MOTIVO DE TUDO: um pedido atrasado e trabalho que a fabrica vai fazer.
+   Fora de um dia, ele nao entrava na conta de dia nenhum e a saturacao da
+   segunda mentia para menos. */
+checa('  e as 50 pecas dele entram na conta da segunda',
+  r.somaSegunda, segundaAntes + 50);
+checa('o finalizado NAO desce', r.total, 9);
 
 console.log('\n=== 9. ARRASTAR MUDA O DIA ===');
 await p.evaluate(() => { document.getElementById('atvPage').scrollTop = 0; });
