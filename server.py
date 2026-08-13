@@ -3403,6 +3403,13 @@ def db_backups(request: Request):
 # ============================================================
 _usuarios_cache = None          # lista de dicts; None = ainda nao lida
 _usuarios_lock = threading.Lock()
+# DE ONDE VEIO E SE FICOU GRAVADO (v3.308). O risco que isto fecha: se a
+# escrita no Drive falhasse, os usuarios existiriam so no sqlite do Render,
+# que e efemero. Num reinicio a lista sumiria, o servidor semearia de novo e
+# TODO MUNDO voltaria para a senha de partida, sem ninguem perceber. Agora a
+# tela de usuarios mostra isso em vermelho.
+_usuarios_fonte = ""            # "drive" | "local" | "semente"
+_usuarios_drive_ok = None       # True/False/None(nao tentou)
 
 
 def _senha_guarda(senha):
@@ -3453,7 +3460,7 @@ def _usuarios_no_local(lista):
 
 
 def usuarios_ler(forcar=False):
-    global _usuarios_cache
+    global _usuarios_cache, _usuarios_fonte, _usuarios_drive_ok
     if _usuarios_cache is not None and not forcar:
         return _usuarios_cache
     with _usuarios_lock:
@@ -3465,18 +3472,20 @@ def usuarios_ler(forcar=False):
                 d = le_banco_drive()
                 if d and isinstance(d.get("usuarios"), list) and d["usuarios"]:
                     lista = d["usuarios"]
+                    _usuarios_fonte = "drive"
+                    _usuarios_drive_ok = True
             except Exception:
                 lista = None
         if lista is None:
             lista = _usuarios_do_local()
+            if lista:
+                _usuarios_fonte = "local"
         if not lista:
             lista = _semear()
+            _usuarios_fonte = "semente"
             _usuarios_cache = lista
             _usuarios_no_local(lista)
-            try:
-                usuarios_gravar(lista)      # sobe a semente para o Drive
-            except Exception:
-                pass
+            usuarios_gravar(lista)      # sobe a semente para o Drive
             return _usuarios_cache
         _usuarios_cache = lista
         _usuarios_no_local(lista)
@@ -3491,22 +3500,35 @@ def _usuarios_para_gravar():
 
 
 def usuarios_gravar(lista):
-    """Grava a lista nos dois lugares. No Drive ela viaja junto do banco,
-       porque e o mesmo arquivo."""
-    global _usuarios_cache
+    """Grava a lista nos dois lugares, e CONFERE o Drive lendo de volta.
+
+       A conferencia existe porque o modo de falhar aqui e silencioso e caro:
+       sem ela, uma escrita recusada deixaria os usuarios so no sqlite do
+       Render, que e efemero, e o proximo reinicio devolveria todo mundo para
+       a senha de partida sem aviso nenhum."""
+    global _usuarios_cache, _usuarios_drive_ok
     _usuarios_cache = lista
     _usuarios_no_local(lista)
     if not drive_ligado():
+        _usuarios_drive_ok = None
         return
-    with _db_lock:
-        atual = None
-        try:
-            atual = le_banco_drive()
-        except Exception:
+    try:
+        with _db_lock:
             atual = None
-        rev = (atual or {}).get("rev", 0)
-        data = (atual or {}).get("data", {})
-        grava_banco_drive(rev, data)
+            try:
+                atual = le_banco_drive()
+            except Exception:
+                atual = None
+            rev = (atual or {}).get("rev", 0)
+            data = (atual or {}).get("data", {})
+            grava_banco_drive(rev, data)
+        # le de volta: gravou mesmo?
+        conf = le_banco_drive()
+        gravados = (conf or {}).get("usuarios")
+        _usuarios_drive_ok = bool(isinstance(gravados, list)
+                                  and len(gravados) == len(lista))
+    except Exception:
+        _usuarios_drive_ok = False
 
 
 def acha_usuario(u):
@@ -3670,8 +3692,19 @@ def _senha_fraca(s):
 @app.get("/api/auth/usuarios")
 def auth_usuarios(request: Request):
     exige_pode(request, "admin")
-    return {"ok": True, "usuarios": [_limpo(x) for x in usuarios_ler()],
-            "papeis": sorted(FT_PAPEIS.keys())}
+    lista = usuarios_ler()
+    return {"ok": True, "usuarios": [_limpo(x) for x in lista],
+            "papeis": sorted(FT_PAPEIS.keys()),
+            # onde a lista mora AGORA. Se o Drive estiver ligado e a gravacao
+            # nao tiver sido confirmada, a tela avisa em vermelho: e o unico
+            # jeito de a pessoa saber antes de um reinicio apagar tudo.
+            "fonte": _usuarios_fonte, "driveLigado": drive_ligado(),
+            "driveOk": _usuarios_drive_ok,
+            # a tela precisa DIZER qual e a senha de partida, e ela nao pode
+            # estar escrita dentro do editor: o editor e um arquivo publico
+            # ate para quem nao entrou. Quem sabe o valor e o servidor, e ele
+            # so conta para admin.
+            "senhaInicial": SENHA_INICIAL_EQUIPE}
 
 
 @app.post("/api/auth/usuarios")
@@ -3702,6 +3735,31 @@ async def auth_usuarios_grava(request: Request):
                       "trocar": True, "criadoEm": agora()})
     elif not achado:
         raise HTTPException(status_code=404, detail="Não achei esse usuário.")
+    elif acao == "renomear":
+        # RENOMEAR DE VERDADE, e nao criar outra pessoa: a senha, o papel e a
+        # marca de "ja trocou" vao junto. Criar e desativar pareceria igual e
+        # nao e: mandaria a pessoa de volta para a senha de partida.
+        novo_u = str(corpo.get("novo") or "").strip().lower()
+        if not re.fullmatch(r"[a-z0-9._-]{3,20}", novo_u):
+            raise HTTPException(status_code=400,
+                detail="Usuário: de 3 a 20 caracteres, só letras minúsculas, números, ponto, hífen.")
+        if novo_u == alvo:
+            raise HTTPException(status_code=400, detail="O nome de usuário é esse mesmo.")
+        if any(y["u"] == novo_u for y in lista):
+            raise HTTPException(status_code=400, detail="Já existe alguém com esse usuário.")
+        achado["u"] = novo_u
+        achado["renomeadoEm"] = agora()
+        usuarios_gravar(lista)
+        # A SESSAO APONTA PARA O NOME ANTIGO e morre na hora. Se quem
+        # renomeou foi a propria pessoa, devolvo o cookie novo aqui mesmo,
+        # senao o admin se deslogaria ao arrumar o proprio usuario. Para
+        # qualquer outra pessoa nao ha o que fazer: ela entra de novo.
+        resp = JSONResponse({"ok": True, "renomeado": novo_u,
+                             "euMesmo": alvo == (eu or {}).get("u"),
+                             "usuarios": [_limpo(x) for x in usuarios_ler()]})
+        if alvo == (eu or {}).get("u"):
+            _poe_cookie(resp, sessao_cria(novo_u))
+        return resp
     elif acao == "papel":
         papel = str(corpo.get("papel") or "")
         if papel not in FT_PAPEIS:

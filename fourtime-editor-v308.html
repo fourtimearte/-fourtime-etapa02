@@ -3689,9 +3689,31 @@
     transition:transform var(--mov-rapido) var(--mov-suave);}
   .ft-dd.aberto .ft-dd-bt{border-color:var(--ft-vermelho);box-shadow:0 0 0 3px var(--ft-anel);}
   .ft-dd.aberto .ft-dd-bt svg{transform:rotate(180deg);}
+  /* ALTURA E ROLAGEM DO MENU (v3.306)
+
+     Nasceu com max-height:240px fixo. Um item mede 31px, então cabiam SETE
+     e nada mais. Num filtro de dia com nove opções, "Dia 11" e "Dia 12"
+     ficavam abaixo do corte, e a barra de rolagem do Chrome tem 2px de
+     largura e some quando não se está rolando: a lista simplesmente
+     parecia terminar no Dia 10. Foi assim que dois dias inteiros do
+     relatório "sumiram" sem nada estar errado no relatório.
+
+     Duas correções. A altura agora é calculada no abre(), pelo espaço que
+     existe na tela — num monitor comum um mês inteiro cabe de uma vez. E
+     quando ainda assim sobrar lista, ela AVISA: sombra em cima e embaixo
+     pelo truque de background-attachment:local, que anda sozinho com a
+     rolagem, sem uma linha de JavaScript. */
   .ft-dd-menu{
     position:fixed;z-index:430;display:none;
-    max-height:240px;overflow:auto;padding:5px;
+    max-height:240px;overflow:auto;overscroll-behavior:contain;padding:5px;
+    /* AQUI A BARRA APARECE, e é exceção de propósito. Lá em cima o editor
+       apaga TODA barra de rolagem do aplicativo (`*{scrollbar-width:none}`),
+       o que é bonito numa página e péssimo numa lista curta: foi por isso
+       que o Dia 11 não tinha como ser percebido. Neste menu a barra volta.
+       Precisa ser pelas propriedades padrão, não pelas ::-webkit-*: no
+       Chrome, com scrollbar-width definido em qualquer ancestral, as regras
+       webkit são ignoradas. */
+    scrollbar-width:thin;scrollbar-color:var(--ft-borda) transparent;
     background:var(--ft-superficie);border:1px solid var(--ft-borda);
     /* era --r-md (8px) do kit; na v3.275 todo o r-md do app virou r-sm.
        Continua sendo o flutuante de raio menor, porque nasce colado no
@@ -3709,6 +3731,30 @@
   .ft-dd-op:hover{background:var(--ft-hover);}
   .ft-dd-op.on{color:var(--ft-vermelho);font-weight:600;}
   .ft-dd-op.on::after{content:'✓';margin-left:auto;}
+  /* a barra de rolagem precisa ser VISTA. A do sistema tem 2px e desaparece
+     parada; esta tem 10 e fica. */
+  .ft-dd-menu::-webkit-scrollbar{width:10px;}
+  .ft-dd-menu::-webkit-scrollbar-track{background:transparent;}
+  .ft-dd-menu::-webkit-scrollbar-thumb{
+    background:var(--ft-borda);border-radius:8px;
+    border:3px solid transparent;background-clip:content-box;
+  }
+  .ft-dd-menu::-webkit-scrollbar-thumb:hover{background-clip:content-box;background-color:var(--ft-cinza-40);}
+  /* SOMBRA DE "TEM MAIS". Os dois primeiros gradientes são a cor do menu e
+     andam COM o conteúdo (local); os dois radiais ficam parados (scroll).
+     Onde há conteúdo escondido, o branco saiu de baixo e a sombra aparece.
+     No topo e na base ao mesmo tempo, sem JavaScript nenhum. */
+  .ft-dd-menu.rolavel{
+    background-image:
+      linear-gradient(var(--ft-superficie) 34%, rgba(255,255,255,0)),
+      linear-gradient(rgba(255,255,255,0), var(--ft-superficie) 66%),
+      radial-gradient(farthest-side at 50% 0, rgba(17,18,20,.16), rgba(17,18,20,0)),
+      radial-gradient(farthest-side at 50% 100%, rgba(17,18,20,.16), rgba(17,18,20,0));
+    background-position:0 0, 0 100%, 0 0, 0 100%;
+    background-repeat:no-repeat;
+    background-size:100% 30px, 100% 30px, 100% 11px, 100% 11px;
+    background-attachment:local, local, scroll, scroll;
+  }
   @media print{ .ft-dd-menu{display:none !important;} }
 
   /* ================================================================
@@ -5284,6 +5330,148 @@
   }
 
   /* ================================================================
+     QUEM ESTA USANDO (v3.307)
+     ================================================================ */
+  .ft-eu-chip{
+    display:flex;align-items:center;gap:9px;width:100%;padding:7px 8px;margin-bottom:6px;
+    background:transparent;border:1px solid transparent;border-radius:9px;
+    cursor:pointer;text-align:left;color:var(--mn-fg);font:inherit;
+  }
+  .ft-eu-chip:hover{background:var(--mn-hover);border-color:var(--mn-borda,transparent);}
+  .ft-eu-chip .ini{
+    flex:0 0 26px;height:26px;border-radius:8px;background:var(--ft-vermelho);color:#fff;
+    display:grid;place-items:center;font-size:12.5px;font-weight:700;
+  }
+  .ft-eu-chip .txt{display:flex;flex-direction:column;min-width:0;line-height:1.2;}
+  .ft-eu-chip .txt b{font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ft-eu-chip .txt i{font-size:10px;font-style:normal;opacity:.65;text-transform:uppercase;letter-spacing:.05em;}
+  body.menu-fechado .ft-eu-chip .txt{display:none;}
+
+  /* FINANCEIRO VE O BANCO, MAS NAO MEXE. Some o que cria e o que apaga; o
+     que resta e consulta. A tranca de verdade esta no servidor: isto aqui e
+     para nao oferecer um botao que vai ser recusado. */
+  body.sem-banco-editar #bdPage .bd-novo-linha,
+  body.sem-banco-editar #bdPage .bd-add-btn,
+  body.sem-banco-editar #bdPage .bd-item-del,
+  body.sem-banco-editar #bdPage .bd-lat-arq{display:none !important;}
+  body.sem-banco-editar #bdPage .bd-item-input,
+  body.sem-banco-editar #bdPage .bd-cor-pick{
+    pointer-events:none;background:transparent;border-color:transparent;
+  }
+
+
+  /* ================================================================
+     PESSOAS: quem entra no sistema (v3.308)
+     Vive num modal proprio, e nao numa secao do trilho: e coisa de
+     administracao, feita de vez em quando, nao trabalho do dia.
+     ================================================================ */
+  .ft-us-fundo{
+    position:fixed;inset:0;z-index:460;display:grid;place-items:center;padding:22px;
+    background:rgba(17,18,20,.42);backdrop-filter:blur(2px);
+    opacity:0;visibility:hidden;pointer-events:none;transition:opacity .18s var(--mov-suave);
+  }
+  .ft-us-fundo.on{opacity:1;visibility:visible;pointer-events:auto;}
+  .ft-us-cx{
+    width:100%;max-width:760px;max-height:86vh;display:flex;flex-direction:column;
+    background:var(--ft-superficie);border:1px solid var(--ft-borda);border-radius:14px;
+    box-shadow:var(--sh-4,0 18px 50px rgba(17,18,20,.22));overflow:hidden;
+    transform:translateY(8px) scale(.99);transition:transform .2s var(--mov-suave);
+  }
+  .ft-us-fundo.on .ft-us-cx{transform:none;}
+  .ft-us-topo{display:flex;align-items:center;gap:10px;padding:14px 16px;
+    border-bottom:1px solid var(--ft-borda);}
+  .ft-us-topo .tit{flex:1;font-size:15px;font-weight:700;color:var(--ft-preto);}
+  .ft-us-corpo{padding:14px 16px 18px;overflow:auto;}
+  .ft-us-aviso{
+    background:#FDF1F1;border:1px solid #F3C9CB;border-radius:10px;padding:10px 12px;
+    font-size:12.5px;line-height:1.5;color:#8E1216;margin-bottom:13px;
+  }
+  .ft-us-linha{
+    display:grid;grid-template-columns:34px 1fr 132px 92px auto;align-items:center;gap:10px;
+    padding:9px 10px;border:1px solid var(--ft-borda);border-radius:10px;margin-bottom:7px;
+    background:var(--ft-superficie-2);
+  }
+  .ft-us-linha.off{opacity:.5;}
+  .ft-us-ini{width:32px;height:32px;border-radius:9px;background:var(--ft-vermelho);color:#fff;
+    display:grid;place-items:center;font-size:13.5px;font-weight:700;}
+  .ft-us-linha.off .ft-us-ini{background:var(--ft-cinza-40);}
+  .ft-us-nome{display:flex;flex-direction:column;min-width:0;line-height:1.3;}
+  .ft-us-nome b{font-size:13.5px;font-weight:600;color:var(--ft-preto);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ft-us-nome span{font-size:11.5px;color:var(--ft-cinza-40);font-variant-numeric:tabular-nums;}
+  .ft-us-nome .eu{color:var(--ft-vermelho);font-weight:600;}
+  .ft-us-linha select,.ft-us-linha input{
+    height:32px;padding:0 9px;font:inherit;font-size:12.5px;color:var(--ft-preto);
+    border:1px solid var(--ft-borda);border-radius:8px;background:var(--ft-superficie);outline:none;
+  }
+  .ft-us-linha select:focus,.ft-us-linha input:focus{border-color:var(--ft-vermelho);}
+  .ft-us-bts{display:flex;gap:6px;}
+  .ft-us-bt{
+    height:32px;padding:0 10px;border:1px solid var(--ft-borda);border-radius:8px;
+    background:var(--ft-superficie);font:inherit;font-size:12px;font-weight:600;
+    color:var(--ft-cinza-40);cursor:pointer;white-space:nowrap;
+  }
+  .ft-us-bt:hover{border-color:var(--ft-vermelho);color:var(--ft-vermelho);}
+  .ft-us-bt.perigo:hover{background:#FDF1F1;}
+  .ft-us-troca{
+    grid-column:1 / -1;display:flex;gap:8px;align-items:center;
+    padding-top:9px;margin-top:2px;border-top:1px dashed var(--ft-borda);
+  }
+  .ft-us-troca input{flex:1;}
+  .ft-us-troca .dica{font-size:11.5px;color:var(--ft-cinza-40);}
+  .ft-us-nova{
+    margin-top:14px;padding:13px;border:1px dashed var(--ft-borda);border-radius:11px;
+    display:grid;grid-template-columns:1fr 1fr 132px auto;gap:9px;align-items:end;
+  }
+  .ft-us-nova label{display:flex;flex-direction:column;gap:5px;font-size:11px;font-weight:700;
+    letter-spacing:.05em;text-transform:uppercase;color:var(--ft-cinza-40);}
+  .ft-us-nova input,.ft-us-nova select{
+    height:34px;padding:0 10px;font:inherit;font-size:13px;color:var(--ft-preto);
+    border:1px solid var(--ft-borda);border-radius:8px;background:var(--ft-superficie);outline:none;
+    text-transform:none;letter-spacing:0;font-weight:400;
+  }
+  .ft-us-nova button{
+    height:34px;padding:0 15px;border:1px solid var(--ft-vermelho);border-radius:8px;
+    background:var(--ft-vermelho);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+  }
+  .ft-us-msg{font-size:12.5px;line-height:1.45;margin-top:11px;min-height:17px;}
+  .ft-us-msg[data-tipo="erro"]{color:var(--ft-vermelho);font-weight:600;}
+  .ft-us-msg[data-tipo="ok"]{color:#17803D;font-weight:600;}
+  .ft-us-msg[data-tipo="esperando"]{color:var(--ft-cinza-40);}
+  .ft-us-pe{font-size:11.5px;color:var(--ft-cinza-40);line-height:1.55;margin-top:12px;}
+  @media (max-width:720px){
+    .ft-us-linha{grid-template-columns:34px 1fr;row-gap:8px;}
+    .ft-us-linha select,.ft-us-linha .ft-us-bts{grid-column:2;}
+    .ft-us-nova{grid-template-columns:1fr;}
+  }
+
+  /* ---- minha conta, dentro do modal de login ---- */
+  .ft-conta{display:grid;gap:14px;}
+  .ft-conta-topo{display:flex;align-items:center;gap:11px;}
+  .ft-conta-ini{
+    flex:0 0 40px;height:40px;border-radius:12px;background:var(--ft-vermelho);color:#fff;
+    display:grid;place-items:center;font-size:17px;font-weight:700;
+  }
+  .ft-conta-nome{display:flex;flex-direction:column;line-height:1.25;}
+  .ft-conta-nome b{font-size:15px;font-weight:600;color:var(--ft-preto);}
+  .ft-conta-nome span{font-size:11.5px;color:var(--ft-cinza-40);text-transform:uppercase;letter-spacing:.05em;}
+  .ft-conta-linha{height:1px;background:var(--ft-borda);}
+  .ft-conta input{
+    width:100%;height:38px;padding:0 11px;font:inherit;font-size:13.5px;color:var(--ft-preto);
+    border:1.5px solid var(--ft-borda);border-radius:9px;background:var(--ft-superficie-2);outline:none;
+  }
+  .ft-conta input:focus{border-color:var(--ft-vermelho);}
+  .ft-conta .rot{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ft-cinza-40);margin-bottom:5px;}
+  .ft-conta .campo{display:block;}
+  .ft-conta .bts{display:flex;gap:9px;}
+  .ft-conta button{height:38px;border-radius:9px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;}
+  .ft-conta .salvar{flex:1;background:var(--ft-vermelho);border:1px solid var(--ft-vermelho);color:#fff;}
+  .ft-conta .sair{background:var(--ft-superficie-2);border:1px solid var(--ft-borda);color:var(--ft-cinza-40);}
+  .ft-conta .sair:hover{border-color:var(--ft-vermelho);color:var(--ft-vermelho);}
+
+
+  /* ================================================================
      SEÇÃO CLIENTES (v4.3)
      ================================================================ */
   /* ---- busca ---- */
@@ -6024,6 +6212,18 @@
       </button>
     </div>
     <div class="ft-login-corpo" id="ftLoginCorpo"></div>
+  </div>
+</div>
+<div class="ft-us-fundo" id="ftUsersFundo">
+  <div class="ft-us-cx">
+    <div class="ft-us-topo">
+      <span class="tit">Pessoas</span>
+      <button class="ft-login-x" id="ftUsersX" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="ft-us-corpo" id="ftUsersCorpo"></div>
   </div>
 </div>
 <div class="ft-notif-wrap" id="ftNotifWrap">
@@ -7033,7 +7233,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.305';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.308';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -7291,7 +7491,12 @@ function syncDatalists(){
 /* Servidor padrão da Fourtime: o editor já abre conectado, sem ninguém digitar nada.
    Os campos do Banco de Dados continuam editáveis (para apontar a outro servidor). */
 const FT_SERVIDOR_PADRAO='https://fourtime-etapa02.onrender.com';
-const FT_TOKEN_PADRAO='2026@Fourtime';
+/* O TOKEN DA EQUIPE SAIU DAQUI (v3.307).
+   Ele ficava escrito nesta linha, dentro de um arquivo que o servidor
+   entregava a qualquer um que abrisse o endereco. Ou seja: a chave da
+   empresa estava publicada. Quem entra agora e a SESSAO, num cookie que o
+   navegador manda sozinho e que nenhum JavaScript le. */
+const FT_TOKEN_PADRAO='';
 const FT_SYNC={
   url:(localStorage.getItem('ft_sync_url')||FT_SERVIDOR_PADRAO).replace(/\/+$/,''),
   token:localStorage.getItem('ft_sync_token')||FT_TOKEN_PADRAO,
@@ -10889,6 +11094,18 @@ function ftDropdown(sel){
      zoom o alcança e as coordenadas de tela valem literalmente. Ao fechar
      ele volta para dentro do .ft-dd — assim não sobra menu órfão no body
      quando a lista de clientes/endereços é redesenhada. */
+  /* ---- ALTURA PELO ESPAÇO QUE HÁ (v3.306) -----------------------------
+     O max-height era 240px fixo no CSS. Com item de 31px isso são SETE
+     opções e ponto final: num filtro de dia com nove, as duas últimas
+     ficavam fora da vista, e como a barra de rolagem do Chrome tem 2px e
+     some quando parada, a lista parecia acabar ali. Foi exatamente assim
+     que "Dia 11" e "Dia 12" sumiram do filtro do relatório enquanto os
+     pedidos dos dias 11 e 12 estavam na tabela, logo ao lado.
+
+     Agora o menu mede o espaço livre acima e abaixo do campo, escolhe o
+     lado mais folgado e usa a altura que tiver. Num monitor comum um mês
+     inteiro de dias cabe de uma vez. Se ainda sobrar lista, a classe
+     .rolavel liga a sombra que avisa que há mais. */
   function abre(){
     monta();
     document.body.appendChild(menu);          /* fora do zoom da lateral */
@@ -10897,8 +11114,25 @@ function ftDropdown(sel){
     const r = bt.getBoundingClientRect();
     menu.style.width = Math.max(140, Math.round(r.width)) + 'px';
     menu.style.left = Math.round(r.left) + 'px';
+
+    const folga = 12, minimo = 132;
+    const abaixo = innerHeight - r.bottom - folga - 4;
+    const acima  = r.top - folga - 4;
+    /* desce por padrão; só sobe quando embaixo não cabe e em cima cabe mais */
+    const desce = abaixo >= acima || abaixo >= menu.scrollHeight;
+    const espaco = Math.max(minimo, Math.round(desce ? abaixo : acima));
+    menu.style.maxHeight = espaco + 'px';
+
     const alt = menu.offsetHeight || 200;
-    menu.style.top = (r.bottom + alt > innerHeight - 12 ? Math.max(8, r.top - alt - 4) : r.bottom + 4) + 'px';
+    menu.style.top = (desce ? (r.bottom + 4) : Math.max(folga, r.top - alt - 4)) + 'px';
+
+    /* sobrou lista? então ela tem de dizer isso */
+    menu.classList.toggle('rolavel', menu.scrollHeight > menu.clientHeight + 1);
+    /* e o que está escolhido tem de estar à vista ao abrir */
+    const marcado = menu.querySelector('.ft-dd-op.on');
+    if(marcado && menu.scrollHeight > menu.clientHeight + 1){
+      try{ marcado.scrollIntoView({block:'nearest'}); }catch(e){}
+    }
   }
   function fecha(){
     dd.classList.remove('aberto');
@@ -10917,8 +11151,15 @@ function ftDropdown(sel){
   });
   addEventListener('resize', fecha, {passive:true});
   /* um menu fixo não acompanha a rolagem do painel: em vez de flutuar
-     solto longe do campo, ele fecha */
-  addEventListener('scroll', fecha, {passive:true, capture:true});
+     solto longe do campo, ele fecha.
+
+     MENOS quando quem rolou foi o PRÓPRIO menu (v3.306). Agora que a lista
+     pode ser mais alta que a tela, rolar dentro dela é uso normal — e com
+     o listener em captura, esse scroll subia e fechava o menu na cara de
+     quem estava procurando o Dia 31. Pior: o scrollIntoView que leva o item
+     marcado para a vista fechava o menu no instante em que ele abria. */
+  addEventListener('scroll', e => { if(e.target !== menu) fecha(); },
+                   {passive:true, capture:true});
 
   new MutationObserver(mostra).observe(sel, {childList:true, subtree:true});
   sel.addEventListener('change', mostra);
@@ -13772,7 +14013,12 @@ window.relAlternar=relAlternar;
 function relAtualizaAcesso(){
   const item=document.getElementById('miRel');
   if(!item)return;
-  const pode=!!(FT_SYNC.on&&FT_SYNC.ehAdmin);
+  /* v3.307: quem decide agora e o PAPEL da pessoa, nao o token de admin.
+     Vendedor nao ve Relatorios; Financeiro ve. Enquanto o /api/auth/eu nao
+     respondeu, vale a regra antiga, para nao piscar. */
+  const pode=(typeof FT_EU==='object'&&FT_EU.carregado)
+    ? (FT_EU.pode.indexOf('relatorio')>=0)
+    : !!(FT_SYNC.on&&FT_SYNC.ehAdmin);
   item.style.display=pode?'':'none';
   if(!pode&&relAberto)relAlternar(false);
 }
@@ -16422,9 +16668,78 @@ const FT_LOGIN_HTML=()=>`<div class="bd-sync">
         <button id="ftDbImp" title="Carregar um banco de dados de um arquivo .ftdb">Importar DB</button>
         <input type="file" id="ftDbFile" accept=".ftdb,.json,application/json" style="display:none">
       </div>`;
+/* ================================================================
+   O MODAL VIROU "MINHA CONTA" (v3.307)
+
+   Ele nasceu para digitar o token de administrador, quando "admin" era uma
+   senha que qualquer um podia colar. Agora quem entrou tem nome e papel, e o
+   que falta aqui e o que e da pessoa: trocar a propria senha e sair.
+
+   O caminho antigo continua vivo logo abaixo, e nao por descuido: quando o
+   editor e aberto de um arquivo, ou quando a chave de emergencia desliga o
+   login no Render, nao ha sessao nenhuma, e o token volta a ser a unica
+   forma de administrar.
+   ================================================================ */
+function FT_CONTA_HTML(){
+  const ini=(FT_EU.nome||'?').trim().charAt(0).toUpperCase();
+  return `<div class="ft-conta">
+    <div class="ft-conta-topo">
+      <div class="ft-conta-ini">${bdEsc(ini)}</div>
+      <div class="ft-conta-nome"><b>${bdEsc(FT_EU.nome||FT_EU.u)}</b>
+        <span>${bdEsc(FT_EU.papel||'')}</span></div>
+    </div>
+    <div class="ft-conta-linha"></div>
+    <label class="campo"><div class="rot">Senha atual</div>
+      <input id="ftCtAtual" type="password" autocomplete="current-password"></label>
+    <label class="campo"><div class="rot">Nova senha</div>
+      <input id="ftCtNova" type="password" autocomplete="new-password"
+             placeholder="pelo menos 8 caracteres"></label>
+    <label class="campo"><div class="rot">Repita a nova senha</div>
+      <input id="ftCtNova2" type="password" autocomplete="new-password"></label>
+    <div class="bts">
+      <button class="salvar" id="ftCtSalvar" type="button">Trocar senha</button>
+      <button class="sair" id="ftCtSair" type="button">Sair</button>
+    </div>
+    ${(FT_EU.pode||[]).indexOf('admin')>=0
+      ? `<div class="ft-conta-linha"></div>
+         <button class="sair" id="ftCtPessoas" type="button"
+                 style="width:100%">Administrar pessoas</button>` : ''}
+    <div class="ft-login-msg" id="ftLoginMsg"></div>
+  </div>`;
+}
+
 function loginAbre(){
   const cx=document.getElementById('ftLoginCorpo');
   if(!cx)return;
+  /* com sessao de verdade, o modal e a conta da pessoa */
+  if(FT_EU.carregado && FT_EU.login && FT_EU.u){
+    cx.innerHTML=FT_CONTA_HTML();
+    const tit=document.querySelector('#ftLoginFundo .ft-login-topo .tit');
+    if(tit)tit.textContent='Minha conta';
+    cx.querySelector('#ftCtSair').onclick=()=>ftSair();
+    const bp=cx.querySelector('#ftCtPessoas');
+    if(bp)bp.onclick=()=>{ loginFecha(); ftUsersAbre(); };
+    cx.querySelector('#ftCtSalvar').onclick=async()=>{
+      const a=cx.querySelector('#ftCtAtual').value;
+      const n=cx.querySelector('#ftCtNova').value;
+      const n2=cx.querySelector('#ftCtNova2').value;
+      const bt=cx.querySelector('#ftCtSalvar');
+      if(!a){ ftLoginDiz(cx,'erro','Digite a senha atual.'); return; }
+      if(n!==n2){ ftLoginDiz(cx,'erro','As duas senhas novas não são iguais.'); return; }
+      if(n.length<8){ ftLoginDiz(cx,'erro','A nova senha precisa de pelo menos 8 caracteres.'); return; }
+      bt.disabled=true; ftLoginDiz(cx,'esperando','Trocando…');
+      try{
+        await ftTrocaSenha(a,n);
+        ftLoginDiz(cx,'ok','Senha trocada.');
+        cx.querySelector('#ftCtAtual').value='';
+        cx.querySelector('#ftCtNova').value='';
+        cx.querySelector('#ftCtNova2').value='';
+      }catch(e){ ftLoginDiz(cx,'erro',e.message); }
+      finally{ bt.disabled=false; }
+    };
+    document.getElementById('ftLoginFundo').classList.add('on');
+    return;
+  }
   cx.innerHTML=FT_LOGIN_HTML();
   /* Reordena o que sobrou numa forma de login: estado, rótulo, senha,
      entrar e sincronizar. O HTML de origem é a barra antiga, pensada para
@@ -16651,6 +16966,310 @@ async function ftLoginEntra(raiz){
   }
 }
 window.ftLoginEntra=ftLoginEntra;
+
+/* ================================================================
+   QUEM ESTÁ USANDO  (v3.307)
+
+   O editor deixou de ser público. O servidor só o entrega a quem tem sessão,
+   e diz, em /api/auth/eu, quem é a pessoa e o que ela pode.
+
+   O QUE ESTA PARTE FAZ E O QUE ELA NÃO FAZ. Ela esconde o que a pessoa não
+   pode usar. Ela NÃO é a segurança: quem recusa de verdade é o servidor, em
+   cada endereço. Esconder botão é conforto, não tranca — quem quiser burlar
+   chama o endereço na mão, e é lá que a porta tem de estar. As duas coisas
+   existem porque servem a propósitos diferentes.
+   ================================================================ */
+let FT_EU={u:'',nome:'',papel:'',pode:[],trocar:false,carregado:false,login:true};
+function euPode(p){ return !FT_EU.carregado || FT_EU.pode.indexOf(p)>=0; }
+
+async function ftEuCarrega(){
+  try{
+    const r=await fetch('/api/auth/eu',{credentials:'same-origin'});
+    if(!r.ok)return false;
+    const d=await r.json();
+    FT_EU=Object.assign({carregado:true,login:d.login!==false},d.usuario||{});
+    FT_EU.pode=FT_EU.pode||[];
+    ftAplicaAcesso();
+    return true;
+  }catch(e){
+    /* aberto de arquivo, ou servidor fora: segue como sempre foi. Não é
+       brecha — sem servidor não há dado nenhum para proteger aqui. */
+    return false;
+  }
+}
+window.ftEuCarrega=ftEuCarrega;
+
+/* o que sumir da tela, e o que sobra */
+function ftAplicaAcesso(){
+  if(!FT_EU.carregado)return;
+  const secs={orcamento:'orcamento',relatorio:'relatorio',clientes:'clientes',
+              banco:'banco',bugs:'bugs'};
+  document.querySelectorAll('.ft-rail-bt').forEach(b=>{
+    const perm=secs[b.dataset.sec];
+    if(perm && !euPode(perm))b.hidden=true;
+  });
+  /* Financeiro vê o banco, mas não mexe. A classe liga as regras que somem
+     com o "Adicionar", com o lápis e com o campo de cor. */
+  document.body.classList.toggle('sem-banco-editar',
+    euPode('banco') && !euPode('banco.editar'));
+  document.body.classList.toggle('sem-admin-pessoa', !euPode('admin'));
+  /* se a pessoa estiver numa seção que não é dela, volta para o editor */
+  if(typeof FT_SEC==='string' && secs[FT_SEC] && !euPode(secs[FT_SEC])
+     && typeof ftSecao==='function')ftSecao('orcamento');
+  ftEuNoRodape();
+  if(typeof relAtualizaAcesso==='function')relAtualizaAcesso();
+}
+window.ftAplicaAcesso=ftAplicaAcesso;
+
+/* o nome de quem está usando, no pé do trilho: numa máquina compartilhada,
+   saber em nome de quem se está salvando é o mínimo */
+function ftEuNoRodape(){
+  const pe=document.querySelector('.ft-rail-pe');
+  if(!pe||!FT_EU.carregado||!FT_EU.nome)return;
+  let el=document.getElementById('ftEuChip');
+  if(!el){
+    el=document.createElement('button');
+    el.id='ftEuChip'; el.className='ft-eu-chip'; el.type='button';
+    el.title='Minha conta';
+    el.onclick=()=>{ if(typeof loginAbre==='function')loginAbre(); };
+    pe.insertBefore(el,pe.firstChild);
+  }
+  const ini=(FT_EU.nome||'?').trim().charAt(0).toUpperCase();
+  el.innerHTML='<span class="ini">'+ini+'</span>'
+    +'<span class="txt"><b>'+bdEsc(FT_EU.nome)+'</b><i>'+bdEsc(FT_EU.papel)+'</i></span>';
+}
+
+/* O VENDEDOR PASSA A SER QUEM ESTÁ LOGADO (v3.307). O campo continua
+   editável: quem monta um orçamento no lugar de um colega precisa poder
+   dizer isso. O que muda é o padrão, e é ele que faz o relatório valer. */
+function ftVendedorPadrao(){
+  if(!FT_EU.carregado||!FT_EU.nome)return;
+  const c=document.querySelector('input[data-h="vendedor"]');
+  if(c&&!c.value.trim()){
+    c.value=FT_EU.nome;
+    c.dispatchEvent(new Event('input',{bubbles:true}));
+    c.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+}
+window.ftVendedorPadrao=ftVendedorPadrao;
+
+async function ftSair(){
+  try{ await fetch('/api/auth/sair',{method:'POST',credentials:'same-origin'}); }catch(e){}
+  location.replace('/');
+}
+window.ftSair=ftSair;
+
+/* trocar a própria senha, de dentro do editor */
+async function ftTrocaSenha(atual,nova){
+  const r=await fetch('/api/auth/senha',{method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({atual:atual,nova:nova})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.detail||'Não consegui trocar a senha.');
+  return true;
+}
+window.ftTrocaSenha=ftTrocaSenha;
+
+/* ================================================================
+   PESSOAS: A TELA DE ADMINISTRAÇÃO (v3.308)
+
+   Na v3.307 os sete usuários nasceram semeados no código e não havia como
+   mexer neles sem uma versão minha. Aqui a administração passa a ser sua.
+
+   O que ela faz, e por que cada um está aqui:
+     criar          uma pessoa nova entra sem depender de deploy;
+     RENOMEAR       o usuário de verdade, levando senha e papel junto. Criar
+                    outra conta e desativar a antiga pareceria a mesma coisa
+                    e não é: mandaria a pessoa de volta para a senha de
+                    partida e apagaria o histórico dela;
+     papel          promover e rebaixar sem mexer no resto;
+     desativar      quem sai da empresa perde a entrada, e o cadastro fica
+                    (apagar perderia o rastro de quem fez o quê);
+     redefinir      quem esqueceu a senha volta para a de partida, com troca
+                    obrigatória no próximo acesso.
+
+   E um aviso que só existe por causa de um risco real: se o Drive recusar a
+   gravação, os usuários ficam só no disco do Render, que é efêmero, e um
+   reinício devolveria todo mundo para a senha de partida sem ninguém
+   perceber. O servidor confere lendo de volta; se não bater, esta tela diz.
+   ================================================================ */
+let FT_US={lista:[],papeis:[],fonte:'',driveLigado:false,driveOk:null,
+           senhaInicial:'',renomeando:''};
+
+async function ftUsersApi(corpo){
+  const o=corpo
+    ? {method:'POST',credentials:'same-origin',
+       headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)}
+    : {credentials:'same-origin'};
+  const r=await fetch('/api/auth/usuarios',o);
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.detail||('Erro '+r.status));
+  return d;
+}
+
+function ftUsersDiz(tipo,txt){
+  const m=document.getElementById('ftUsersMsg');
+  if(!m)return; m.dataset.tipo=tipo||''; m.textContent=txt||'';
+}
+
+async function ftUsersAbre(){
+  const cx=document.getElementById('ftUsersCorpo');
+  if(!cx)return;
+  document.getElementById('ftUsersFundo').classList.add('on');
+  cx.innerHTML='<div class="ft-us-msg" data-tipo="esperando">Carregando…</div>';
+  try{
+    const d=await ftUsersApi(null);
+    FT_US.lista=d.usuarios||[]; FT_US.papeis=d.papeis||[];
+    FT_US.fonte=d.fonte||''; FT_US.driveLigado=!!d.driveLigado; FT_US.driveOk=d.driveOk;
+    FT_US.senhaInicial=d.senhaInicial||'';
+    FT_US.renomeando='';
+    ftUsersDesenha();
+  }catch(e){
+    cx.innerHTML='<div class="ft-us-msg" data-tipo="erro">'+bdEsc(e.message)+'</div>';
+  }
+}
+function ftUsersFecha(){
+  const f=document.getElementById('ftUsersFundo');
+  if(f)f.classList.remove('on');
+}
+window.ftUsersAbre=ftUsersAbre; window.ftUsersFecha=ftUsersFecha;
+
+function ftUsersDesenha(){
+  const cx=document.getElementById('ftUsersCorpo');
+  if(!cx)return;
+  const eu=(FT_EU&&FT_EU.u)||'';
+  const opc=(sel)=>FT_US.papeis.map(p=>
+    '<option value="'+p+'"'+(p===sel?' selected':'')+'>'+p+'</option>').join('');
+
+  let aviso='';
+  if(FT_US.driveLigado && FT_US.driveOk===false){
+    aviso='<div class="ft-us-aviso"><b>A lista de pessoas não foi confirmada no Drive.</b><br>'
+      +'Ela está valendo, mas só no disco do servidor, que é apagado a cada reinício. '
+      +'Se ficar assim, num reinício todo mundo volta para a senha de partida. '
+      +'Confira se a pasta do banco continua compartilhada com a conta de serviço como Editor.</div>';
+  }
+
+  const linhas=FT_US.lista.map(x=>{
+    const ini=(x.nome||x.u||'?').trim().charAt(0).toUpperCase();
+    const souEu=(x.u===eu);
+    const renomeando=(FT_US.renomeando===x.u);
+    return '<div class="ft-us-linha'+(x.ativo?'':' off')+'" data-u="'+bdEsc(x.u)+'">'
+      +'<div class="ft-us-ini">'+bdEsc(ini)+'</div>'
+      +'<div class="ft-us-nome"><b>'+bdEsc(x.nome||x.u)+'</b>'
+      +'<span>@'+bdEsc(x.u)+(souEu?' <i class="eu">(você)</i>':'')
+      +(x.trocar?' · senha de partida':'')+'</span></div>'
+      +'<select data-acao="papel"'+(souEu?' title="Você não perde o próprio acesso por engano"':'')+'>'
+      +opc(x.papel)+'</select>'
+      +'<button class="ft-us-bt" data-acao="ativo">'+(x.ativo?'Desativar':'Reativar')+'</button>'
+      +'<div class="ft-us-bts">'
+      +'<button class="ft-us-bt" data-acao="renomear">Renomear</button>'
+      +'<button class="ft-us-bt perigo" data-acao="resetar">Redefinir senha</button>'
+      +'</div>'
+      +(renomeando
+        ? '<div class="ft-us-troca">'
+          +'<span class="dica">Novo usuário:</span>'
+          +'<input data-campo="novo" value="'+bdEsc(x.u)+'" spellcheck="false" autocapitalize="none">'
+          +'<button class="ft-us-bt" data-acao="renomear-ok">Salvar</button>'
+          +'<button class="ft-us-bt" data-acao="renomear-nao">Cancelar</button>'
+          +'<span class="dica">A senha e o papel vão junto. A pessoa entra de novo.</span>'
+          +'</div>'
+        : '')
+      +'</div>';
+  }).join('');
+
+  cx.innerHTML=aviso+linhas
+    +'<div class="ft-us-nova">'
+    +'<label>Nome<input id="ftUsNome" placeholder="Maria"></label>'
+    +'<label>Usuário<input id="ftUsU" placeholder="maria" spellcheck="false" autocapitalize="none"></label>'
+    +'<label>Acesso<select id="ftUsPapel">'+opc('vendedor')+'</select></label>'
+    +'<button id="ftUsCriar" type="button">Adicionar</button>'
+    +'</div>'
+    +'<div class="ft-us-msg" id="ftUsersMsg"></div>'
+    /* a senha de partida vem do SERVIDOR, e nao escrita aqui: este arquivo
+       e publico ate para quem nao entrou */
+    +'<div class="ft-us-pe">Quem entra pela primeira vez, ou tem a senha redefinida, '
+    +'usa <b>'+bdEsc(FT_US.senhaInicial||'a senha de partida')+'</b> '
+    +'e precisa criar uma senha antes de o editor abrir.<br>'
+    +'Desativar não apaga: o cadastro fica, para o histórico de quem fez o quê continuar fazendo sentido.</div>';
+
+  cx.querySelectorAll('.ft-us-linha').forEach(l=>{
+    const u=l.dataset.u;
+    const sel=l.querySelector('select[data-acao="papel"]');
+    if(sel)sel.onchange=()=>ftUsersFaz({acao:'papel',u:u,papel:sel.value});
+    l.querySelectorAll('button[data-acao]').forEach(b=>{
+      const a=b.dataset.acao;
+      b.onclick=()=>{
+        if(a==='renomear'){ FT_US.renomeando=u; ftUsersDesenha();
+          const i=document.querySelector('.ft-us-linha[data-u="'+u+'"] input[data-campo="novo"]');
+          if(i){i.focus();i.select();} return; }
+        if(a==='renomear-nao'){ FT_US.renomeando=''; ftUsersDesenha(); return; }
+        if(a==='renomear-ok'){
+          const i=l.querySelector('input[data-campo="novo"]');
+          ftUsersFaz({acao:'renomear',u:u,novo:(i?i.value:'').trim().toLowerCase()});
+          return; }
+        if(a==='ativo'){
+          const x=FT_US.lista.find(y=>y.u===u);
+          ftUsersFaz({acao:'ativo',u:u,ativo:!(x&&x.ativo)}); return; }
+        if(a==='resetar')ftUsersFaz({acao:'resetar',u:u});
+      };
+    });
+    const inp=l.querySelector('input[data-campo="novo"]');
+    if(inp)inp.onkeydown=e=>{ if(e.key==='Enter'){e.preventDefault();
+      ftUsersFaz({acao:'renomear',u:u,novo:inp.value.trim().toLowerCase()}); } };
+  });
+
+  const cri=document.getElementById('ftUsCriar');
+  if(cri)cri.onclick=()=>{
+    const nome=document.getElementById('ftUsNome').value.trim();
+    const u=document.getElementById('ftUsU').value.trim().toLowerCase();
+    const papel=document.getElementById('ftUsPapel').value;
+    if(!u){ ftUsersDiz('erro','Escolha o nome de usuário.'); return; }
+    ftUsersFaz({acao:'criar',u:u,nome:nome||u,papel:papel});
+  };
+}
+
+async function ftUsersFaz(corpo){
+  ftUsersDiz('esperando','Salvando…');
+  try{
+    const d=await ftUsersApi(corpo);
+    FT_US.lista=d.usuarios||FT_US.lista;
+    FT_US.renomeando='';
+    ftUsersDesenha();
+    if(corpo.acao==='renomear'){
+      ftUsersDiz('ok','Agora é @'+corpo.novo+'.'
+        +(d.euMesmo?'' : ' A pessoa precisa entrar de novo.'));
+      if(d.euMesmo && typeof ftEuCarrega==='function')ftEuCarrega();
+    }
+    else if(corpo.acao==='criar')ftUsersDiz('ok','Pronto. A senha de partida é '+(FT_US.senhaInicial||'a de sempre')+'.');
+    else if(corpo.acao==='resetar')ftUsersDiz('ok','Senha redefinida para '+(FT_US.senhaInicial||'a de partida')+'.');
+    else ftUsersDiz('ok','Salvo.');
+    /* a conferência do Drive pode ter mudado com esta gravação */
+    try{ const d2=await ftUsersApi(null);
+      FT_US.driveOk=d2.driveOk; FT_US.fonte=d2.fonte;
+      const m=document.getElementById('ftUsersMsg');
+      const txt=m?m.textContent:'', tp=m?m.dataset.tipo:'';
+      ftUsersDesenha(); ftUsersDiz(tp,txt);
+    }catch(e){}
+  }catch(e){ ftUsersDiz('erro',e.message); }
+}
+
+(function ligaUsers(){
+  const x=document.getElementById('ftUsersX');
+  if(x)x.onclick=ftUsersFecha;
+  const f=document.getElementById('ftUsersFundo');
+  if(f)f.addEventListener('mousedown',e=>{ if(e.target===f)ftUsersFecha(); });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&f&&f.classList.contains('on'))ftUsersFecha();
+  });
+})();
+
+
+(function ligaEu(){
+  const vai=async()=>{ await ftEuCarrega(); setTimeout(ftVendedorPadrao,400); };
+  if(document.readyState!=='loading')setTimeout(vai,120);
+  else addEventListener('DOMContentLoaded',()=>setTimeout(vai,120));
+})();
+
 function loginFecha(){
   const f=document.getElementById('ftLoginFundo');
   if(f)f.classList.remove('on');
