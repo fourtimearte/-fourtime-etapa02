@@ -2,7 +2,7 @@
    v277 com tudo no lugar. O teste não confia no formato: ele SALVA numa
    versão antiga de verdade (v276, v275, v274) e ABRE na v277, comparando
    campo a campo. É o caminho do usuário: salvar ontem, abrir hoje. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
 const falhas=[];
@@ -39,9 +39,12 @@ const RESUMO = `(()=>{
 })()`;
 
 /* a versão NOVA vem do ambiente; as antigas são fixas, é o ponto do teste */
-const NOVA = process.env.FT_ARQ || 'fourtime-editor-v303.html';
-const VER  = process.env.FT_VER || '3.303';
-for (const antiga of ['fourtime-editor-v302.html','fourtime-editor-v301.html','fourtime-editor-v300.html','fourtime-editor-v299.html','fourtime-editor-v298.html','fourtime-editor-v297.html','fourtime-editor-v296.html','fourtime-editor-v295.html','fourtime-editor-v294.html','fourtime-editor-v293.html','fourtime-editor-v292.html','fourtime-editor-v291.html','fourtime-editor-v290.html','fourtime-editor-v289.html','fourtime-editor-v288.html','fourtime-editor-v287.html','fourtime-editor-v286.html','fourtime-editor-v285.html','fourtime-editor-v284.html','fourtime-editor-v283.html','fourtime-editor-v282.html','fourtime-editor-v281.html','fourtime-editor-v280.html','fourtime-editor-v279.html','fourtime-editor-v278.html','fourtime-editor-v277.html','fourtime-editor-v276.html','fourtime-editor-v275.html','fourtime-editor-v274.html']){
+const NOVA = process.env.FT_ARQ || editorAtual();
+/* a versao esperada sai do proprio nome do arquivo: 311 vira 3.311 */
+const VER  = process.env.FT_VER || ('3.'+NOVA.match(/v(\d+)/)[1]);
+/* as versoes recentes entram primeiro: a que acabou de sair e a que
+   tem mais chance de ter quebrado alguma coisa */
+for (const antiga of ['fourtime-editor-v310.html','fourtime-editor-v309.html','fourtime-editor-v308.html','fourtime-editor-v307.html','fourtime-editor-v306.html','fourtime-editor-v305.html','fourtime-editor-v304.html','fourtime-editor-v303.html','fourtime-editor-v302.html','fourtime-editor-v301.html','fourtime-editor-v300.html','fourtime-editor-v299.html','fourtime-editor-v298.html','fourtime-editor-v297.html','fourtime-editor-v296.html','fourtime-editor-v295.html','fourtime-editor-v294.html','fourtime-editor-v293.html','fourtime-editor-v292.html','fourtime-editor-v291.html','fourtime-editor-v290.html','fourtime-editor-v289.html','fourtime-editor-v288.html','fourtime-editor-v287.html','fourtime-editor-v286.html','fourtime-editor-v285.html','fourtime-editor-v284.html','fourtime-editor-v283.html','fourtime-editor-v282.html','fourtime-editor-v281.html','fourtime-editor-v280.html','fourtime-editor-v279.html','fourtime-editor-v278.html','fourtime-editor-v277.html','fourtime-editor-v276.html','fourtime-editor-v275.html','fourtime-editor-v274.html']){
   console.log('\n=== .ft salvo na '+antiga.replace('fourtime-editor-','').replace('.html','')+' → aberto na v'+VER+' ===');
   let velha;
   try { velha = await abre(antiga); } catch(e){ console.log('  (versão não está aqui, pulando)'); continue; }

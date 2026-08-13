@@ -63,7 +63,7 @@ export async function abreNavegador(opcoes) {
    estourar o tempo. A condição pergunta antes se esta versão tem a
    função — assim a espera serve para qualquer arquivo do histórico.
    ================================================================ */
-export async function esperaPronto(page, ms) {
+export async function esperaPronto(page, ms, limite) {
   await page.waitForFunction(() =>
     typeof FT_EDITOR !== 'undefined'
     && document.querySelector('.folha-a4')
@@ -72,7 +72,11 @@ export async function esperaPronto(page, ms) {
     && typeof window.zoomMedidas === 'function'
     && window.ZOOM > 0
     && (typeof window.ftDropdownsLiga !== 'function'
-        || document.querySelector('.ft-dd-bt')), null, { timeout: 30000 });
+        || document.querySelector('.ft-dd-bt')), null,
+    /* FT_ESPERA existe por causa das suites que sobem um servidor local: na
+       bateria em paralelo, o navegador divide a maquina com dois uvicorn e
+       30 s ficou apertado. Fora dali nada muda. */
+    { timeout: limite || Number(process.env.FT_ESPERA) || 30000 });
   /* um respiro curto para as animações de entrada assentarem: várias
      asserções leem cor e posição, e a aba tem transição de 120 ms */
   await page.waitForTimeout(ms == null ? 200 : ms);
@@ -110,4 +114,25 @@ export async function redimensiona(page, tamanho, ms) {
   /* o debounce do editor é de 180 ms: um piso garante que ele JÁ disparou,
      e não que a folha ainda nem começou a mudar de tamanho */
   await page.waitForTimeout(ms == null ? 260 : ms);
+}
+
+/* O EDITOR ATUAL, E NÃO UM NOME ESCRITO À MÃO.
+
+   As suítes que acompanham a versão em desenvolvimento traziam o nome do
+   arquivo dentro delas: 'fourtime-editor-v303.html'. Isso envelhece sozinho.
+   A v3.304 centralizou a barra de filtros, a v3.309 trocou os rótulos por
+   texto dentro do campo, e a suíte dos filtros continuou apontando para o
+   v303: passou a acusar erro a cada bateria, sempre pelo mesmo motivo, e
+   sempre um motivo falso. Alarme que sempre toca é alarme que ninguém ouve.
+
+   Quem escolhe agora é a pasta: o maior número de versão que estiver nela.
+   FT_ARQ continua mandando quando alguém quer apontar para uma versão
+   específica de propósito. */
+import { readdirSync } from 'fs';
+export function editorAtual(dir) {
+  const pasta = dir || (import.meta.dirname + '/');
+  const arqs = readdirSync(pasta)
+    .filter(n => /^fourtime-editor-v\d+\.html$/.test(n))
+    .sort((a, b) => (+a.match(/v(\d+)/)[1]) - (+b.match(/v(\d+)/)[1]));
+  return arqs.length ? arqs[arqs.length - 1] : 'fourtime-editor-v303.html';
 }

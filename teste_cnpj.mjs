@@ -3,7 +3,7 @@
    números e ver a pontuação aparecer), a consulta em PARALELO às duas
    fontes (uma fora do ar não pode derrubar a outra) e o preenchimento de
    uma ficha que abre com o CNPJ já lá. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
 const falhas=[];
@@ -42,7 +42,7 @@ await p.route('**/api.opencnpj.org/**',async r=>{
   r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(RECEITA_OPENCNPJ)});
 });
 
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v291.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||editorAtual())).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. A MÁSCARA: SÓ NÚMEROS ENTRAM, A PONTUAÇÃO APARECE ===');

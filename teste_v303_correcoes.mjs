@@ -15,10 +15,10 @@
 
    3. VISUALIZADOR DE IMAGEM — clicar fora da imagem fecha. Sem estragar o
       arrasto: soltar longe de onde apertou continua sendo pan.            */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v303.html';
+const ARQ = process.env.FT_ARQ || editorAtual();
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(56)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);

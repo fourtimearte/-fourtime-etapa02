@@ -2,7 +2,7 @@
    O teste aplica um valor berrante em cada um e conta quantos elementos
    mudaram de aparência. Zero = token morto, e token morto é um controle
    que mente para quem usa. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
 const falhas=[];
@@ -13,7 +13,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v303.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||editorAtual())).href);
 await esperaPronto(p);
 await p.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,2600)); });
 

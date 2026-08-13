@@ -2,7 +2,7 @@
    O teste finge um servidor que responde /api/versao-publica e confere que
    o cartão acende — com a sincronização DESLIGADA, que é o caso de quem
    mais precisa do aviso. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
 const falhas=[];
@@ -16,7 +16,7 @@ const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
 /* o servidor de mentira: só a rota da versão */
 await p.route('**/api/versao-publica', route=>route.fulfill({
   status:200, contentType:'application/json', body:JSON.stringify({editor:'9.999', minimo:'0'})}));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v291.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||editorAtual())).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. COM A SINCRONIZAÇÃO DESLIGADA, o aviso ainda chega ===');

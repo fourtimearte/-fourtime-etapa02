@@ -3,7 +3,7 @@
    DTF/Sublimação do design — as duas do Design Kit v5. O que não pode
    regredir: só no arquivo EXPORTADO, só onde há conteúdo, 10 repetições ao
    abrir e 5 a cada vez que a janela recupera o foco. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 import { writeFileSync } from 'fs';
 const DIR = import.meta.dirname + '/';
@@ -15,7 +15,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1400,height:900}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v295.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||editorAtual())).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O EDITOR NÃO BRILHA — a animação é só do arquivo ===');

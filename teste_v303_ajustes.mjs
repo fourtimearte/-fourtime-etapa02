@@ -3,7 +3,7 @@
    2) o botão de copiar não sai na impressão;
    3) o separador entre layouts não existe: nem editor, nem papel, nem Trello;
    4) o quadrado da cor tem a medida e o alinhamento do botão "+" do tecido. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
 const falhas=[];
@@ -14,7 +14,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const browser=await abreNavegador();
 const page=await browser.newPage({ viewport:{width:1400,height:900} });
 const erros=[]; page.on('pageerror',e=>erros.push(String(e).slice(0,200)));
-await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v303.html')).href);
+await page.goto(pathToFileURL(DIR+(process.env.FT_ARQ||editorAtual())).href);
 await esperaPronto(page);
 await page.evaluate(async ()=>{ const mi=document.getElementById('miKitTeste'); mi.hidden=false; mi.style.display=''; mi.click(); await new Promise(s=>setTimeout(s,1500)); });
 
@@ -388,7 +388,21 @@ for(const tema of ['claro','escuro']){
     await page.emulateMedia({ media });
     r=await page.evaluate(async (tema)=>{
       document.body.dataset.tema=tema; if(window.aplicaLogos)aplicaLogos();
-      await new Promise(s=>setTimeout(s,400));
+      /* ESPERAR O SINAL, E NAO O RELOGIO. Aqui havia um sleep de 400ms. Com a
+         bateria em paralelo, e agora com duas suites subindo um servidor
+         local, 400ms as vezes cai NO MEIO da transicao de tema, e a mesma
+         borda e lida em dois cinzas de um degrau de diferenca
+         (rgb(56,62,68) e rgb(57,63,69)). A medida so vale quando parou de
+         mudar: tres leituras iguais seguidas. */
+      const medir=()=>[...document.querySelectorAll('.folha-a4 *')]
+        .map(e=>getComputedStyle(e).borderTopColor).join('|');
+      let igual=0, ultima='';
+      for(let i=0;i<80 && igual<3;i++){
+        await new Promise(s=>setTimeout(s,60));
+        const agora=medir();
+        igual = (agora===ultima) ? igual+1 : 0;
+        ultima = agora;
+      }
       const f=document.querySelector('.folha-a4');
       /* toda linha CINZA do documento tem de ser a mesma. Vermelho, tinta de
          gênero e o selo são sinal, não estrutura: ficam de fora. */

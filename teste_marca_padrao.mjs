@@ -16,10 +16,10 @@
         VALOR marca pendência onde não há);
      4. o rodapé conta as pendências do painel INTEIRO, não da aba aberta;
      5. "Restaurar" devolve tudo para ✓.                                   */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v300.html';
+const ARQ = process.env.FT_ARQ || editorAtual();
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(52)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);

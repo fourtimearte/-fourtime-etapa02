@@ -2921,11 +2921,13 @@ def _rel_fontes(ano, mes, dia):
         d = _orc_dia_da_pasta(sub["name"])
         if d and (not dia or d == dia):
             for f in _orc_lista_ft(sub["id"], limite=400):
-                achados.append({"id": f["id"], "nome": f["name"], "dia": d})
+                achados.append({"id": f["id"], "nome": f["name"], "dia": d,
+                                "mod": f.get("modifiedTime") or ""})
     if not dia:
         for f in _orc_lista_ft(pid_mes, limite=400):
             achados.append({"id": f["id"], "nome": f["name"],
-                            "dia": _orc_dia_mes_ano(f["name"])[0]})
+                            "dia": _orc_dia_mes_ano(f["name"])[0],
+                            "mod": f.get("modifiedTime") or ""})
     return pid_mes, achados
 
 
@@ -3221,6 +3223,200 @@ def ft_relatorio_guardado(request: Request, ano: int = 0, mes: int = 0, dia: int
     doc["existe"] = True
     doc["ok"] = True
     return doc
+
+
+# =====================================================================
+# RELATORIO DE ATIVIDADE (v3.311)
+#
+# O Relatorio de Pedidos responde "quanto vendemos". Este responde outra
+# coisa: "o que a fabrica vai produzir nesta semana, e cabe?". Por isso e
+# um endpoint separado e nao um parametro do outro:
+#
+#   1. NAO TEM DINHEIRO. Nenhum. Quem planeja producao nao precisa saber
+#      quanto o pedido custou, e a marca de acesso pode ser dada a quem o
+#      faturamento nao diz respeito. Um campo de valor que ninguem usa e
+#      um campo de valor que um dia vaza.
+#   2. TEM A DATA DE ENVIO, que o Relatorio de Pedidos nao carrega.
+#   3. A LEITURA E INCREMENTAL. Gerar de novo nao pode custar o mes
+#      inteiro outra vez, nem derrubar o que ja foi planejado a mao.
+# =====================================================================
+
+def exige_atividade(req: Request, planejar=False):
+    """Recusa quem nao pode. 'planejar' e mais apertado que 'ver': mudar o
+       dia de um pedido e coisa de admin."""
+    if FT_LOGIN_DESLIGADO:
+        return None
+    u = exige_token(req)
+    if planejar and not pode_planejar(u):
+        raise HTTPException(status_code=403,
+            detail="Só um administrador altera o planejamento da semana.")
+    if not pode(u, "atividade"):
+        raise HTTPException(status_code=403,
+            detail="Seu acesso não inclui o Relatório de Atividade.")
+    return u
+
+
+def _atv_nome_arquivo(semana):
+    """Um arquivo por semana, nomeado pela segunda-feira: 2026-08-17.fta.
+
+       Nomear pela segunda e nao por numero de semana ISO e uma escolha a
+       favor de quem abre o Drive: '2026-W34' nao diz nada a ninguem, e
+       '2026-08-17' diz exatamente de que semana se trata."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(semana or "")):
+        raise HTTPException(status_code=400, detail="Semana inválida.")
+    return "%s.fta" % semana
+
+
+@app.get("/api/ft/atividade-lista")
+def ft_atividade_lista(request: Request, ano: int = 0, mes: int = 0):
+    """Quais arquivos existem no mes, sem abrir nenhum.
+
+       Vem com o modifiedTime de cada um, e e ele que torna a geracao
+       incremental possivel: o editor so manda abrir o que nunca viu ou o
+       que mudou desde a ultima vez."""
+    exige_atividade(request)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    h = datetime.now(timezone.utc)
+    ano = int(ano or h.year); mes = int(mes or h.month)
+    if not (1 <= mes <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    try:
+        _pid, achados = _rel_fontes(ano, mes, 0)
+    except Exception as e:
+        raise HTTPException(status_code=502,
+            detail="Não consegui abrir a pasta: %s" % str(e)[:200])
+    return {"ok": True, "ano": ano, "mes": mes,
+            "total": len(achados), "arquivos": achados}
+
+
+@app.post("/api/ft/atividade-lote")
+async def ft_atividade_lote(request: Request):
+    """Abre um punhado de orcamentos e devolve so o que a producao precisa."""
+    exige_atividade(request)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    pedidos = corpo.get("arquivos") or []
+    if not isinstance(pedidos, list) or len(pedidos) > 40:
+        raise HTTPException(status_code=400, detail="Lote inválido.")
+    itens, falhas = [], []
+    for a in pedidos:
+        fid = str((a or {}).get("id") or "")
+        nome = str((a or {}).get("nome") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
+            continue
+        try:
+            bruto, _ = _drive_get("/files/" + fid,
+                                  {"alt": "media", "supportsAllDrives": "true"},
+                                  binario=True)
+            c = json.loads(bruto.decode("utf-8"))
+        except Exception as e:
+            falhas.append({"nome": nome, "erro": str(e)[:120]})
+            continue
+        header = c.get("header") or {}
+        cli, ped = _rel_cliente_pedido(nome, header)
+        sp, _sv, pp, _pv, _ign = _rel_do_conteudo(c)
+        itens.append({
+            "id": fid, "arquivo": nome,
+            "dia": int((a or {}).get("dia") or _orc_dia_mes_ano(nome)[0]),
+            "mod": str((a or {}).get("mod") or ""),
+            "cliente": cli, "pedido": ped,
+            "vendedor": str(header.get("vendedor") or "").strip(),
+            # QUANDO a mercadoria sai. E a data que coloca o pedido na
+            # semana, ate alguem arrastar a linha para outro dia.
+            "envio": str(header.get("envio") or "").strip(),
+            "subPecas": int(sp), "perPecas": int(pp),
+            "total": int(sp) + int(pp),
+        })
+    return {"ok": True, "itens": itens, "falhas": falhas}
+
+
+@app.get("/api/ft/atividade-guardado")
+def ft_atividade_guardado(request: Request, semana: str = ""):
+    """O planejamento salvo de uma semana, se houver."""
+    exige_atividade(request)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    nome = _atv_nome_arquivo(semana)
+    try:
+        pid = _rel_pasta()
+        achados = _drive_get("/files", {
+            "q": ("'%s' in parents and trashed = false and name = '%s'"
+                  % (pid, nome.replace("'", "\\'"))),
+            "fields": "files(id,name,modifiedTime)", "pageSize": "5",
+            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"}).get("files", [])
+        if not achados:
+            return {"ok": True, "existe": False, "semana": semana}
+        bruto, _ = _drive_get("/files/" + achados[0]["id"],
+                              {"alt": "media", "supportsAllDrives": "true"}, binario=True)
+        doc = json.loads(bruto.decode("utf-8"))
+    except Exception as e:
+        return {"ok": True, "existe": False, "semana": semana, "aviso": str(e)[:160]}
+    doc["existe"] = True
+    doc["ok"] = True
+    return doc
+
+
+@app.post("/api/ft/atividade-guardar")
+async def ft_atividade_guardar(request: Request):
+    """Grava o planejamento da semana.
+
+       O servidor NAO funde nada: quem funde e o editor, que tem na tela o
+       salvo e o recem-lido. Aqui so se escreve o resultado. Fundir nos dois
+       lados daria duas regras de fusao para manter de acordo, e a segunda
+       silenciosamente erraria."""
+    exige_atividade(request, planejar=True)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    semana = str(corpo.get("semana") or "")
+    nome = _atv_nome_arquivo(semana)
+    linhas = corpo.get("linhas")
+    if not isinstance(linhas, list):
+        raise HTTPException(status_code=400, detail="Semana sem linhas.")
+    h = datetime.now(timezone.utc)
+    doc = {"_formato": "fourtime-atividade", "_versao": 1,
+           "salvoEm": h.isoformat(), "semana": semana,
+           "linhas": linhas,
+           # o que ja foi lido do Drive, para a proxima geracao nao reabrir
+           # tudo de novo: id -> modifiedTime.
+           "vistos": corpo.get("vistos") or {},
+           "capacidade": corpo.get("capacidade") or {}}
+    texto = json.dumps(doc, ensure_ascii=False)
+    fid, acao, via = None, "", ""
+    try:
+        pid = _rel_pasta()
+        existente = _orc_acha_arquivo(nome, pid)
+        if existente:
+            _orc_grava_por_id(existente, texto.encode("utf-8"))
+            fid, acao, via = existente, "atualizado", "service-account"
+    except Exception:
+        pass
+    if not fid and FT_SCRIPT_ORCAMENTOS:
+        try:
+            r = _script_post({"acao": "salvar", "nome": nome, "conteudo": texto,
+                              "destino": "relatorio",
+                              "pastaRelatorios": FT_PASTA_RELATORIOS})
+            fid, acao, via = r.get("id"), "criado", "apps-script"
+        except Exception as e:
+            return {"ok": False, "aviso": "Não consegui guardar: %s" % str(e)[:160]}
+    if not fid:
+        return {"ok": False, "aviso": "Não consegui guardar: a conta de serviço não "
+                                      "tem cota para criar arquivos e o Apps Script "
+                                      "não está configurado."}
+    return {"ok": True, "id": fid, "acao": acao, "via": via,
+            "nome": nome, "salvoEm": doc["salvoEm"]}
 
 
 # ------------- PWA (offline + instalável) -------------
@@ -3558,7 +3754,25 @@ def acha_usuario(u):
 def pode(usuario, permissao):
     if not usuario:
         return False
+    # A ATIVIDADE NAO E UM PAPEL, E UMA MARCA NA PESSOA.
+    #
+    # Os outros acessos vem do papel: quem e vendedor pode o que vendedor
+    # pode. O Relatorio de Atividade nao cabe nesse molde. Quem planeja a
+    # producao nao e um cargo do sistema: hoje e a Patricia, que e editora,
+    # amanha pode ser alguem do financeiro. Fazer disso um papel obrigaria a
+    # mudar o cargo da pessoa para dar uma tela a ela.
+    #
+    # Entao e uma marca ligada em cada pessoa, e admin tem sempre.
+    if permissao == "atividade":
+        return usuario.get("papel") == "admin" or bool(usuario.get("atividade"))
     return permissao in FT_PAPEIS.get(usuario.get("papel", ""), set())
+
+
+def pode_planejar(usuario):
+    """VER e MEXER sao coisas diferentes aqui. A marca da a leitura; mudar o
+       dia de um pedido, ou a etapa dele, e so do admin. Um planejamento que
+       qualquer um pode reescrever nao e um planejamento."""
+    return bool(usuario) and usuario.get("papel") == "admin"
 
 
 # ---------------- sessao ----------------
@@ -3612,9 +3826,18 @@ def _poe_cookie(resp: Response, valor, dias=None):
 
 def _limpo(x):
     """O que pode ser dito ao navegador sobre uma pessoa. Sem o hash."""
+    marcas = set(FT_PAPEIS.get(x.get("papel", ""), set()))
+    if x.get("papel") == "admin" or x.get("atividade"):
+        marcas.add("atividade")
     return {"u": x.get("u"), "nome": x.get("nome"), "papel": x.get("papel"),
             "ativo": x.get("ativo", True), "trocar": bool(x.get("trocar")),
-            "pode": sorted(FT_PAPEIS.get(x.get("papel", ""), set())),
+            "pode": sorted(marcas),
+            # a marca crua, para a tela de Pessoas desenhar o interruptor.
+            # Diferente de "atividade" dentro de pode: la o admin ja entra
+            # ligado por ser admin, aqui e o que esta gravado na pessoa.
+            "atividade": bool(x.get("atividade")),
+            # quem planeja a semana, e nao so olha
+            "planeja": x.get("papel") == "admin",
             # o editor usa isto para decidir se preenche o campo Vendedor
             "vende": x.get("papel") in FT_PAPEL_VENDE}
 
@@ -3787,6 +4010,10 @@ async def auth_usuarios_grava(request: Request):
             raise HTTPException(status_code=400,
                 detail="Este é o último administrador. Promova outra pessoa antes.")
         achado["papel"] = papel
+    elif acao == "atividade":
+        # a marca de quem ve o Relatorio de Atividade. Em admin nao muda
+        # nada: admin ve por ser admin, com marca ou sem.
+        achado["atividade"] = bool(corpo.get("atividade"))
     elif acao == "nome":
         achado["nome"] = str(corpo.get("nome") or achado["nome"]).strip()
     elif acao == "ativo":

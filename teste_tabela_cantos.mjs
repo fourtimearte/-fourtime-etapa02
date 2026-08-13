@@ -8,10 +8,10 @@
    Isso já tinha sido corrigido no cabeçalho quando o modo nasceu, e ficou
    esquecido no rodapé: em cima arredondava, embaixo não. Este teste mede os
    quatro cantos nos dois modos, para os dois lados não voltarem a divergir. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v300.html';
+const ARQ = process.env.FT_ARQ || editorAtual();
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(50)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);

@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fourtime · Relatório de Atividade em A4 (mockup 2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ==================================================================
+   RELATÓRIO DE ATIVIDADE EM A4 DEITADO — MOCKUP 2
+   Design Kit Personifour v5
+
+   Duas perguntas para responder, e as duas se respondem MEDINDO, não
+   estimando:
+
+     1. cabe uma semana numa folha?
+     2. quando não cabe, onde ela quebra?
+
+   Por isso a paginação aqui é a de verdade: as linhas são colocadas numa
+   folha real de 297x210mm até a altura estourar, e só então uma folha
+   nova começa. É o mesmo método que o editor de orçamentos usa para o A4
+   em pé, e é o único que não mente.
+
+   O contador de pedidos existe para você EMPURRAR o limite e ver onde ele
+   está, em vez de acreditar num número que eu escrevi.
+   ================================================================== */
+:root{
+  --ft-vermelho:#C6161B;
+  --ft-cinza-70:#161A20;
+  --ft-cinza-40:#666B70;
+  --ft-borda:#d5d8e2;
+  --ft-branco:#ffffff;
+  --ft-superficie-2:#FBFCFD;
+  --ft-fundo-pagina:#f9f9f9;
+  --ft-fundo-externo:#c7c7c7;
+  --ft-hover:#f2f2f2;
+  --ft-hover-2:#EEEFF1;
+  --ft-anel:rgba(198,22,27,.35);
+  --ft-fonte-ui:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  --ft-fonte-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+  --mov-suave:cubic-bezier(.16,1,.3,1);
+  --mov-mola:cubic-bezier(.34,1.42,.5,1);
+  --sh-1:0 1px 2px rgba(17,18,20,.05);
+  --sh-2:0 2px 8px rgba(17,18,20,.07);
+  --sh-4:0 18px 44px rgba(17,18,20,.20);
+  --sh-arrasto:0 22px 48px rgba(17,18,20,.24),0 3px 10px rgba(17,18,20,.14);
+  --sat-ok:#15803D;      --sat-ok-bg:#E9F6EE;
+  --sat-cheio:#B45309;   --sat-cheio-bg:#FDF3E3;
+  --sat-estourou:#C6161B;--sat-estourou-bg:#FDF1F1;
+}
+[data-tag]{ --tg:#666B70; --tg-bg:#F1F3F5; --tg-tx:#4B5158; }
+[data-tag="separacao"]{ --tg:#64748B; --tg-bg:#EEF1F5; --tg-tx:#48546A; }
+[data-tag="corte"]{     --tg:#7C3AED; --tg-bg:#F1EBFE; --tg-tx:#5B21B6; }
+[data-tag="sublimacao"]{--tg:#2563EB; --tg-bg:#E7EFFE; --tg-tx:#1D4ED8; }
+[data-tag="dtf"]{       --tg:#0891B2; --tg-bg:#E2F5F9; --tg-tx:#0E7490; }
+[data-tag="prensa"]{    --tg:#EA580C; --tg-bg:#FEEEE3; --tg-tx:#C2410C; }
+[data-tag="costura"]{   --tg:#DB2777; --tg-bg:#FDEAF2; --tg-tx:#A81B5B; }
+[data-tag="conferencia"]{--tg:#CA8A04;--tg-bg:#FBF3DF; --tg-tx:#9A6A03; }
+[data-tag="embalagem"]{ --tg:#92400E; --tg-bg:#F7EDE6; --tg-tx:#7C3510; }
+[data-tag="despacho"]{  --tg:#0F766E; --tg-bg:#E2F2F0; --tg-tx:#115E56; }
+[data-tag="finalizado"]{--tg:#15803D; --tg-bg:#E9F6EE; --tg-tx:#136B34; }
+[data-tag="atrasado"]{  --tg:#C6161B; --tg-bg:#FDF1F1; --tg-tx:#A31217; }
+
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:var(--ft-fonte-ui);color:var(--ft-cinza-70);
+  background:var(--ft-fundo-pagina);-webkit-font-smoothing:antialiased;
+}
+
+/* ================= BARRA DE CONTROLE (só na tela) ================= */
+.controle{
+  position:sticky;top:0;z-index:60;background:var(--ft-branco);
+  border-bottom:1px solid var(--ft-borda);box-shadow:var(--sh-1);
+  padding:11px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+}
+.controle h1{font-size:16px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;}
+.controle .cresce{flex:1;}
+.abas{display:flex;background:var(--ft-superficie-2);border:1px solid var(--ft-borda);
+  border-radius:10px;padding:3px;gap:2px;}
+.abas button{
+  height:32px;padding:0 15px;border:0;border-radius:8px;background:transparent;
+  font:inherit;font-size:13px;font-weight:600;color:var(--ft-cinza-40);cursor:pointer;
+  transition:background .18s var(--mov-suave),color .18s var(--mov-suave);
+}
+.abas button.on{background:var(--ft-vermelho);color:#fff;}
+.abas button:not(.on):hover{background:var(--ft-hover);}
+.quantos{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ft-cinza-40);}
+.quantos input[type=range]{width:190px;accent-color:var(--ft-vermelho);}
+.quantos b{font-family:var(--ft-fonte-mono);font-size:14px;color:var(--ft-cinza-70);
+  min-width:26px;text-align:right;}
+.medida{
+  display:flex;align-items:center;gap:9px;padding:6px 13px;border-radius:99px;
+  background:var(--sat-bg);color:var(--sat);font-size:12.5px;font-weight:600;white-space:nowrap;
+  transition:background-color .3s var(--mov-suave),color .3s var(--mov-suave);
+}
+.medida .n{font-family:var(--ft-fonte-mono);font-size:15px;font-weight:700;}
+.bt{
+  height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--ft-borda);
+  background:var(--ft-branco);font:inherit;font-size:13px;font-weight:600;
+  color:var(--ft-cinza-40);cursor:pointer;display:inline-flex;align-items:center;gap:7px;
+  transition:border-color .16s var(--mov-suave),color .16s var(--mov-suave);
+}
+.bt:hover{border-color:var(--ft-vermelho);color:var(--ft-vermelho);}
+.bt.forte{background:var(--ft-vermelho);border-color:var(--ft-vermelho);color:#fff;}
+.bt.forte:hover{filter:brightness(1.08);color:#fff;}
+.bt svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.1;
+  stroke-linecap:round;stroke-linejoin:round;}
+
+.palco{padding:22px 20px 70px;}
+.vista{display:none;}
+.vista.on{display:block;}
+
+/* ==================================================================
+   A FOLHA A4 DEITADA
+   297 x 210mm. Deitada porque são oito colunas: em pé, ou o nome do
+   cliente vira duas linhas, ou a coluna de etapa não cabe.
+   ================================================================== */
+.folhas{display:flex;flex-direction:column;align-items:center;gap:26px;}
+.folha{
+  width:297mm;min-height:210mm;height:210mm;
+  background:#fff;border:1px solid var(--ft-borda);box-shadow:var(--sh-2);
+  padding:9mm 10mm 8mm;display:flex;flex-direction:column;
+  position:relative;overflow:hidden;
+}
+.folha-corpo{flex:1;min-height:0;display:flex;flex-direction:column;}
+
+/* ---- cabeçalho da folha ---- */
+.f-topo{
+  display:flex;align-items:flex-end;gap:14px;
+  padding-bottom:6px;border-bottom:1.5px solid var(--ft-vermelho);margin-bottom:7px;
+}
+.f-marca{font-size:15px;font-weight:700;letter-spacing:.14em;color:var(--ft-vermelho);line-height:1;}
+.f-tit{flex:1;line-height:1.2;}
+.f-tit h2{font-size:13px;font-weight:700;letter-spacing:-.01em;}
+.f-tit p{font-size:9.5px;color:var(--ft-cinza-40);margin-top:1px;}
+.f-resumo{display:flex;gap:14px;align-items:flex-end;}
+.f-res{text-align:right;line-height:1.15;}
+.f-res .r{font-size:7.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ft-cinza-40);}
+.f-res .v{font-family:var(--ft-fonte-mono);font-size:13px;font-weight:600;
+  font-variant-numeric:tabular-nums;}
+.f-res.sat .v{color:var(--sat);}
+
+/* ---- a tabela do papel ---- */
+.f-tab{width:100%;border-collapse:collapse;table-layout:fixed;}
+.f-tab th{
+  font-size:7.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ft-cinza-40);text-align:left;padding:3px 4px;
+  border-bottom:1px solid var(--ft-borda);
+}
+.f-tab th.n,.f-tab td.n{text-align:right;}
+.f-tab td{
+  font-size:9.5px;padding:3.1px 4px;border-bottom:1px solid #EEF0F4;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.f-tab td.ped,.f-tab td.data,.f-tab td.n{
+  font-family:var(--ft-fonte-mono);font-size:9px;font-variant-numeric:tabular-nums;
+}
+.f-tab td.nome{font-weight:500;}
+.f-tab td.tot{font-weight:700;}
+.f-tab td.vazio{color:#B9BEC6;}
+
+/* a faixa do dia: é ela que dá o ritmo da folha */
+.f-dia td{
+  background:var(--ft-superficie-2);border-top:1px solid var(--ft-borda);
+  border-bottom:1px solid var(--ft-borda);padding:3.5px 5px;
+}
+.f-dia .cx{display:flex;align-items:center;gap:9px;}
+.f-dia b{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+.f-dia .dt{font-family:var(--ft-fonte-mono);font-size:8.5px;color:var(--ft-cinza-40);}
+.f-dia .cont{font-size:8px;color:var(--ft-cinza-40);font-style:italic;}
+.f-dia .esp{flex:1;}
+.f-dia .barra{width:120px;height:4px;border-radius:99px;background:var(--ft-hover-2);overflow:hidden;}
+.f-dia .barra i{display:block;height:100%;border-radius:99px;background:var(--sat);}
+.f-dia .num{font-family:var(--ft-fonte-mono);font-size:8.5px;font-weight:600;color:var(--sat);}
+.f-dia .folga{font-size:8px;font-weight:700;color:var(--sat);white-space:nowrap;}
+.f-dia.atraso td{background:#FFF6F6;border-color:#F0BFC1;}
+.f-dia.atraso b{color:var(--ft-vermelho);}
+
+/* a etapa no papel: chip pequeno, e a cor tem de sobreviver à impressora */
+.f-chip{
+  display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:99px;
+  font-size:8px;font-weight:700;background:var(--tg-bg);color:var(--tg-tx);
+  border:1px solid var(--tg);white-space:nowrap;
+}
+.f-chip::before{content:'';width:4px;height:4px;border-radius:99px;background:var(--tg);}
+
+/* ---- rodapé da folha ---- */
+.f-rodape{
+  margin-top:auto;padding-top:5px;border-top:1px solid var(--ft-borda);
+  display:flex;align-items:center;gap:14px;font-size:8.5px;color:var(--ft-cinza-40);
+}
+.f-rodape .esq{flex:1;line-height:1.4;}
+.f-rodape .esq b{color:var(--ft-cinza-70);font-size:10px;}
+.f-fecho{
+  display:flex;align-items:center;gap:10px;padding:5px 11px;border-radius:8px;
+  background:var(--sat-bg);color:var(--sat);
+}
+.f-fecho .g{font-family:var(--ft-fonte-mono);font-size:14px;font-weight:700;}
+.f-fecho .t{font-size:8.5px;font-weight:600;line-height:1.25;}
+.f-pag{font-family:var(--ft-fonte-mono);font-size:8.5px;color:var(--ft-cinza-40);white-space:nowrap;}
+
+/* a régua que mostra quanto sobrou da folha (só na tela) */
+.f-sobra{
+  position:absolute;left:0;right:0;bottom:0;
+  border-top:1px dashed #C6161B55;background:repeating-linear-gradient(
+    135deg,rgba(198,22,27,.045) 0 6px,transparent 6px 12px);
+  pointer-events:none;display:flex;align-items:flex-start;justify-content:flex-end;
+  padding:3px 10px;font-size:8.5px;color:#C6161B99;font-weight:600;
+}
+
+/* ==================================================================
+   VISTA DE TELA — onde o arraste acontece
+   ================================================================== */
+.tela{max-width:1240px;margin:0 auto;}
+.dia{
+  background:var(--ft-branco);border:1px solid var(--ft-borda);border-radius:12px;
+  margin-bottom:10px;box-shadow:var(--sh-1);overflow:hidden;
+  transition:border-color .2s var(--mov-suave),box-shadow .2s var(--mov-suave);
+}
+.dia.alvo{border-color:var(--ft-vermelho);box-shadow:0 0 0 3px var(--ft-anel);}
+.dia.atrasados{border-color:#F0BFC1;background:#FFFCFC;}
+.dia-cab{
+  display:flex;align-items:center;gap:13px;padding:9px 13px;
+  border-bottom:1px solid var(--ft-borda);background:var(--ft-superficie-2);
+}
+.dia-cab b{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
+.dia-cab .dt{font-size:12px;color:var(--ft-cinza-40);font-variant-numeric:tabular-nums;}
+.dia-cab .esp{flex:1;}
+.dia-cab .barra{width:150px;height:6px;border-radius:99px;background:var(--ft-hover-2);overflow:hidden;}
+.dia-cab .barra i{display:block;height:100%;border-radius:99px;background:var(--sat);
+  transition:width .45s var(--mov-suave),background-color .3s var(--mov-suave);}
+.dia-cab .num{font-family:var(--ft-fonte-mono);font-size:12px;font-weight:600;color:var(--sat);}
+.dia-cab .folga{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:99px;
+  background:var(--sat-bg);color:var(--sat);white-space:nowrap;}
+
+.lista{padding:3px 0;min-height:14px;}
+.linha{
+  display:grid;grid-template-columns:26px 92px 1fr 74px 96px 58px 74px 92px 168px;
+  align-items:center;gap:9px;padding:5px 13px;font-size:12.5px;
+  border-bottom:1px solid #F3F5F8;background:var(--ft-branco);
+}
+.linha:last-child{border-bottom:0;}
+.linha:hover{background:var(--ft-superficie-2);}
+.linha .ped,.linha .data,.linha .n{
+  font-family:var(--ft-fonte-mono);font-size:12px;font-variant-numeric:tabular-nums;}
+.linha .n{text-align:right;}
+.linha .nome{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.linha .tot{font-weight:700;}
+.linha .vazio{color:#B9BEC6;}
+.cabecalho-lista{
+  display:grid;grid-template-columns:26px 92px 1fr 74px 96px 58px 74px 92px 168px;
+  gap:9px;padding:7px 13px;background:var(--ft-branco);border:1px solid var(--ft-borda);
+  border-radius:10px;margin-bottom:9px;position:sticky;top:57px;z-index:30;box-shadow:var(--sh-2);
+  font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ft-cinza-40);
+}
+.cabecalho-lista .n{text-align:right;}
+
+.puxador{
+  width:22px;height:24px;display:grid;place-items:center;color:#C2C7CF;
+  border-radius:6px;cursor:grab;touch-action:none;
+  transition:color .15s var(--mov-suave),background-color .15s var(--mov-suave);
+}
+.puxador:hover{color:var(--ft-vermelho);background:var(--ft-hover);}
+.puxador svg{width:13px;height:13px;fill:currentColor;pointer-events:none;}
+
+.chip{
+  display:inline-flex;align-items:center;gap:6px;height:23px;padding:0 9px;border-radius:99px;
+  font-size:11px;font-weight:600;background:var(--tg-bg);color:var(--tg-tx);
+  border:1px solid var(--tg);white-space:nowrap;
+}
+.chip::before{content:'';width:5px;height:5px;border-radius:99px;background:var(--tg);}
+
+/* ==================================================================
+   O ARRASTE, COM ANIMAÇÃO
+
+   Três peças, e cada uma existe por um motivo:
+
+     .voando     a cópia que acompanha o dedo. É uma cópia, e não a linha
+                 original, porque a original precisa continuar no fluxo
+                 para os outros dias poderem se reorganizar em volta dela.
+
+     .buraco     o espaço que abre no dia de destino. Ele CRESCE, e não
+                 aparece: sem a transição de altura, as linhas de baixo
+                 dão um salto e ninguém entende para onde a linha vai.
+
+     .fantasma   a linha original enquanto viaja: some encolhendo, no mesmo
+                 tempo em que o buraco cresce. As duas animações somadas
+                 dão a impressão de UMA linha se movendo, que é o que a
+                 pessoa acha que está fazendo.
+   ================================================================== */
+.voando{
+  position:fixed;z-index:200;pointer-events:none;
+  background:var(--ft-branco);border:1px solid var(--ft-vermelho);border-radius:10px;
+  box-shadow:var(--sh-arrasto);
+  transform-origin:center left;
+  transition:box-shadow .2s var(--mov-suave);
+}
+.voando.pousando{transition:transform .34s var(--mov-suave),box-shadow .34s var(--mov-suave);}
+.buraco{
+  height:0;overflow:hidden;background:linear-gradient(var(--ft-superficie-2),var(--ft-superficie-2));
+  border-radius:8px;margin:0 13px;
+  border:1px dashed transparent;
+  transition:height .26s var(--mov-suave),border-color .26s var(--mov-suave),margin .26s var(--mov-suave);
+}
+.buraco.aberto{border-color:var(--ft-vermelho);}
+.linha.fantasma{
+  overflow:hidden;padding-top:0;padding-bottom:0;
+  transition:height .24s var(--mov-suave),opacity .18s var(--mov-suave),
+             padding .24s var(--mov-suave);
+  opacity:0;height:0 !important;border-bottom-color:transparent;
+}
+.linha.pousou{animation:pousou .6s var(--mov-suave);}
+@keyframes pousou{
+  0%{background:#FFF3D6;} 100%{background:transparent;}
+}
+body.arrastando{cursor:grabbing;user-select:none;}
+body.arrastando .linha:hover{background:var(--ft-branco);}
+
+/* ---- avisos ---- */
+.nota{
+  max-width:1240px;margin:18px auto 0;font-size:12.5px;line-height:1.6;
+  color:var(--ft-cinza-40);background:var(--ft-branco);
+  border:1px dashed var(--ft-borda);border-radius:11px;padding:13px 16px;
+}
+.nota b{color:var(--ft-cinza-70);}
+.nota code{font-family:var(--ft-fonte-mono);font-size:12px;background:var(--ft-hover-2);
+  padding:1px 5px;border-radius:4px;}
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
+  background:var(--ft-cinza-70);color:#fff;padding:10px 16px;border-radius:10px;
+  font-size:13px;box-shadow:var(--sh-4);opacity:0;pointer-events:none;
+  transition:opacity .22s var(--mov-suave),transform .22s var(--mov-suave);z-index:300;
+}
+.toast.on{opacity:1;transform:translate(-50%,0);}
+
+/* ==================================================================
+   IMPRESSÃO DE VERDADE
+   ================================================================== */
+@page{ size:A4 landscape; margin:0; }
+@media print{
+  .controle,.nota,.toast,.f-sobra,#vTela{display:none !important;}
+  body{background:#fff;}
+  .palco{padding:0;}
+  .folhas{gap:0;}
+  .folha{
+    box-shadow:none;border:0;margin:0;break-after:page;page-break-after:always;
+  }
+  .folha:last-child{break-after:auto;page-break-after:auto;}
+  .vista{display:none !important;}
+  .vista#vPapel{display:block !important;}
+}
+</style>
+</head>
+<body>
+
+<div class="controle">
+  <h1>Relatório de Atividade</h1>
+  <div class="abas">
+    <button id="abaPapel" class="on">Folha A4</button>
+    <button id="abaTela">Tela (arraste)</button>
+  </div>
+  <div class="quantos">
+    <span>Pedidos na semana</span>
+    <input type="range" id="quantos" min="4" max="60" value="18">
+    <b id="quantosN">18</b>
+  </div>
+  <div class="cresce"></div>
+  <div class="medida" id="medida"></div>
+  <button class="bt" id="btEmbaralha" title="Redistribui os pedidos pelos dias">
+    <svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+    Redistribuir</button>
+  <button class="bt forte" id="btImprimir">
+    <svg viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
+    Imprimir</button>
+</div>
+
+<div class="palco">
+  <div class="vista on" id="vPapel"><div class="folhas" id="folhas"></div></div>
+  <div class="vista" id="vTela">
+    <div class="tela">
+      <div class="cabecalho-lista">
+        <span></span><span>Pedido</span><span>Nome</span><span>Entrega</span>
+        <span>Planejamento</span><span class="n">Total</span><span class="n">Subl.</span>
+        <span class="n">Personaliz.</span><span>Atualização</span>
+      </div>
+      <div id="grupos"></div>
+    </div>
+  </div>
+
+  <div class="nota" id="nota"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ==================================================================
+   DADOS
+   ================================================================== */
+const CAP_DIA=325, CAP_SEM=1500;
+const TAGS=[['separacao','Separação'],['corte','Corte'],['sublimacao','Impressão sublimação'],
+  ['dtf','Impressão DTF'],['prensa','Prensa'],['costura','Costura'],
+  ['conferencia','Conferência'],['embalagem','Embalagem'],['despacho','Despacho'],
+  ['finalizado','Finalizado']];
+const NOME_TAG=Object.fromEntries(TAGS); NOME_TAG.atrasado='Atrasado';
+const CLIENTES=['CROSSFIT SELVA - ÁGUAS CLARAS','FORÇA TÁTICA','BEACH LIFE ARENA',
+ 'SAGA BYD MARISTA','PONTO SETE','UNIÃO VÔLEI','VIAPOL TIME','CT BRANCO QUEIROZ',
+ 'OPEN CENTER','SESC VÔLEI','CORUJINHAS DE MÃE PARA FILHO','FENIX GAMES',
+ 'SIL FIOS E CABOS','ARENA CROSS','SAGA SEMINOVOS CASTELO BRANCO','LOGUN',
+ 'FORMULA EUNAPOLIS','BARATEIRO','RASTA','CT ALDEIA','PROMAIS VOLEI','CROSSTX',
+ 'HUGO PCDF','ALEXANDRE DA SILVA LIMA','JONATAS NORBERTO RODRIGUES','SAGA VW T-7',
+ 'ROGER RAFAEL PORTO ROCHA','SAGA BRASIL','VIAPOL TORCIDA','NA HORA H',
+ 'CROSS DOZE','PONTO CERTO','ARENA GYM','TEAM NOGUEIRA GO','BOX 62',
+ 'ATLÉTICA MEDICINA UFG','LIGA GOIANA DE FUTSAL','COLÉGIO WR','SESI JATAÍ',
+ 'CLUBE JAÓ','ELITE FIGHT','VOAR ACADEMIA','MUNDO ANIMAL PET','TOP CAR',
+ 'ADEGA DO ZÉ','FAST BURGUER','SUPERMERCADO REAL','ÓTICA VISÃO','PANIFICADORA SOL',
+ 'AUTO PEÇAS GO','LAVA JATO EXPRESS','PIZZARIA DONA MARIA','TRANSPORTES ANHANGUERA',
+ 'CONSTRUTORA HORIZONTE','ESCOLA NOVO SABER','ACADEMIA PULSE','MOTO CLUBE GYN',
+ 'FARMÁCIA VIDA','HORTIFRUTI CENTRAL','GRÁFICA RÁPIDA'];
+const DIAS_SEM=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const UTEIS=[1,2,3,4,5,6];
+const SEG=new Date(2026,7,17);          /* segunda, 17 de agosto de 2026 */
+
+const maisDias=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')
+  +'-'+String(d.getDate()).padStart(2,'0');
+const curta=s=>{const[a,m,d]=s.split('-');return d+'/'+m;};
+
+/* uma "aleatoriedade" repetível: mexer no contador não pode bagunçar os
+   pedidos que já estavam na tela, senão não dá para comparar */
+let SEMENTE=7;
+function sorteio(){ SEMENTE=(SEMENTE*1103515245+12345)&0x7fffffff; return SEMENTE/0x7fffffff; }
+
+let LINHAS=[];
+function gera(n){
+  SEMENTE=7; LINHAS=[];
+  for(let i=0;i<n;i++){
+    const dia=Math.floor(sorteio()*6);
+    const sub=sorteio()<.62;
+    const q=15+Math.floor(sorteio()*230);
+    const t=sorteio()<.62?TAGS[Math.floor(sorteio()*TAGS.length)][0]:'';
+    const d=iso(maisDias(SEG,dia));
+    LINHAS.push({ id:'PD00'+(4100+i), nome:CLIENTES[i%CLIENTES.length],
+      entrega:d, plano:d, sub:sub?q:0, per:sub?0:q, tag:t });
+  }
+  LINHAS.sort((a,b)=>a.plano.localeCompare(b.plano));
+}
+const total=l=>l.sub+l.per;
+const soma=(a,f)=>a.reduce((x,y)=>x+f(y),0);
+
+function faixa(p){
+  if(p>100)return{c:'var(--sat-estourou)',b:'var(--sat-estourou-bg)'};
+  if(p>=85)return{c:'var(--sat-cheio)',b:'var(--sat-cheio-bg)'};
+  return{c:'var(--sat-ok)',b:'var(--sat-ok-bg)'};
+}
+function pinta(el,p){const f=faixa(p);
+  el.style.setProperty('--sat',f.c); el.style.setProperty('--sat-bg',f.b);}
+
+function porDia(){
+  return UTEIS.map(n=>{
+    const d=maisDias(SEG,n-1), ch=iso(d);
+    return { chave:ch, data:d, nome:DIAS_SEM[d.getDay()],
+             linhas:LINHAS.filter(l=>l.plano===ch) };
+  });
+}
+
+/* ==================================================================
+   A FOLHA: PAGINAÇÃO MEDIDA, NÃO ESTIMADA
+
+   O método é o mesmo do editor de orçamentos: monta a folha de verdade,
+   põe uma linha, MEDE, e só recomeça numa folha nova quando a altura
+   estourou. Nenhuma conta de "cabem N linhas" sobrevive a um nome de
+   cliente que quebra ou a uma etapa com nome comprido; a medida sim.
+
+   Quando um dia é partido entre duas folhas, a faixa dele é repetida na
+   folha seguinte com "(continuação)". Sem isso, quem vira a página
+   encontra cinco pedidos órfãos sem saber de que dia são.
+   ================================================================== */
+const COLS=`<colgroup>
+  <col style="width:22mm"><col><col style="width:19mm"><col style="width:23mm">
+  <col style="width:15mm"><col style="width:19mm"><col style="width:24mm">
+  <col style="width:38mm"></colgroup>`;
+const CABECALHO=`<tr>
+  <th>Pedido</th><th>Nome</th><th>Entrega</th><th>Planejamento</th>
+  <th class="n">Total</th><th class="n">Sublim.</th><th class="n">Personaliz.</th>
+  <th>Atualização</th></tr>`;
+
+function celulasDe(l){
+  const mudou=l.plano!==l.entrega;
+  return `<td class="ped">${l.id}</td>
+    <td class="nome">${l.nome}</td>
+    <td class="data">${curta(l.entrega)}</td>
+    <td class="data"${mudou?' style="color:var(--ft-vermelho);font-weight:600"':''}>${curta(l.plano)}</td>
+    <td class="n tot">${total(l)}</td>
+    <td class="n${l.sub?'':' vazio'}">${l.sub||'—'}</td>
+    <td class="n${l.per?'':' vazio'}">${l.per||'—'}</td>
+    <td>${l.tag?`<span class="f-chip" data-tag="${l.tag}">${NOME_TAG[l.tag]}</span>`:''}</td>`;
+}
+
+function faixaDia(g,cont){
+  const pecas=soma(g.linhas,total);
+  const pct=Math.round(pecas/CAP_DIA*100);
+  const folga=CAP_DIA-pecas;
+  const f=faixa(pct);
+  return `<tr class="f-dia" style="--sat:${f.c}"><td colspan="8"><div class="cx">
+      <b>${g.nome}</b><span class="dt">${curta(g.chave)}</span>
+      ${cont?'<span class="cont">continuação</span>':''}
+      <span class="esp"></span>
+      <span class="barra"><i style="width:${Math.min(100,pct)}%"></i></span>
+      <span class="num">${pecas} / ${CAP_DIA}</span>
+      <span class="folga">${folga>=0?('cabem +'+folga):('passou '+(-folga))}</span>
+    </div></td></tr>`;
+}
+
+let ULTIMA_MEDIDA={folhas:1,sobra:0,linhasQueCabem:0};
+
+function montaFolhas(){
+  const alvo=document.getElementById('folhas');
+  alvo.innerHTML='';
+  const grupos=porDia().filter(g=>g.linhas.length);
+  const pecas=soma(LINHAS,total), pct=Math.round(pecas/CAP_SEM*100);
+
+  /* O RODAPÉ ENTRA NA FOLHA ANTES DAS LINHAS, E EM TODAS AS FOLHAS.
+
+     A primeira versão montava as linhas com o rodapé vazio e só depois
+     escrevia o total e o "Página 2 de 3". O rodapé crescia uns 30px, o
+     corpo era espremido no mesmo tanto, e a última linha de cada folha
+     saía cortada pelo overflow:hidden. O erro não aparecia na tela: a
+     linha simplesmente não estava mais lá.
+
+     A régua tem de existir inteira ANTES de alguém medir por ela. Então
+     o rodapé nasce com o texto definitivo, e a numeração é só um span
+     cujo texto muda no fim, sem mudar a altura. */
+  const RODAPE=`<div class="esq"><b>${pecas.toLocaleString('pt-BR')} peças planejadas na semana</b><br>
+      ${CAP_SEM-pecas>=0
+        ? 'Ainda cabem '+(CAP_SEM-pecas).toLocaleString('pt-BR')+' peças antes do limite de '+CAP_SEM.toLocaleString('pt-BR')+'.'
+        : 'A semana passou o limite em '+(pecas-CAP_SEM).toLocaleString('pt-BR')+' peças.'}</div>
+    <div class="f-fecho"><span class="g">${pct}%</span>
+      <span class="t">saturação<br>da semana</span></div>
+    <span class="f-pag">Página</span>`;
+
+  let folha=null, tbody=null, corpo=null;
+  const novaFolha=()=>{
+    folha=document.createElement('section');
+    folha.className='folha';
+    pinta(folha,pct);
+    folha.innerHTML=`<div class="folha-corpo">
+        <div class="f-topo">
+          <span class="f-marca">FOURTIME</span>
+          <div class="f-tit"><h2>Relatório de Atividade</h2>
+            <p>Semana de ${SEG.getDate()} a ${maisDias(SEG,5).getDate()} de ${MESES[SEG.getMonth()]} de ${SEG.getFullYear()}</p></div>
+          <div class="f-resumo">
+            <div class="f-res"><div class="r">Pedidos</div><div class="v">${LINHAS.length}</div></div>
+            <div class="f-res"><div class="r">Peças</div><div class="v">${pecas.toLocaleString('pt-BR')}</div></div>
+            <div class="f-res"><div class="r">Capacidade</div><div class="v">${CAP_SEM.toLocaleString('pt-BR')}</div></div>
+            <div class="f-res sat"><div class="r">Saturação</div><div class="v">${pct}%</div></div>
+          </div>
+        </div>
+        <table class="f-tab">${COLS}<thead>${CABECALHO}</thead><tbody></tbody></table>
+      </div>
+      <div class="f-rodape">${RODAPE}</div>`;
+    alvo.appendChild(folha);
+    corpo=folha.querySelector('.folha-corpo');
+    tbody=folha.querySelector('tbody');
+  };
+  /* cabe mais uma linha nesta folha? a resposta é a folha que responde */
+  const cabe=()=>corpo.scrollHeight<=corpo.clientHeight;
+
+  novaFolha();
+  let linhasNaPrimeira=0, contando=true;
+  grupos.forEach(g=>{
+    let cont=false;
+    tbody.insertAdjacentHTML('beforeend', faixaDia(g,cont));
+    if(!cabe()){ tbody.lastElementChild.remove(); novaFolha(); contando=false;
+      tbody.insertAdjacentHTML('beforeend', faixaDia(g,cont)); }
+    g.linhas.forEach(l=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=celulasDe(l);
+      tbody.appendChild(tr);
+      if(!cabe()){
+        tr.remove();
+        novaFolha(); contando=false; cont=true;
+        tbody.insertAdjacentHTML('beforeend', faixaDia(g,cont));
+        tbody.appendChild(tr);
+      }
+      if(contando)linhasNaPrimeira++;
+    });
+  });
+
+  /* numeração e a régua da sobra
+
+     A sobra NÃO é clientHeight menos scrollHeight. O corpo é um item
+     flex que ocupa a folha toda, então scrollHeight nunca fica menor
+     que clientHeight e essa conta dava zero em qualquer folha, cheia ou
+     vazia. O que sobra de papel é a distância entre o fim da tabela e o
+     fim do corpo, e é isso que se mede. */
+  const fs=[...alvo.querySelectorAll('.folha')];
+  const sobraDe=f=>{
+    const c=f.querySelector('.folha-corpo'), t=f.querySelector('.f-tab');
+    return Math.max(0, Math.round(c.getBoundingClientRect().bottom
+                                - t.getBoundingClientRect().bottom));
+  };
+  fs.forEach((f,i)=>{
+    f.querySelector('.f-pag').textContent=`Página ${i+1} de ${fs.length}`;
+    const livre=sobraDe(f);
+    if(livre>18){
+      const mm=(livre*25.4/96).toFixed(0);
+      const lin=Math.floor(livre/ALTURA_LINHA());
+      f.insertAdjacentHTML('beforeend',
+        `<div class="f-sobra" style="height:${livre}px;bottom:${
+          Math.round(f.querySelector('.f-rodape').getBoundingClientRect().height+30)}px">`+
+        `sobram ${mm}mm · cabem mais ${lin} pedidos</div>`);
+    }
+  });
+
+  /* a medida que o topo mostra */
+  const livre0=sobraDe(fs[0]);
+  ULTIMA_MEDIDA={ folhas:fs.length,
+    sobra:Math.floor(livre0/ALTURA_LINHA()),
+    linhasQueCabem: linhasNaPrimeira + Math.floor(livre0/ALTURA_LINHA()) };
+  desenhaMedida();
+}
+
+/* a altura de uma linha, medida na folha e não chutada */
+let _alt=null;
+function ALTURA_LINHA(){
+  if(_alt)return _alt;
+  const tr=document.querySelector('.f-tab tbody tr:not(.f-dia)');
+  _alt=tr?tr.getBoundingClientRect().height:15;
+  return _alt||15;
+}
+
+function desenhaMedida(){
+  const m=document.getElementById('medida');
+  const f=ULTIMA_MEDIDA.folhas;
+  pinta(m, f===1?40:(f===2?90:120));
+  m.innerHTML= f===1
+    ? `<span class="n">1</span> folha · ainda cabem ${ULTIMA_MEDIDA.sobra} pedidos`
+    : `<span class="n">${f}</span> folhas · a semana não cabe em uma`;
+  const n=document.getElementById('nota');
+  n.innerHTML=`<b>Mockup 2.</b> A paginação aqui é medida na folha de verdade
+    (297 x 210mm, margens de 10mm), não estimada: cada linha é colocada, a
+    altura é conferida, e só então uma folha nova começa. Puxe o
+    <b>contador de pedidos</b> no topo para achar o ponto de virada.
+    <br>Na aba <b>Tela</b>, arraste uma linha pela alça para outro dia e veja
+    a animação. <code>Imprimir</code> abre o diálogo do navegador já em A4
+    deitado.`;
+}
+
+/* ==================================================================
+   VISTA DE TELA + ARRASTE
+   ================================================================== */
+function desenhaTela(){
+  const alvo=document.getElementById('grupos');
+  alvo.innerHTML='';
+  porDia().forEach(g=>{
+    const pecas=soma(g.linhas,total);
+    const pct=Math.round(pecas/CAP_DIA*100);
+    const folga=CAP_DIA-pecas;
+    const box=document.createElement('section');
+    box.className='dia'; box.dataset.dia=g.chave;
+    pinta(box,pct);
+    box.innerHTML=`<div class="dia-cab">
+        <b>${g.nome}</b><span class="dt">${curta(g.chave)}</span>
+        <span class="esp"></span>
+        <span class="barra"><i style="width:${Math.min(100,pct)}%"></i></span>
+        <span class="num">${pecas} / ${CAP_DIA}</span>
+        <span class="folga">${folga>=0?('cabem +'+folga):('passou '+(-folga))} peças</span>
+      </div><div class="lista"></div>`;
+    const lista=box.querySelector('.lista');
+    g.linhas.forEach(l=>lista.appendChild(montaLinha(l)));
+    if(!g.linhas.length){
+      lista.innerHTML='<div style="padding:11px 13px;color:#B9BEC6;font-size:12.5px">'
+        +'Nada planejado. Cabem '+CAP_DIA+' peças.</div>';
+    }
+    alvo.appendChild(box);
+  });
+}
+
+function montaLinha(l){
+  const d=document.createElement('div');
+  d.className='linha'; d.dataset.id=l.id;
+  const mudou=l.plano!==l.entrega;
+  d.innerHTML=`<div class="puxador" title="Arraste para outro dia">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>
+      <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
+      <circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></div>
+    <span class="ped">${l.id}</span>
+    <span class="nome">${l.nome}</span>
+    <span class="data">${curta(l.entrega)}</span>
+    <span class="data"${mudou?' style="color:var(--ft-vermelho);font-weight:600"':''}>${curta(l.plano)}</span>
+    <span class="n tot">${total(l)}</span>
+    <span class="n${l.sub?'':' vazio'}">${l.sub||'—'}</span>
+    <span class="n${l.per?'':' vazio'}">${l.per||'—'}</span>
+    <span>${l.tag?`<span class="chip" data-tag="${l.tag}">${NOME_TAG[l.tag]}</span>`:''}</span>`;
+  return d;
+}
+
+/* ---- o arraste ---- */
+let A=null;   /* estado do arraste em curso */
+
+document.addEventListener('pointerdown',e=>{
+  const p=e.target.closest && e.target.closest('.puxador');
+  if(!p || e.button)return;
+  const linha=p.closest('.linha');
+  if(!linha)return;
+  e.preventDefault();
+  const r=linha.getBoundingClientRect();
+
+  /* a cópia que voa */
+  const voa=linha.cloneNode(true);
+  voa.classList.add('voando');
+  voa.style.width=r.width+'px';
+  voa.style.height=r.height+'px';
+  voa.style.left='0'; voa.style.top='0';
+  document.body.appendChild(voa);
+
+  /* o buraco que vai abrindo no destino */
+  const buraco=document.createElement('div');
+  buraco.className='buraco';
+
+  A={ linha, voa, buraco, id:linha.dataset.id,
+      dx:e.clientX-r.left, dy:e.clientY-r.top,
+      alt:r.height, origem:linha.closest('.dia').dataset.dia, destino:null };
+  moveVoando(e.clientX,e.clientY,0);
+  document.body.classList.add('arrastando');
+  p.setPointerCapture&&p.setPointerCapture(e.pointerId);
+
+  /* a original encolhe enquanto o buraco cresce: as duas somadas dão a
+     impressão de uma linha só se movendo */
+  linha.style.height=r.height+'px';
+  requestAnimationFrame(()=>{ linha.classList.add('fantasma'); });
+});
+
+function moveVoando(x,y,giro){
+  if(!A)return;
+  A.voa.style.transform=
+    `translate(${x-A.dx}px,${y-A.dy}px) scale(1.012) rotate(${giro}deg)`;
+}
+
+document.addEventListener('pointermove',e=>{
+  if(!A)return;
+  /* uma inclinação leve, proporcional à velocidade: dá peso ao objeto sem
+     virar pirueta */
+  const v=Math.max(-1.6,Math.min(1.6,(e.movementY||0)*0.12));
+  moveVoando(e.clientX,e.clientY,v);
+
+  const dia=[...document.querySelectorAll('.dia')].find(d=>{
+    const r=d.getBoundingClientRect();
+    return e.clientY>=r.top && e.clientY<=r.bottom;
+  });
+  document.querySelectorAll('.dia.alvo').forEach(d=>{ if(d!==dia)d.classList.remove('alvo'); });
+  if(!dia){ tiraBuraco(); A.destino=null; return; }
+  dia.classList.add('alvo');
+  A.destino=dia.dataset.dia;
+
+  /* onde a linha cairia: entre as linhas do dia, pelo meio de cada uma */
+  const lista=dia.querySelector('.lista');
+  const irmas=[...lista.querySelectorAll('.linha:not(.fantasma)')];
+  let antesDe=null;
+  for(const l of irmas){
+    const r=l.getBoundingClientRect();
+    if(e.clientY < r.top+r.height/2){ antesDe=l; break; }
+  }
+  if(A.buraco.parentNode!==lista || A.buraco.nextSibling!==antesDe){
+    lista.insertBefore(A.buraco, antesDe);
+    requestAnimationFrame(()=>{
+      A.buraco.style.height=A.alt+'px';
+      A.buraco.classList.add('aberto');
+    });
+  }
+});
+
+function tiraBuraco(){
+  if(!A||!A.buraco.parentNode)return;
+  A.buraco.style.height='0px';
+  A.buraco.classList.remove('aberto');
+}
+
+document.addEventListener('pointerup',async e=>{
+  if(!A)return;
+  const {linha,voa,buraco,id,destino}=A;
+  const item=LINHAS.find(x=>x.id===id);
+
+  if(!destino || !buraco.parentNode){        /* soltou fora: volta para casa */
+    const r=linha.getBoundingClientRect();
+    voa.classList.add('pousando');
+    voa.style.transform=`translate(${r.left}px,${r.top}px) scale(1) rotate(0deg)`;
+    voa.style.boxShadow='none';
+    setTimeout(()=>{ voa.remove(); linha.classList.remove('fantasma');
+      linha.style.height=''; }, 340);
+    limpaArraste();
+    return;
+  }
+
+  /* pousa em cima do buraco, e só depois o desenho é refeito */
+  const rb=buraco.getBoundingClientRect();
+  voa.classList.add('pousando');
+  voa.style.transform=`translate(${rb.left}px,${rb.top}px) scale(1) rotate(0deg)`;
+  voa.style.boxShadow='0 1px 2px rgba(17,18,20,.05)';
+  const de=item.plano;
+  item.plano=destino;
+  limpaArraste();
+
+  await new Promise(s=>setTimeout(s,330));
+  voa.remove();
+  desenhaTela();
+  montaFolhas();
+  const nova=document.querySelector(`.linha[data-id="${id}"]`);
+  if(nova){ nova.classList.add('pousou'); setTimeout(()=>nova.classList.remove('pousou'),700); }
+  avisa(de===destino ? (id+' continua no dia '+curta(destino))
+    : (id+': planejamento de '+curta(de)+' para '+curta(destino)));
+});
+
+function limpaArraste(){
+  document.body.classList.remove('arrastando');
+  document.querySelectorAll('.dia.alvo').forEach(d=>d.classList.remove('alvo'));
+  if(A&&A.buraco&&A.buraco.parentNode)A.buraco.remove();
+  A=null;
+}
+
+/* ==================================================================
+   MIUDEZAS
+   ================================================================== */
+let tt=null;
+function avisa(t){
+  const el=document.getElementById('toast');
+  el.textContent=t; el.classList.add('on');
+  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('on'),2600);
+}
+function tudo(){ desenhaTela(); montaFolhas(); }
+
+const abaP=document.getElementById('abaPapel'), abaT=document.getElementById('abaTela');
+function vista(qual){
+  abaP.classList.toggle('on',qual==='papel');
+  abaT.classList.toggle('on',qual==='tela');
+  document.getElementById('vPapel').classList.toggle('on',qual==='papel');
+  document.getElementById('vTela').classList.toggle('on',qual==='tela');
+}
+abaP.onclick=()=>vista('papel');
+abaT.onclick=()=>vista('tela');
+
+const range=document.getElementById('quantos');
+range.oninput=()=>{
+  document.getElementById('quantosN').textContent=range.value;
+  gera(+range.value); tudo();
+};
+document.getElementById('btEmbaralha').onclick=()=>{
+  SEMENTE=Math.floor(Math.random()*1e9);
+  const n=+range.value;
+  LINHAS=[];
+  for(let i=0;i<n;i++){
+    const dia=Math.floor(sorteio()*6);
+    const sub=sorteio()<.62;
+    const q=15+Math.floor(sorteio()*230);
+    const t=sorteio()<.62?TAGS[Math.floor(sorteio()*TAGS.length)][0]:'';
+    const d=iso(maisDias(SEG,dia));
+    LINHAS.push({id:'PD00'+(4100+i),nome:CLIENTES[Math.floor(sorteio()*CLIENTES.length)],
+      entrega:d,plano:d,sub:sub?q:0,per:sub?0:q,tag:t});
+  }
+  LINHAS.sort((a,b)=>a.plano.localeCompare(b.plano));
+  tudo(); avisa('Pedidos redistribuídos pelos dias.');
+};
+document.getElementById('btImprimir').onclick=()=>{ vista('papel'); setTimeout(()=>print(),120); };
+
+gera(+range.value);
+tudo();
+</script>
+</body>
+</html>

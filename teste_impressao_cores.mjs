@@ -16,11 +16,11 @@
    documento têm transição de fundo — medir logo depois de trocar o media
    pega a cor NO MEIO do caminho (medido: #A2BEF6 entre #E3EEFB e #97B6F5)
    e o teste acusaria um defeito que não existe.                          */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 import { readFileSync } from 'fs';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v300.html';
+const ARQ = process.env.FT_ARQ || editorAtual();
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(52)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);

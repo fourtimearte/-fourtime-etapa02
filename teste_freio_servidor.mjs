@@ -1,3 +1,4 @@
+import { editorAtual } from './ft_navegador.mjs';
 /* O FREIO DE MÃO DO SERVIDOR CONTRA DUPLICAÇÃO
    Ele salvou o sistema quando 225 clientes viraram 675 — e barrou, com
    razão, o catálogo novo de cores: de fora, plantar 71 cores de uma vez é
@@ -14,7 +15,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 
 const SRV = existsSync(DIR+'server.py') ? DIR+'server.py' : '/home/claude/repo/server.py';
 console.log('\n=== 1. O EDITOR DECLARA O QUE TRAZ DE FÁBRICA ===');
-const ed = DIR+(process.env.FT_ARQ||'fourtime-editor-v291.html');
+const ed = DIR+(process.env.FT_ARQ||editorAtual());
 const html = readFileSync(ed,'utf8');
 checa('o envio leva o campo semente', /semente:ftSementeDeclarada\(\)/.test(html), true);
 checa('  e ele é montado do catálogo embutido',

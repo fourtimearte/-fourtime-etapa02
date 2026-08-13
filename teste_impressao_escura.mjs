@@ -1,10 +1,10 @@
 /* IMPRIMIR DO TEMA ESCURO tem de sair IGUAL a imprimir do tema claro.
    O teste não confere uma lista de cores: compara os DOIS documentos
    elemento a elemento. Se um único pixel de cor divergir, ele aponta qual. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v300.html';
+const ARQ = process.env.FT_ARQ || editorAtual();
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(50)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);

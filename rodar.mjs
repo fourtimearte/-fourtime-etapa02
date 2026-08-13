@@ -31,10 +31,19 @@ const SUITES = [
   'teste_arquivar_data', 'teste_cnpj', 'teste_brilho_obs', 'teste_cores_grupos',
   'teste_freio_servidor', 'teste_v303_correcoes', 'teste_cabecalho_v303',
   'teste_impressao_cores', 'teste_painel_abas', 'teste_marca_padrao', 'teste_tabela_cantos',
-  'teste_filtros_trello',
+  'teste_filtros_trello', 'teste_login_admin', 'teste_dropdown_altura',
+  'teste_login_editor', 'teste_pessoas', 'teste_celular_trello',
+  'teste_papel_editor',
+  /* v3.311 — Relatório de Atividade */
+  'teste_atividade', 'teste_atividade_servidor',
   'teste_aviso_versao', 'teste_versao_servidor',
 ];
-const EXTRA = ['verifica_trello', 'cmp_a4_chave'];
+const EXTRA = ['verifica_trello', 'cmp_a4_chave',
+  /* o Relatório de Atividade ainda é maquete, não faz parte do editor
+     publicado. Mas a maquete é onde a decisão de layout está sendo
+     tomada, e decisão tomada em cima de medida errada custa caro:
+     ficam aqui, e entram com "tudo". */
+  'teste_mockup_a4', 'teste_a4_impressao'];
 /* as suítes das versões anteriores: garantem que nada do que já funcionava
    foi perdido pelo caminho. Entram com "tudo". */
 const ANTIGAS = [
@@ -68,6 +77,14 @@ const SUBIDA = [
   'teste_marca_padrao',      /* cada token diz se está no arquivo ou só aqui    */
   'teste_tabela_cantos',     /* os 4 cantos da tabela, com e sem valores        */
   'teste_filtros_trello',    /* filtros do arquivo do Trello + barra fixa       */
+  'teste_login_admin',       /* a senha de administrador entra em maquina nova  */
+  'teste_dropdown_altura',   /* o menu mostra a lista inteira, e avisa se rola  */
+  'teste_login_editor',      /* login por pessoa: porta, papel e troca de senha  */
+  'teste_pessoas',           /* administrar gente: renomear leva a senha junto   */
+  'teste_celular_trello',    /* o arquivo do Trello num celular de verdade      */
+  'teste_papel_editor',      /* quem monta assina depois de quem vendeu         */
+  'teste_atividade',         /* gerar de novo não derruba o planejamento da semana */
+  'teste_atividade_servidor',/* a marca por pessoa, e dinheiro nenhum na atividade */
   'teste_compat_v303',       /* aqui a versão anterior entra como origem     */
   'teste_painel_v303',       /* nenhum token do painel pode ter morrido      */
   'teste_impressao_escura',  /* o documento do cliente e o papel             */
@@ -87,10 +104,22 @@ const t0 = Date.now();
 const resultados = [];
 let fila = lista.slice();
 
+/* NEM TODA SUÍTE É JAVASCRIPT.
+   As do servidor são Python, e rodavam à mão até agora: ficavam de fora da
+   bateria justamente por isso, que é o mesmo que não existir. Quem decide
+   com o que rodar é o arquivo que está na pasta. */
+import { existsSync } from 'fs';
+function comando(nome) {
+  return existsSync(DIR + nome + '.py')
+    ? ['python3', [nome + '.py']]
+    : ['node', [nome + '.mjs']];
+}
+
 function roda(nome) {
   return new Promise(res => {
     const ini = Date.now();
-    const p = spawn('node', [nome + '.mjs'], { cwd: DIR.slice(0,-1) });
+    const [exe, args] = comando(nome);
+    const p = spawn(exe, args, { cwd: DIR.slice(0,-1) });
     let saida = '';
     p.stdout.on('data', d => saida += d);
     p.stderr.on('data', d => saida += d);

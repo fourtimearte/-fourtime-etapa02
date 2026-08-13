@@ -1,7 +1,7 @@
 /* ARQUIVAR EM ORGANIZADOS COM DATA ESCOLHIDA
    A data manda na PASTA e no NOME. O teste não confere pixels: confere
    que a escolha vira o carimbo DDMMAA que o resto do sistema usa. */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 const DIR = import.meta.dirname + '/';
 const falhas=[];
@@ -12,7 +12,7 @@ function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
 const b=await abreNavegador();
 const p=await b.newPage({viewport:{width:1500,height:1000}});
 const erros=[]; p.on('pageerror',e=>erros.push(String(e).slice(0,160)));
-await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||'fourtime-editor-v291.html')).href);
+await p.goto(pathToFileURL(DIR+(process.env.FT_ARQ||editorAtual())).href);
 await esperaPronto(p);
 
 console.log('\n=== 1. O MODAL ABRE E MOSTRA O CAMINHO ===');

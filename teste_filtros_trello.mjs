@@ -11,11 +11,11 @@
         mudaria a paginação;
      5. dentro de um grupo os filtros somam (OU); entre grupos, restringem (E);
      6. no papel não há filtro nem layout apagado.                        */
-import { abreNavegador, esperaPronto } from './ft_navegador.mjs';
+import { abreNavegador, esperaPronto, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 import { writeFileSync } from 'fs';
 const DIR = import.meta.dirname + '/';
-const ARQ = process.env.FT_ARQ || 'fourtime-editor-v303.html';
+const ARQ = process.env.FT_ARQ || editorAtual();
 const falhas=[];
 function checa(r,o,e){ const ok=JSON.stringify(o)===JSON.stringify(e);
   console.log(`  ${ok?'OK ':'FALHOU'}  ${r.padEnd(52)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -98,9 +98,14 @@ checa('toda opção conta o que existe mesmo', bate, []);
 checa('  e nenhuma opção devolve zero',
   await q.evaluate(()=>[...document.querySelectorAll('#ftFiltros .ft-fsel option')]
     .filter(o=>o.value&&/\(0\)$/.test(o.textContent)).length), 0);
-checa('  toda lista começa com "Todos"',
+/* v3.309: a opção vazia deixou de ser "Todos" e passou a ser o NOME do
+   filtro. Foi o que permitiu tirar o rótulo de fora e caber os três campos
+   numa linha só no celular. No computador ela continua sendo a primeira, e
+   continua sendo a que limpa aquele filtro. */
+checa('  toda lista começa pelo nome do filtro',
   await q.evaluate(()=>[...document.querySelectorAll('#ftFiltros .ft-fsel')]
-    .every(s=>s.options[0].value===''&&s.options[0].textContent==='Todos')), true);
+    .map(s=>s.options[0].value===''?s.options[0].textContent:'(!)')),
+  ['Design','Observação','Infantil'])
 
 console.log('\n=== 3. APAGA A 20%, E NÃO SOME ===');
 const um=await q.evaluate(async()=>{
@@ -213,6 +218,50 @@ const centro=await q.evaluate(()=>{
 console.log('     '+JSON.stringify(centro));
 checa('a barra fixa está centralizada', centro.just, 'center');
 checa('  e as folgas dos dois lados batem', centro.simetrico, true);
+
+/* ---------------------------------------------------------------------
+   O BURACO QUE DEIXOU O ERRO PASSAR (v3.304)
+
+   A seção 7 media a centralização da LINHA DE DADOS e parava aí. A linha
+   de filtros, logo abaixo, dentro da mesma barra, tinha margin:0 anulando
+   o margin:0 auto da regra base — ficava colada na esquerda enquanto a de
+   cima estava centrada. Em 1400px de tela a diferença é pequena; em um
+   monitor largo é gritante, e foi assim que apareceu.
+
+   Agora a conta é direta: as DUAS linhas têm de começar e terminar na
+   mesma coluna, e medido numa tela larga, que é onde dói.
+   --------------------------------------------------------------------- */
+console.log('\n=== 8. A LINHA DE FILTROS ALINHA COM A LINHA DE DADOS ===');
+await q.setViewportSize({width:1900,height:900});
+await q.waitForTimeout(350);
+const alinha=await q.evaluate(()=>{
+  const int=document.querySelector('.ft-barra-int');
+  const fora=document.getElementById('ftFiltrosFixo');
+  /* sem o miolo separado (versões até a 3.303) mede-se a própria linha —
+     é a geometria antiga, e é ela que tem de reprovar aqui */
+  const fil=fora.querySelector('.ft-fint')||fora;
+  const barra=document.getElementById('ftBarra');
+  const a=int.getBoundingClientRect(), f=fil.getBoundingClientRect();
+  const rb=barra.getBoundingClientRect(), rf=fora.getBoundingClientRect();
+  return {
+    esqIgual:Math.abs(a.left-f.left)<2, dirIgual:Math.abs(a.right-f.right)<2,
+    esqDados:Math.round(a.left), esqFiltro:Math.round(f.left),
+    dirDados:Math.round(a.right), dirFiltro:Math.round(f.right),
+    /* e a linha de filtros continua centrada em si: folga igual dos dois lados */
+    folgaEsq:Math.round(f.left-rf.left), folgaDir:Math.round(rf.right-f.right),
+    /* o FUNDO e o filete, esses sim, atravessam a barra inteira */
+    fundoCheio:Math.abs(rf.width-rb.width)<2,
+    larguraTela:Math.round(rb.width)
+  };
+});
+console.log('     '+JSON.stringify(alinha));
+checa('numa tela larga, a barra ocupa tudo', alinha.larguraTela>1800, true);
+checa('filtro e dados começam na mesma coluna', alinha.esqIgual, true);
+checa('  e terminam na mesma coluna', alinha.dirIgual, true);
+checa('  com folga igual dos dois lados', Math.abs(alinha.folgaEsq-alinha.folgaDir)<2, true);
+checa('o fundo do filtro, esse, atravessa a barra toda', alinha.fundoCheio, true);
+await q.setViewportSize({width:1400,height:900});
+await q.waitForTimeout(250);
 
 console.log('\n'+'='.repeat(64));
 checa('nenhum erro no editor', erE.length, 0);
