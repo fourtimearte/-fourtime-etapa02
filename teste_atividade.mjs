@@ -398,7 +398,7 @@ r = await p.evaluate(() => {
   const vaza = [...document.querySelectorAll('.atv-folha-corpo')]
     .filter(c => c.scrollHeight > c.clientHeight + 1).length;
   const pag = [...document.querySelectorAll('.atv-f-pag')].map(x => x.textContent);
-  const rod = document.querySelectorAll('.atv-f-rodape .atv-f-fecho').length;
+  const rod = document.querySelectorAll('.atv-f-rodape .atv-f-med .tr i').length;
   const linhas = document.querySelectorAll('.atv-tab tbody tr:not(.f-dia)').length;
   const out = { folhas: n, larg: mm(f.width), alt: mm(f.height), vaza, pag, rod, linhas };
   document.body.classList.remove('atv-imprimindo');
@@ -411,7 +411,7 @@ checa('  nove pedidos cabem numa folha so', r.folhas, 1);
 checa('  nada vaza da margem', r.vaza, 0);
 checa('  toda linha entrou', r.linhas, 9);
 checa('  a numeracao esta certa', r.pag, ['Página 1 de 1']);
-checa('  e o rodape de total esta na folha', r.rod, 1);
+checa('  e o rodape de total, com a barra, esta na folha', r.rod, 1);
 
 /* AGORA A PARTE QUE IMPORTA: o ponto de virada. O mockup 2 mediu 24 pedidos
    por folha com seis dias em faixa. Se o editor tiver saido diferente, e
@@ -457,6 +457,69 @@ checa('com etapa em toda linha, a folha vira em 24 pedidos', virada.comChip.cort
 checa('  sem etapa, vira em 26', virada.semChip.corte, 26);
 checa('  e em nenhum dos casos alguma coisa vaza da folha',
   virada.comChip.vaza + virada.semChip.vaza, 0);
+
+console.log('\n=== 11b. OS CARTOES E O RODAPE ===');
+/* Os quatro cartoes e o rodape sairam do mockup 1 e nao tinham vindo para o
+   editor. Nao sao enfeite: o numero grande sozinho ("1.670 pecas") nao diz
+   de onde veio nem se cabe. A segunda linha de cada cartao e a barra do
+   rodape sao o que transformam o numero em algo sobre o que decidir. E
+   depois de rolar sete cartoes de dia o topo ja saiu da tela, entao a
+   pergunta "e no total, cabe?" precisa ter resposta embaixo tambem. */
+r = await p.evaluate(() => {
+  /* uma semana conhecida: 3 pedidos, 100 pecas cada, um deles finalizado */
+  ATV.linhas = [0, 1, 2].map(i => ({ id: 'C' + i, pedido: 'PD0' + i, cliente: 'CLIENTE ' + i,
+    vendedor: 'Dani', entrega: '17/08/2026', plan: '2026-08-17',
+    etapa: i === 0 ? 'finalizado' : 'prensa',
+    sub: 60, per: 40, total: 100, chegouEm: '', novo: false }));
+  ATV_CAP.semana = 1500; ATV_CAP.dia = 325; ATV_CAP.dias = 6;
+  atvDesenha();
+  const txt = s => (document.querySelector(s) || {}).textContent || '';
+  const larg = s => { const e = document.querySelector(s);
+    return e ? Math.round(parseFloat(e.style.width)) : -1; };
+  return {
+    cartoes: document.querySelectorAll('.atv-card').length,
+    pecas: txt('.atv-card.c-pec .val'), pecasPe: txt('.atv-card.c-pec .pe'),
+    capPe: txt('.atv-card.c-cap .pe'),
+    sat: txt('.atv-card.c-sat .val'), satBarra: larg('.atv-satbar i'),
+    pedPe: txt('.atv-card.c-ped .pe'),
+    temRodape: !!document.getElementById('atvRodape'),
+    rodTitulo: txt('#atvRodape .esq b'),
+    rodDet: txt('#atvRodape .esq .det'),
+    rodPct: txt('#atvRodape .medidor .linha b'),
+    rodBarra: larg('#atvRodape .trilho i'),
+  };
+});
+console.log('     ' + JSON.stringify(r));
+checa('os quatro cartoes estao la', r.cartoes, 4);
+checa('  peças na semana: 300', r.pecas, '300');
+checa('  e a conta que explica o número',
+  r.pecasPe, '180 sublimação · 120 personalizado');
+checa('  capacidade traz o teto do dia', r.capPe, '325 peças por dia · 6 dias');
+checa('  pedidos traz o que já está pronto', r.pedPe, '1 finalizados · 100 peças prontas');
+checa('a saturação é 20% e a barra acompanha', [r.sat, r.satBarra], ['20%', 20]);
+checa('o rodapé existe', r.temRodape, true);
+checa('  com o total da semana', r.rodTitulo, '300 peças planejadas nesta semana');
+checa('  e a folga até o limite',
+  r.rodDet, 'Ainda cabem 1.200 peças antes de encostar no limite de 1.500.');
+checa('  o medidor do rodapé bate com o do topo', [r.rodPct, r.rodBarra], ['20%', 20]);
+
+/* PASSAR DO LIMITE MUDA O TEXTO E A COR, e é esse o momento em que o
+   relatório precisa ser lido: cabe é informação, passou é decisão. */
+r = await p.evaluate(() => {
+  ATV.linhas.forEach(l => { l.total = 600; l.sub = 600; l.per = 0; });
+  atvDesenha();
+  const cor = s => getComputedStyle(document.querySelector(s)).color;
+  return { det: document.querySelector('#atvRodape .esq .det').textContent,
+    pct: document.querySelector('.atv-card.c-sat .val').textContent,
+    corSat: cor('.atv-card.c-sat .val'),
+    barra: Math.round(parseFloat(document.querySelector('#atvRodape .trilho i').style.width)) };
+});
+console.log('     ' + JSON.stringify(r));
+checa('passou do limite: o texto diz o que fazer',
+  r.det, 'A semana passou o limite em 300 peças. Alguma coisa precisa mudar de dia.');
+checa('  a saturação é 120%', r.pct, '120%');
+checa('  em vermelho', r.corSat, 'rgb(198, 22, 27)');
+checa('  e a barra para em 100%, sem transbordar', r.barra, 100);
 
 console.log('\n=== 12. TROCAR DE SEMANA LIMPA A TELA ===');
 await p.evaluate(() => { ATV.sujo = false; });
