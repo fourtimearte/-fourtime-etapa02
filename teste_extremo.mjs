@@ -146,32 +146,37 @@ console.log(`\nservindo ${ARQ} (v${VER}) em ${BASE}`);
 const fila = [];
 
 /* ---- COMPATIBILIDADE: o .ft das versoes anteriores ----
-   Entra em DUAS raias. Cada volta e quase toda espera de pagina, e nao
-   trabalho de nucleo: dividir as versoes em duas filas com uma pagina
-   propria cada uma corta o bloco quase pela metade. */
-const TODAS = readdirSync(DIR)
-  .filter(n => /^fourtime-editor-v\d+\.html$/.test(n) && n !== ARQ)
-  .sort((a, b) => (+b.match(/v(\d+)/)[1]) - (+a.match(/v(\d+)/)[1]));
-/* QUANTAS VERSOES ANTIGAS ENTRAM NO NIVEL EXTREMO.
 
-   Este bloco e o mais caro da suite: cada volta abre um editor antigo,
-   monta um orcamento de teste e abre o resultado no editor novo. Medido,
-   e o que segura o relogio de tudo.
+   ANTES: abria seis editores antigos, 1,3MB cada, mandava cada um montar
+   um orcamento de teste, e so entao abria o resultado no editor novo. Era
+   o bloco mais caro da suite, e o unico que segurava o relogio.
 
-   Os arquivos antigos NAO MUDAM; o que muda e a versao nova. E uma quebra
-   de formato que aparece so na v274 e nao na v310 e um caso que nunca se
-   viu. Tres versoes seguram o que precisa ser segurado a cada alteracao;
-   o varrimento completo entra com `tudo` ou FT_COMPAT_TUDO=1, e vale
-   antes de publicar. */
-const FUNDO = process.env.FT_COMPAT_TUDO === '1' ? TODAS.length
-            : Number(process.env.FT_COMPAT_FUNDO) || 3;
-const ALVOS = TODAS.slice(0, FUNDO);
-/* MEDIDO, uma raia por versao ate tres: 1 raia deu 63s, 2 deram 47s, 3
-   deram 36s. A intuicao de que paginas demais brigariam por dois nucleos
-   estava errada, porque estes blocos passam quase todo o tempo esperando
-   pagina carregar. Acima de tres o ganho para. */
-const RAIAS = Math.min(3, Math.max(1, FUNDO));
-const blocoCompat = (minhas, raia) => async () => {
+   O que aquilo tinha de errado: a v279 e um arquivo CONGELADO. Ela produz
+   a mesma saida hoje, amanha e daqui a tres anos. Carregar o editor dela a
+   cada rodada era pagar de novo por bytes que nunca mudam.
+
+   AGORA: o que esta guardado nao e o editor antigo, e o ARQUIVO que ele
+   produzia. Seis amostras em compat-amostras/, geradas uma vez por
+   gera_fixtures_compat.mjs, que abre as 54 versoes de verdade. Aqui elas
+   entram numa pagina ja aberta, e a conferencia e a mesma de antes: o que
+   a pessoa digitou na versao antiga tem de aparecer igual na versao nova.
+
+   POR QUE SEIS, E NAO CINQUENTA E QUATRO. O gerador comparou a FORMA do
+   arquivo das 54 versoes e achou duas. Rodando duas vezes, as duas formas
+   cairam em grupos diferentes: a diferenca era sorteio do kit de teste, e
+   nao evolucao do formato. Ou seja, o formato do .ft nao mudou em 54
+   versoes, e as dezenas de voltas testavam a mesma coisa.
+
+   As seis foram escolhidas por EPOCA, uma a cada quinze versoes, e nao
+   pelo agrupamento. A forma nao enxerga o perigo maior: o campo continua
+   la, com o mesmo tipo, e o SIGNIFICADO do valor muda. Um genero que era
+   'M' e virou 'masculino' tem a mesma assinatura e quebra igual. Uma
+   amostra por periodo cobre as convencoes daquele periodo.
+
+   A VARREDURA PROFUNDA continua existindo, e e o proprio gerador: quando
+   houver duvida, `node gera_fixtures_compat.mjs` abre as 54 versoes de
+   verdade e refaz as amostras. Nao e coisa de bateria. */
+fila.push(async () => {
   const t0 = Date.now();
   const linhas = [];
   const diz = (rot, o, e) => { const ok = JSON.stringify(o) === JSON.stringify(e);
@@ -196,109 +201,73 @@ const blocoCompat = (minhas, raia) => async () => {
     };
   })()`;
 
-  const lista = minhas;
-  if (raia === 1) linhas.push(`  (conferindo as ${ALVOS.length} versoes anteriores`
-    + (FUNDO >= TODAS.length ? '' : `; FT_COMPAT_TUDO=1 varre todas as ${TODAS.length}`)
-    + ', em ' + RAIAS + ' raias)');
+  const PASTA = DIR + 'compat-amostras/';
+  const amostras = existsSync(PASTA)
+    ? readdirSync(PASTA).filter(n => /^v\d+\.json$/.test(n)).sort()
+    : [];
+  diz('as amostras de compatibilidade estao na pasta', amostras.length >= 4, true);
+  if (!amostras.length) {
+    linhas.push('  ! rode `node gera_fixtures_compat.mjs` para criar as amostras');
+    return { nome: 'COMPATIBILIDADE DOS .ft', linhas };
+  }
+  linhas.push('  (' + amostras.length + ' amostras: '
+    + amostras.map(n => n.replace('.json', '')).join(' ') + ')');
 
-  /* UMA pagina para a versao nova, reaproveitada entre as voltas.
-     Recarregar o editor a cada versao custava 4s de graca. Para que o
-     reaproveitamento nao esconda sujeira de uma volta na seguinte, cada
-     volta comeca zerando o documento e CONFERINDO que zerou. */
-  const { ctx, p: pNova } = await novaAba({ width: 1400, height: 900 });
-  await pNova.goto(pathToFileURL(DIR + ARQ).href, { waitUntil: 'domcontentloaded' });
-  await esperaPronto(pNova, null, 90000);
-  /* ESPERAR O SINAL, E NAO O RELOGIO.
+  const { ctx, p } = await novaAba({ width: 1400, height: 900 });
+  await p.goto(pathToFileURL(DIR + ARQ).href, { waitUntil: 'domcontentloaded' });
+  await esperaPronto(p, null, 90000);
 
-     Cada volta gastava 8,6s dormindo: 2,4s depois do kit de teste, 0,5 e
-     0,6 no ajuste de valor, 0,9 ao zerar e 4,2 depois de aplicar o
-     estado. Numeros escolhidos com folga para aguentar a maquina ocupada,
-     e por isso quase sempre grandes demais.
-
-     O sinal de que o documento assentou e ele parar de mudar: duas
-     leituras iguais seguidas do mesmo resumo que a comparacao vai usar.
-     Volta assim que assenta, e ainda aguenta ate 9s quando a maquina
-     esta carregada, em vez de medir no meio do desenho. */
-  const assenta = async (pag, minimo) => {
+  /* ESPERAR O SINAL, E NAO O RELOGIO: o documento assentou quando para de
+     mudar, ou seja, duas leituras iguais seguidas do mesmo resumo que a
+     comparacao vai usar. Antes eram 4,2s fixos por volta. */
+  const assenta = async minimo => {
     let ant = null;
     for (let i = 0; i < 60; i++) {
-      const agora = await pag.evaluate(R => JSON.stringify(eval(R)), RESUMO);
-      const igual = ant !== null && agora === ant;
-      if (igual && (!minimo || JSON.parse(agora).layouts.length >= minimo))
+      const agora = await p.evaluate(R => JSON.stringify(eval(R)), RESUMO);
+      if (ant === agora && (!minimo || JSON.parse(agora).layouts.length >= minimo))
         return JSON.parse(agora);
       ant = agora;
-      await pag.waitForTimeout(150);
+      await p.waitForTimeout(120);
     }
     return JSON.parse(ant);
   };
+  const virgem = await assenta();
 
-  /* O DOCUMENTO VIRGEM, como referencia de "vazio".
-     Zerar nao devolve zero layout: o editor sempre mantem um layout em
-     branco, senao nao haveria onde escrever. Comparar com zero seria
-     comparar com um numero inventado. A referencia certa e o documento
-     recem-aberto, que e exatamente o que o zerar precisa reproduzir. */
-  const virgem = await pNova.evaluate(R => eval(R), RESUMO);
+  for (const nome of amostras) {
+    const rot = nome.replace('.json', '');
+    const dados = JSON.parse(readFileSync(PASTA + nome, 'utf8'));
 
-  for (const antiga of lista) {
-    const rot = antiga.replace('fourtime-editor-', '').replace('.html', '');
-    const pv = await ctx.newPage();
-    pv.setDefaultTimeout(90000);
-    try {
-      await pv.goto(pathToFileURL(DIR + antiga).href, { waitUntil: 'domcontentloaded' });
-      await esperaPronto(pv, null, 90000);
-    } catch (e) { linhas.push('  (' + rot + ' nao abriu, pulando)'); await pv.close(); continue; }
-    await pv.evaluate(() => { const mi = document.getElementById('miKitTeste');
-      mi.hidden = false; mi.style.display = ''; mi.click(); });
-    await assenta(pv, 1);                      /* o kit terminou de montar */
-    await pv.evaluate(() => { const add = document.getElementById('finAdd');
-      if (add) add.click(); });
-    await pv.waitForSelector('.fin-valor', { timeout: 15000 }).catch(() => {});
-    await pv.evaluate(() => {
-      const v = document.querySelector('.fin-valor');
-      if (v) { v.value = '150,00'; v.dispatchEvent(new Event('input', { bubbles: true })); }
-      const m = document.querySelector('.fin-motivo');
-      if (m) { m.value = 'Brinde'; m.dispatchEvent(new Event('input', { bubbles: true })); }
-    });
-    const resumoVelho = await assenta(pv, 1);  /* o ajuste entrou na conta */
-    const dados = await pv.evaluate(() => ({
-      arquivo: JSON.stringify(coletaEstado()), versao: FT_EDITOR }));
-    dados.resumo = resumoVelho;
-    diz(rot + ': a versao antiga abriu', typeof dados.versao, 'string');
-    await pv.close();
+    /* ZERAR ANTES, E CONFERIR QUE ZEROU. A pagina e reaproveitada entre as
+       amostras; sem isto, sobra da volta anterior poderia fazer a
+       comparacao bater por acaso, e um teste que bate por acaso e pior que
+       teste nenhum. A referencia de "vazio" e o documento recem-aberto, e
+       nao zero layouts: o editor sempre mantem um layout em branco. */
+    await p.evaluate(() => aplicaEstado({ header: {}, layouts: [], ajustes: [] }));
+    diz(rot + ': o documento voltou ao estado virgem', await assenta(), virgem);
 
-    /* zera antes de aplicar: se sobrasse alguma coisa da volta anterior, a
-       comparacao poderia bater por acaso, e um teste que bate por acaso e
-       pior que teste nenhum */
-    await pNova.evaluate(() => aplicaEstado({ header: {}, layouts: [], ajustes: [] }));
-    const limpo = await assenta(pNova);
-    diz(rot + ':   o documento voltou ao estado virgem antes de receber',
-      limpo, virgem);
-
-    await pNova.evaluate(arq => aplicaEstado(JSON.parse(arq)), dados.arquivo);
-    const resumoNovo = await assenta(pNova, dados.resumo.layouts.length);
-    const depois = await pNova.evaluate(() => ({
+    await p.evaluate(arq => aplicaEstado(arq), dados.arquivo);
+    const depois = await assenta(dados.resumo.layouts.length);
+    const folha = await p.evaluate(() => ({
       versao: FT_EDITOR, folhas: document.querySelectorAll('.folha-a4').length,
       estouro: [...document.querySelectorAll('.folha-a4')].map(f => +excedeFolha(f).toFixed(1)) }));
-    depois.resumo = resumoNovo;
 
-    diz(rot + ':   abriu na v' + VER, depois.versao, VER);
-    diz(rot + ':   cabecalho identico', depois.resumo.header, dados.resumo.header);
+    diz(rot + ':   abriu na v' + VER, folha.versao, VER);
+    diz(rot + ':   cabecalho identico', depois.header, dados.resumo.header);
     diz(rot + ':   mesmo numero de layouts',
-      depois.resumo.layouts.length, dados.resumo.layouts.length);
+      depois.layouts.length, dados.resumo.layouts.length);
     for (let i = 0; i < dados.resumo.layouts.length; i++)
       diz(rot + ':   layout ' + (i + 1) + ' identico',
-        depois.resumo.layouts[i], dados.resumo.layouts[i]);
-    diz(rot + ':   ajustes de valor preservados', depois.resumo.ajustes, dados.resumo.ajustes);
+        depois.layouts[i], dados.resumo.layouts[i]);
+    diz(rot + ':   ajustes de valor preservados', depois.ajustes, dados.resumo.ajustes);
     diz(rot + ':   pecas e total batem',
-      [depois.resumo.pecas, depois.resumo.total], [dados.resumo.pecas, dados.resumo.total]);
-    diz(rot + ':   nenhuma folha estourada', depois.estouro.every(v => v <= 0.5), true);
+      [depois.pecas, depois.total], [dados.resumo.pecas, dados.resumo.total]);
+    diz(rot + ':   nenhuma folha estourada', folha.estouro.every(v => v <= 0.5), true);
   }
   await ctx.close();
-  return { nome: 'COMPATIBILIDADE DOS .ft (raia ' + raia + ', '
+  return { nome: 'COMPATIBILIDADE DOS .ft ('
     + ((Date.now() - t0) / 1000).toFixed(1) + 's)', linhas };
-};
-for (let k = 0; k < RAIAS; k++)
-  fila.push(blocoCompat(ALVOS.filter((_, i) => i % RAIAS === k), k + 1));
+});
+
 
 /* ---- LOGIN DE ADMINISTRADOR: modal, localStorage e as tres falhas ---- */
 fila.push(async () => {
@@ -1326,11 +1295,12 @@ console.log('     ' + ((Date.now() - _t0) / 1000).toFixed(1) + 's no total');
 /* UM TESTE QUE ENCOLHE SEM AVISAR E PIOR QUE UM TESTE QUEBRADO.
    Esta suite juntou nove arquivos; se um bloco parar de rodar por um erro
    de encanamento, o resto continua verde e ninguem percebe que metade da
-   cobertura sumiu. O piso e conferido. */
-/* O PISO CRESCE COM A PROFUNDIDADE DA COMPATIBILIDADE: com 3 versoes sao
-   ~229 conferencias, com 6 sao ~272, com as 37 passam de 700. Um piso fixo
-   ou reprovaria a rodada curta ou nao pegaria nada na longa. */
-const CONFERENCIAS_MINIMAS = 180 + FUNDO * 13;
+   cobertura sumiu. O piso conta as amostras de compatibilidade que
+   existirem na pasta, para nao reprovar quando alguem acrescentar uma. */
+const CONFERENCIAS_MINIMAS = 180 + 13 *
+  (existsSync(DIR + 'compat-amostras/')
+    ? readdirSync(DIR + 'compat-amostras/').filter(n => /^v\d+\.json$/.test(n)).length
+    : 0);
 checa('a suite nao encolheu: ao menos ' + CONFERENCIAS_MINIMAS + ' conferencias',
   (falhas.length + contaOk) >= CONFERENCIAS_MINIMAS, true);
 checa('nenhum erro de pagina em lugar nenhum', err.length, 0);

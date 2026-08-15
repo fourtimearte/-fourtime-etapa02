@@ -2,11 +2,15 @@
 /* ================================================================
    RODAR — executa as suítes em paralelo e resume.
 
-     node rodar.mjs extremo      o que não pode quebrar em silêncio    ~37s
+     node rodar.mjs extremo      o que não pode quebrar em silêncio    ~32s
      node rodar.mjs mediano      + o que atrapalha o trabalho do dia    ~90s
      node rodar.mjs normal       + aparência e versões antigas          140s
      node rodar.mjs              o mesmo que 'normal'
-     node rodar.mjs tudo         + Trello/A4/antigas + as 37 versões    ~8min
+     node rodar.mjs tudo         + Trello/A4 + as 9 antigas             ~3min
+
+   A compatibilidade dos .ft não abre mais os editores antigos: ela usa as
+   amostras congeladas em compat-amostras/. Para refazê-las abrindo as 54
+   versões de verdade: `node gera_fixtures_compat.mjs` (uns 20 minutos).
      node rodar.mjs subida       só o que a publicação muda de verdade
      node rodar.mjs pop modal    só as que casarem com esses nomes
 
@@ -132,11 +136,11 @@ const SUBIDA = [
    desses ciclos, quase todos só para CHEGAR ao estado em que a
    conferência começava.
 
-   `teste_extremo.mjs` faz 230 conferências em 37s: um servidor, um
-   navegador, as senhas pela API, a verdade do servidor por fetch e o
-   comportamento da tela numa página só, trocando a identidade em memória.
-   Com FT_COMPAT_TUDO=1 são 944 conferências em 5min40, porque aí ele abre
-   as 37 versões anteriores em vez das 3 mais recentes.
+   `teste_extremo.mjs` faz 267 conferências em 32s: um servidor, um
+   navegador, as senhas pela API, a verdade do servidor por fetch, o
+   comportamento da tela numa página só trocando a identidade em memória,
+   e a compatibilidade dos .ft lida de amostras congeladas em vez de
+   editores antigos carregados na hora.
 
    Os nove arquivos originais continuam na pasta e rodam por nome
    (`node rodar.mjs teste_pessoas`), para quando for preciso isolar uma
@@ -175,10 +179,7 @@ const MODOS = ['tudo', 'subida', 'extremo', 'mediano', 'normal'];
 let lista = SUITES.filter(x => !ABSORVIDAS.includes(x));
 let nivel = 'normal (a bateria de sempre)';
 if (arg.includes('subida')) { lista = SUBIDA; nivel = 'subida'; }
-else if (arg.includes('tudo')) {
-  lista = lista.concat(EXTRA, ANTIGAS); nivel = 'tudo';
-  process.env.FT_COMPAT_TUDO = '1';       /* o varrimento completo só aqui */
-}
+else if (arg.includes('tudo')) { lista = lista.concat(EXTRA, ANTIGAS); nivel = 'tudo'; }
 else if (arg.includes('extremo')) { lista = EXTREMO; nivel = 'extremo'; }
 else if (arg.includes('mediano')) { lista = EXTREMO.concat(MEDIANO); nivel = 'extremo + mediano'; }
 else if (arg.includes('normal'))  { lista = EXTREMO.concat(MEDIANO, NORMAL); nivel = 'os tres niveis'; }
