@@ -2,7 +2,7 @@
 /* ================================================================
    RODAR — executa as suítes em paralelo e resume.
 
-     node rodar.mjs extremo      o que não pode quebrar em silêncio   ~3min
+     node rodar.mjs extremo      o que não pode quebrar em silêncio    ~82s
      node rodar.mjs mediano      + o que atrapalha o trabalho do dia   ~4min
      node rodar.mjs normal       + aparência e versões antigas         ~5min
      node rodar.mjs              o mesmo que 'normal'
@@ -43,6 +43,8 @@ const SUITES = [
   /* v3.311 — Relatório de Atividade */
   'teste_atividade', 'teste_atividade_servidor',
   'teste_aviso_versao', 'teste_versao_servidor',
+  /* v3.313 — as nove do nível extremo, numa suíte só */
+  'teste_extremo',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
@@ -121,16 +123,28 @@ const SUBIDA = [
 
    Os niveis SOMAM: mediano roda o extremo junto, normal roda os tres.
    ================================================================ */
-const EXTREMO = [
-  'teste_compat_v303',       /* orçamento antigo abrindo errado: silencioso e irreversível */
-  'teste_login_editor',      /* a porta: sessão, papel, troca obrigatória de senha         */
-  'teste_pessoas',           /* renomear leva a senha junto, senão a pessoa fica trancada  */
-  'teste_papel_editor',      /* o * que não pode partir a venda da Dani em duas no relatório */
-  'teste_atividade',         /* a fusão que não pode derrubar o planejamento da semana     */
-  'teste_atividade_servidor',/* a marca de acesso, e o dinheiro que não pode vazar         */
-  'teste_login_admin',       /* a senha de administrador numa máquina nova                 */
-  'teste_freio_servidor',    /* o freio que impede duplicar registro no banco              */
-  'teste_versao_servidor',   /* o servidor serve o arquivo certo: sem isto, nada subiu     */
+/* EXTREMO É UMA SUÍTE SÓ desde a v3.313.
+
+   Eram nove arquivos e 195s. O que se repetia entre eles não eram as
+   conferências: era o PREPARO. Cada arquivo subia o próprio servidor,
+   abria o próprio navegador e fazia os próprios logins pela interface, e
+   um ciclo de login pela interface custa 27s medidos. Os nove faziam 18
+   desses ciclos, quase todos só para CHEGAR ao estado em que a
+   conferência começava.
+
+   `teste_extremo.mjs` faz 244 conferências em 82s: um servidor, um
+   navegador, as senhas pela API, a verdade do servidor por fetch e o
+   comportamento da tela numa página só, trocando a identidade em memória.
+
+   Os nove arquivos originais continuam na pasta e rodam por nome
+   (`node rodar.mjs teste_pessoas`), para quando for preciso isolar uma
+   parte. Não entram em nenhum modo automático: rodá-los junto seria
+   pagar o preço antigo de novo. */
+const EXTREMO = ['teste_extremo'];
+const ABSORVIDAS = [
+  'teste_compat_v303', 'teste_login_editor', 'teste_pessoas', 'teste_papel_editor',
+  'teste_atividade', 'teste_atividade_servidor', 'teste_login_admin',
+  'teste_freio_servidor', 'teste_versao_servidor',
 ];
 const MEDIANO = [
   'teste_v303_ajustes',      /* o grosso do comportamento do editor            */
@@ -151,11 +165,12 @@ const MEDIANO = [
 /* NORMAL é o resto do que já rodava: o que sobrar de SUITES depois de tirar
    os dois primeiros níveis. Escrito assim de propósito — acrescentar uma
    suíte nova a SUITES não pode deixá-la de fora da bateria por esquecimento. */
-const NORMAL = SUITES.filter(x => !EXTREMO.includes(x) && !MEDIANO.includes(x));
+const NORMAL = SUITES.filter(x => !EXTREMO.includes(x) && !MEDIANO.includes(x)
+                               && !ABSORVIDAS.includes(x));
 
 const arg = process.argv.slice(2);
 const MODOS = ['tudo', 'subida', 'extremo', 'mediano', 'normal'];
-let lista = SUITES.slice();
+let lista = SUITES.filter(x => !ABSORVIDAS.includes(x));
 let nivel = 'normal (a bateria de sempre)';
 if (arg.includes('subida')) { lista = SUBIDA; nivel = 'subida'; }
 else if (arg.includes('tudo')) {
@@ -172,7 +187,8 @@ if (filtros.length) {
   nivel = 'filtro: ' + filtros.join(' ');
 }
 const ondeEsta = n => EXTREMO.includes(n) ? 'EXTREMO'
-                    : MEDIANO.includes(n) ? 'mediano' : 'normal';
+                    : MEDIANO.includes(n) ? 'mediano'
+                    : ABSORVIDAS.includes(n) ? 'absorvida' : 'normal';
 console.log('nivel: ' + nivel + '  ·  ' + lista.length + ' suites\n');
 
 const LIMITE = 3;
