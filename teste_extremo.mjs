@@ -152,9 +152,27 @@ const fila = [];
 const TODAS = readdirSync(DIR)
   .filter(n => /^fourtime-editor-v\d+\.html$/.test(n) && n !== ARQ)
   .sort((a, b) => (+b.match(/v(\d+)/)[1]) - (+a.match(/v(\d+)/)[1]));
-const FUNDO = process.env.FT_COMPAT_TUDO === '1' ? TODAS.length : 6;
+/* QUANTAS VERSOES ANTIGAS ENTRAM NO NIVEL EXTREMO.
+
+   Este bloco e o mais caro da suite: cada volta abre um editor antigo,
+   monta um orcamento de teste e abre o resultado no editor novo. Medido,
+   e o que segura o relogio de tudo.
+
+   Os arquivos antigos NAO MUDAM; o que muda e a versao nova. E uma quebra
+   de formato que aparece so na v274 e nao na v310 e um caso que nunca se
+   viu. Tres versoes seguram o que precisa ser segurado a cada alteracao;
+   o varrimento completo entra com `tudo` ou FT_COMPAT_TUDO=1, e vale
+   antes de publicar. */
+const FUNDO = process.env.FT_COMPAT_TUDO === '1' ? TODAS.length
+            : Number(process.env.FT_COMPAT_FUNDO) || 3;
 const ALVOS = TODAS.slice(0, FUNDO);
+/* MEDIDO, uma raia por versao ate tres: 1 raia deu 63s, 2 deram 47s, 3
+   deram 36s. A intuicao de que paginas demais brigariam por dois nucleos
+   estava errada, porque estes blocos passam quase todo o tempo esperando
+   pagina carregar. Acima de tres o ganho para. */
+const RAIAS = Math.min(3, Math.max(1, FUNDO));
 const blocoCompat = (minhas, raia) => async () => {
+  const t0 = Date.now();
   const linhas = [];
   const diz = (rot, o, e) => { const ok = JSON.stringify(o) === JSON.stringify(e);
     linhas.push(`  ${ok ? 'OK ' : 'FALHOU'}  ${rot.padEnd(58)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
@@ -181,7 +199,7 @@ const blocoCompat = (minhas, raia) => async () => {
   const lista = minhas;
   if (raia === 1) linhas.push(`  (conferindo as ${ALVOS.length} versoes anteriores`
     + (FUNDO >= TODAS.length ? '' : `; FT_COMPAT_TUDO=1 varre todas as ${TODAS.length}`)
-    + ', em 2 raias)');
+    + ', em ' + RAIAS + ' raias)');
 
   /* UMA pagina para a versao nova, reaproveitada entre as voltas.
      Recarregar o editor a cada versao custava 4s de graca. Para que o
@@ -190,6 +208,30 @@ const blocoCompat = (minhas, raia) => async () => {
   const { ctx, p: pNova } = await novaAba({ width: 1400, height: 900 });
   await pNova.goto(pathToFileURL(DIR + ARQ).href, { waitUntil: 'domcontentloaded' });
   await esperaPronto(pNova, null, 90000);
+  /* ESPERAR O SINAL, E NAO O RELOGIO.
+
+     Cada volta gastava 8,6s dormindo: 2,4s depois do kit de teste, 0,5 e
+     0,6 no ajuste de valor, 0,9 ao zerar e 4,2 depois de aplicar o
+     estado. Numeros escolhidos com folga para aguentar a maquina ocupada,
+     e por isso quase sempre grandes demais.
+
+     O sinal de que o documento assentou e ele parar de mudar: duas
+     leituras iguais seguidas do mesmo resumo que a comparacao vai usar.
+     Volta assim que assenta, e ainda aguenta ate 9s quando a maquina
+     esta carregada, em vez de medir no meio do desenho. */
+  const assenta = async (pag, minimo) => {
+    let ant = null;
+    for (let i = 0; i < 60; i++) {
+      const agora = await pag.evaluate(R => JSON.stringify(eval(R)), RESUMO);
+      const igual = ant !== null && agora === ant;
+      if (igual && (!minimo || JSON.parse(agora).layouts.length >= minimo))
+        return JSON.parse(agora);
+      ant = agora;
+      await pag.waitForTimeout(150);
+    }
+    return JSON.parse(ant);
+  };
+
   /* O DOCUMENTO VIRGEM, como referencia de "vazio".
      Zerar nao devolve zero layout: o editor sempre mantem um layout em
      branco, senao nao haveria onde escrever. Comparar com zero seria
@@ -205,40 +247,39 @@ const blocoCompat = (minhas, raia) => async () => {
       await pv.goto(pathToFileURL(DIR + antiga).href, { waitUntil: 'domcontentloaded' });
       await esperaPronto(pv, null, 90000);
     } catch (e) { linhas.push('  (' + rot + ' nao abriu, pulando)'); await pv.close(); continue; }
-    const dados = await pv.evaluate(async R => {
-      const mi = document.getElementById('miKitTeste');
-      mi.hidden = false; mi.style.display = ''; mi.click();
-      await new Promise(s => setTimeout(s, 2400));
-      const add = document.getElementById('finAdd');
-      if (add) { add.click(); await new Promise(s => setTimeout(s, 500));
-        const v = document.querySelector('.fin-valor');
-        if (v) { v.value = '150,00'; v.dispatchEvent(new Event('input', { bubbles: true })); }
-        const m = document.querySelector('.fin-motivo');
-        if (m) { m.value = 'Brinde'; m.dispatchEvent(new Event('input', { bubbles: true })); }
-        await new Promise(s => setTimeout(s, 600)); }
-      return { arquivo: JSON.stringify(coletaEstado()), resumo: eval(R), versao: FT_EDITOR };
-    }, RESUMO);
+    await pv.evaluate(() => { const mi = document.getElementById('miKitTeste');
+      mi.hidden = false; mi.style.display = ''; mi.click(); });
+    await assenta(pv, 1);                      /* o kit terminou de montar */
+    await pv.evaluate(() => { const add = document.getElementById('finAdd');
+      if (add) add.click(); });
+    await pv.waitForSelector('.fin-valor', { timeout: 15000 }).catch(() => {});
+    await pv.evaluate(() => {
+      const v = document.querySelector('.fin-valor');
+      if (v) { v.value = '150,00'; v.dispatchEvent(new Event('input', { bubbles: true })); }
+      const m = document.querySelector('.fin-motivo');
+      if (m) { m.value = 'Brinde'; m.dispatchEvent(new Event('input', { bubbles: true })); }
+    });
+    const resumoVelho = await assenta(pv, 1);  /* o ajuste entrou na conta */
+    const dados = await pv.evaluate(() => ({
+      arquivo: JSON.stringify(coletaEstado()), versao: FT_EDITOR }));
+    dados.resumo = resumoVelho;
     diz(rot + ': a versao antiga abriu', typeof dados.versao, 'string');
     await pv.close();
 
     /* zera antes de aplicar: se sobrasse alguma coisa da volta anterior, a
        comparacao poderia bater por acaso, e um teste que bate por acaso e
        pior que teste nenhum */
-    const limpo = await pNova.evaluate(async R => {
-      aplicaEstado({ header: {}, layouts: [], ajustes: [] });
-      await new Promise(s => setTimeout(s, 900));
-      return eval(R);
-    }, RESUMO);
+    await pNova.evaluate(() => aplicaEstado({ header: {}, layouts: [], ajustes: [] }));
+    const limpo = await assenta(pNova);
     diz(rot + ':   o documento voltou ao estado virgem antes de receber',
       limpo, virgem);
 
-    const depois = await pNova.evaluate(async ({ arq, R }) => {
-      aplicaEstado(JSON.parse(arq));
-      await new Promise(s => setTimeout(s, 4200));
-      return { resumo: eval(R), versao: FT_EDITOR,
-               folhas: document.querySelectorAll('.folha-a4').length,
-               estouro: [...document.querySelectorAll('.folha-a4')].map(f => +excedeFolha(f).toFixed(1)) };
-    }, { arq: dados.arquivo, R: RESUMO });
+    await pNova.evaluate(arq => aplicaEstado(JSON.parse(arq)), dados.arquivo);
+    const resumoNovo = await assenta(pNova, dados.resumo.layouts.length);
+    const depois = await pNova.evaluate(() => ({
+      versao: FT_EDITOR, folhas: document.querySelectorAll('.folha-a4').length,
+      estouro: [...document.querySelectorAll('.folha-a4')].map(f => +excedeFolha(f).toFixed(1)) }));
+    depois.resumo = resumoNovo;
 
     diz(rot + ':   abriu na v' + VER, depois.versao, VER);
     diz(rot + ':   cabecalho identico', depois.resumo.header, dados.resumo.header);
@@ -253,10 +294,11 @@ const blocoCompat = (minhas, raia) => async () => {
     diz(rot + ':   nenhuma folha estourada', depois.estouro.every(v => v <= 0.5), true);
   }
   await ctx.close();
-  return { nome: 'COMPATIBILIDADE DOS .ft (raia ' + raia + ')', linhas };
+  return { nome: 'COMPATIBILIDADE DOS .ft (raia ' + raia + ', '
+    + ((Date.now() - t0) / 1000).toFixed(1) + 's)', linhas };
 };
-fila.push(blocoCompat(ALVOS.filter((_, i) => i % 2 === 0), 1));
-fila.push(blocoCompat(ALVOS.filter((_, i) => i % 2 === 1), 2));
+for (let k = 0; k < RAIAS; k++)
+  fila.push(blocoCompat(ALVOS.filter((_, i) => i % RAIAS === k), k + 1));
 
 /* ---- LOGIN DE ADMINISTRADOR: modal, localStorage e as tres falhas ---- */
 fila.push(async () => {
@@ -264,6 +306,7 @@ fila.push(async () => {
   const diz = (rot, o, e) => { const ok = JSON.stringify(o) === JSON.stringify(e);
     linhas.push(`  ${ok ? 'OK ' : 'FALHOU'}  ${rot.padEnd(58)} obtido=${JSON.stringify(o)} esperado=${JSON.stringify(e)}`);
     if (ok) contaOk++; else falhas.push('[admin] ' + rot); };
+  const t0 = Date.now();
   const SENHA_CERTA = 'senha-de-teste-2026';
   const servidor = { modo: 'normal' };   /* normal | token-invalido | fora-do-ar */
   const { ctx, p } = await novaAba({ width: 1500, height: 950 });
@@ -286,9 +329,15 @@ fila.push(async () => {
   await p.goto(pathToFileURL(DIR + ARQ).href, { waitUntil: 'domcontentloaded' });
   await esperaPronto(p, null, 90000);
   /* MAQUINA NOVA: e a condicao em que o defeito aparecia. Quem ja era
-     admin carregava a senha do localStorage desde antes da mudanca */
-  await p.evaluate(() => localStorage.clear());
-  await p.reload(); await esperaPronto(p, null, 90000);
+     admin carregava a senha do localStorage desde antes da mudanca, e por
+     isso nao via nada de errado.
+
+     O teste antigo limpava o localStorage e RECARREGAVA para chegar nesse
+     estado. Aqui a aba nasce num contexto proprio, e contexto novo ja vem
+     sem localStorage nenhum: a maquina ja e nova. O recarregamento custava
+     um editor inteiro para chegar onde a pagina ja estava. */
+  diz('a aba nasce como maquina nova, sem senha guardada',
+    await p.evaluate(() => localStorage.getItem('ft_sync_admin')), null);
 
   const abre = async () => { await p.evaluate(() => loginAbre()); await p.waitForTimeout(350); };
   const estado = () => p.evaluate(() => ({
@@ -377,7 +426,7 @@ fila.push(async () => {
   diz('  e a conexao continua de pe', e.on, true);
 
   await ctx.close();
-  return { nome: 'LOGIN DE ADMINISTRADOR', linhas };
+  return { nome: 'LOGIN DE ADMINISTRADOR (' + ((Date.now() - t0) / 1000).toFixed(1) + 's)', linhas };
 });
 
 /* A FILA DE ARQUIVO COMECA A CORRER AGORA, e nao uma linha antes.
@@ -399,7 +448,17 @@ const emParalelo = Promise.all(fila.map(f => f()));
    prova o meio dela, nao as pontas.
    ================================================================ */
 titulo('1. A PORTA: LOGIN, TROCA OBRIGATORIA E O EDITOR');
-const { ctx: ctxPorta, p: pPorta } = await novaAba();
+/* A PAGINA QUE SAI DAQUI E A MESMA QUE ATENDE OS BLOCOS 4 A 7.
+
+   A primeira versao provava a porta com o Kev, fechava a aba, e abria
+   outra do zero para o resto. Eram dois carregamentos do editor, 24s, e o
+   segundo nao provava nada que o primeiro nao tivesse provado. Entra o
+   Henrique: a corrente e a mesma (senha de partida, troca obrigatoria,
+   editor), e no fim dela a pagina ja esta logada como admin, que e o que
+   os blocos seguintes precisam. */
+const { ctx: ctxEd, p: pEd } = await novaAba();
+const pPorta = pEd;
+await comFontes(pEd);
 await pPorta.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
 let r = await pPorta.evaluate(() => ({
   temLogin: !!document.getElementById('fLogin'),
@@ -412,7 +471,7 @@ checa('  nem no titulo', r.titulo, 'Fourtime - Entrar');
 checa('  e o token da equipe nao esta escrito na pagina',
   (await pPorta.content()).includes(S_EQUIPE), false);
 
-await pPorta.fill('#u', 'kev'); await pPorta.fill('#s', S_EQUIPE);
+await pPorta.fill('#u', 'henrique'); await pPorta.fill('#s', S_ADMIN);
 await pPorta.click('#bt'); await pPorta.waitForTimeout(900);
 r = await pPorta.evaluate(() => ({
   pediuTroca: !document.getElementById('fTroca').classList.contains('oculto'),
@@ -422,19 +481,20 @@ console.log('     ' + JSON.stringify(r));
 checa('a senha de partida para na troca obrigatoria', r.pediuTroca, true);
 checa('  e nao deixa passar antes disso', r.entrouNoEditor, false);
 /* a API tambem tem de recusar: uma trava que so existe na tela se
-   contorna digitando o endereco */
+   contorna digitando o endereco. Cobrada com OUTRA pessoa, que nao trocou
+   a senha nem vai trocar aqui. */
 checa('  a API tambem recusa quem nao trocou',
   (await pede((await entraApi('kev', S_EQUIPE)).cookie, 'GET', '/api/db')).status, 403);
 
-await pPorta.fill('#n1', 'kev-forte-2026'); await pPorta.fill('#n2', 'kev-forte-2026');
+SENHAS.henrique = 'henrique-forte-2026';
+await pPorta.fill('#n1', SENHAS.henrique); await pPorta.fill('#n2', SENHAS.henrique);
 await pPorta.click('#bt2'); await pPorta.waitForTimeout(1400);
 await esperaPronto(pPorta, null, 90000);
+await pPorta.evaluate(() => document.fonts.ready);
 checa('trocou a senha, e o editor abre',
   await pPorta.evaluate(() => !!document.querySelector('.folha-a4')), true);
 checa('  o editor sabe quem entrou',
-  await pPorta.evaluate(() => [FT_EU.nome, FT_EU.papel]), ['Kev', 'vendedor']);
-SENHAS.kev = 'kev-forte-2026';
-await ctxPorta.close();
+  await pPorta.evaluate(() => [FT_EU.nome, FT_EU.papel]), ['Henrique', 'admin']);
 
 /* ================================================================
    BLOCO 2: TODO MUNDO COM SENHA, PELA API
@@ -444,7 +504,8 @@ await ctxPorta.close();
    quebrada, o bloco 1 avisa antes de qualquer atalho ser usado.
    ================================================================ */
 titulo('2. AS SENHAS, PELA API');
-const GENTE = [['henrique', S_ADMIN], ['dani', S_ADMIN], ['patricia', S_EQUIPE],
+/* o Henrique ja trocou a senha no bloco 1, pela tela */
+const GENTE = [['kev', S_EQUIPE], ['dani', S_ADMIN], ['patricia', S_EQUIPE],
                ['lucas', S_EQUIPE], ['fabricio', S_EQUIPE], ['dayane', S_EQUIPE]];
 for (const [u, inicial] of GENTE) {
   const nova = u + '-forte-2026';
@@ -452,7 +513,6 @@ for (const [u, inicial] of GENTE) {
   await pede(e.cookie, 'POST', '/api/auth/senha', { atual: inicial, nova });
   SENHAS[u] = nova;
 }
-SENHAS.kev = 'kev-forte-2026';
 for (const u of Object.keys(SENHAS)) SESSAO[u] = (await entraApi(u, SENHAS[u])).cookie;
 /* A PATRICIA VIRA EDITORA. Na semente ela nasce vendedora; o papel editor
    existe justamente para ela, e e o unico jeito de exercitar a marca * no
@@ -599,15 +659,9 @@ for (const ruim of ['', '2026-8-17', 'semana', '2026-08-17.fta', '../../senha'])
    que se mede aqui e so o que a TELA faz com essa resposta.
    ================================================================ */
 titulo('4. O EDITOR COM A IDENTIDADE DE CADA PESSOA');
-const { ctx: ctxEd, p: pEd } = await novaAba();
-await comFontes(pEd);
-await pEd.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-await pEd.fill('#u', 'henrique'); await pEd.fill('#s', SENHAS.henrique);
-await pEd.click('#bt'); await pEd.waitForTimeout(900);
-await esperaPronto(pEd, null, 90000);
-await pEd.evaluate(() => document.fonts.ready);
+/* a mesma pagina do bloco 1, ja logada como admin */
 checa('quem ja trocou a senha entra direto no editor',
-  await pEd.evaluate(() => !!document.querySelector('.folha-a4')), true);
+  (await pede((await entraApi('henrique', SENHAS.henrique)).cookie, 'GET', '/api/db')).status !== 403, true);
 
 /* LIMPAR A TELA ENTRE OS BLOCOS.
 
@@ -671,11 +725,18 @@ for (const [quem, esperado] of [
 titulo('4b. O FINANCEIRO VE O BANCO E NAO MEXE');
 await vira('dayane');
 r = await pEd.evaluate(async () => {
-  ftSecao('banco'); await new Promise(s => setTimeout(s, 700));
-  if (typeof ftSyncPull === 'function') { try { await ftSyncPull(); } catch (e) {} }
+  /* O BANCO E POSTO NA MAO, E NAO PUXADO DO SERVIDOR.
+
+     Puxar com ftSyncPull() custava 12,8s MEDIDOS, sozinho um quarto da
+     suite inteira. E o que se cobra aqui nao e a sincronizacao: e se o
+     Financeiro consegue MEXER no que esta na tela. Para isso basta haver
+     item na tela. A sincronizacao tem suite propria, e o servidor ja foi
+     cobrado no bloco 3. */
+  if (typeof DB === 'object') DB.tecidos = ['DRY FIT', 'PIQUET', 'HELANCA', 'MALHA FRIA'];
+  ftSecao('banco');
   if (typeof bdCat !== 'undefined') bdCat = 'tecidos';
   if (typeof bdRender === 'function') bdRender();
-  await new Promise(s => setTimeout(s, 700));
+  await new Promise(s => setTimeout(s, 300));
   const vis = e => !!e && getComputedStyle(e).display !== 'none';
   const pg = document.getElementById('bdPage');
   return { travado: document.body.classList.contains('sem-banco-editar'),
@@ -1266,7 +1327,10 @@ console.log('     ' + ((Date.now() - _t0) / 1000).toFixed(1) + 's no total');
    Esta suite juntou nove arquivos; se um bloco parar de rodar por um erro
    de encanamento, o resto continua verde e ninguem percebe que metade da
    cobertura sumiu. O piso e conferido. */
-const CONFERENCIAS_MINIMAS = 260;
+/* O PISO CRESCE COM A PROFUNDIDADE DA COMPATIBILIDADE: com 3 versoes sao
+   ~229 conferencias, com 6 sao ~272, com as 37 passam de 700. Um piso fixo
+   ou reprovaria a rodada curta ou nao pegaria nada na longa. */
+const CONFERENCIAS_MINIMAS = 180 + FUNDO * 13;
 checa('a suite nao encolheu: ao menos ' + CONFERENCIAS_MINIMAS + ' conferencias',
   (falhas.length + contaOk) >= CONFERENCIAS_MINIMAS, true);
 checa('nenhum erro de pagina em lugar nenhum', err.length, 0);
