@@ -44,7 +44,20 @@ const NOVA = process.env.FT_ARQ || editorAtual();
 const VER  = process.env.FT_VER || ('3.'+NOVA.match(/v(\d+)/)[1]);
 /* as versoes recentes entram primeiro: a que acabou de sair e a que
    tem mais chance de ter quebrado alguma coisa */
-for (const antiga of ['fourtime-editor-v310.html','fourtime-editor-v309.html','fourtime-editor-v308.html','fourtime-editor-v307.html','fourtime-editor-v306.html','fourtime-editor-v305.html','fourtime-editor-v304.html','fourtime-editor-v303.html','fourtime-editor-v302.html','fourtime-editor-v301.html','fourtime-editor-v300.html','fourtime-editor-v299.html','fourtime-editor-v298.html','fourtime-editor-v297.html','fourtime-editor-v296.html','fourtime-editor-v295.html','fourtime-editor-v294.html','fourtime-editor-v293.html','fourtime-editor-v292.html','fourtime-editor-v291.html','fourtime-editor-v290.html','fourtime-editor-v289.html','fourtime-editor-v288.html','fourtime-editor-v287.html','fourtime-editor-v286.html','fourtime-editor-v285.html','fourtime-editor-v284.html','fourtime-editor-v283.html','fourtime-editor-v282.html','fourtime-editor-v281.html','fourtime-editor-v280.html','fourtime-editor-v279.html','fourtime-editor-v278.html','fourtime-editor-v277.html','fourtime-editor-v276.html','fourtime-editor-v275.html','fourtime-editor-v274.html']){
+/* QUANTAS VERSOES ANTIGAS ENTRAM.
+
+   Abrir as 37 versoes a cada rodada e caro e quase todo redundante: os
+   arquivos antigos nao mudam, e o que muda e a versao NOVA. As seis mais
+   recentes pegam praticamente qualquer quebra de formato, porque uma
+   quebra que so aparece na v274 e nao na v308 e um caso que nunca se viu.
+
+   O varrimento completo continua existindo e entra com `tudo`, ou com
+   FT_COMPAT_TUDO=1. Antes de publicar, vale o completo. */
+const TODAS = ['fourtime-editor-v310.html','fourtime-editor-v309.html','fourtime-editor-v308.html','fourtime-editor-v307.html','fourtime-editor-v306.html','fourtime-editor-v305.html','fourtime-editor-v304.html','fourtime-editor-v303.html','fourtime-editor-v302.html','fourtime-editor-v301.html','fourtime-editor-v300.html','fourtime-editor-v299.html','fourtime-editor-v298.html','fourtime-editor-v297.html','fourtime-editor-v296.html','fourtime-editor-v295.html','fourtime-editor-v294.html','fourtime-editor-v293.html','fourtime-editor-v292.html','fourtime-editor-v291.html','fourtime-editor-v290.html','fourtime-editor-v289.html','fourtime-editor-v288.html','fourtime-editor-v287.html','fourtime-editor-v286.html','fourtime-editor-v285.html','fourtime-editor-v284.html','fourtime-editor-v283.html','fourtime-editor-v282.html','fourtime-editor-v281.html','fourtime-editor-v280.html','fourtime-editor-v279.html','fourtime-editor-v278.html','fourtime-editor-v277.html','fourtime-editor-v276.html','fourtime-editor-v275.html','fourtime-editor-v274.html'];
+const FUNDO = (process.env.FT_COMPAT_TUDO === '1') ? TODAS.length : 6;
+console.log('  (conferindo as ' + Math.min(FUNDO, TODAS.length) + ' versoes anteriores'
+  + (FUNDO >= TODAS.length ? '' : '; FT_COMPAT_TUDO=1 varre todas as ' + TODAS.length) + ')');
+for (const antiga of TODAS.slice(0, FUNDO)){
   console.log('\n=== .ft salvo na '+antiga.replace('fourtime-editor-','').replace('.html','')+' → aberto na v'+VER+' ===');
   let velha;
   try { velha = await abre(antiga); } catch(e){ console.log('  (versão não está aqui, pulando)'); continue; }

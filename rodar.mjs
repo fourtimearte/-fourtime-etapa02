@@ -2,10 +2,16 @@
 /* ================================================================
    RODAR — executa as suítes em paralelo e resume.
 
-     node rodar.mjs              as suítes de regressão
+     node rodar.mjs extremo      o que não pode quebrar em silêncio   ~3min
+     node rodar.mjs mediano      + o que atrapalha o trabalho do dia   ~4min
+     node rodar.mjs normal       + aparência e versões antigas         ~5min
+     node rodar.mjs              o mesmo que 'normal'
+     node rodar.mjs tudo         + Trello/A4/antigas + as 37 versões   ~9min
      node rodar.mjs subida       só o que a publicação muda de verdade
-     node rodar.mjs tudo         + Trello/impressão + A4 + as 9 antigas
      node rodar.mjs pop modal    só as que casarem com esses nomes
+
+   Os níveis SOMAM: 'mediano' roda o extremo junto. A tabela de quem está
+   em qual nível fica logo abaixo de SUBIDA, com o motivo de cada um.
 
    Por padrão as suítes rodam contra a versão do próprio arquivo delas.
    Para apontar todas para outra versão:
@@ -91,13 +97,83 @@ const SUBIDA = [
   'teste_aviso_versao', 'teste_versao_servidor',      /* sem isto, ninguém fica sabendo da publicação */
 ];
 
+/* ================================================================
+   OS TRES NIVEIS
+
+   O criterio NAO e "quebra com que frequencia". E outro:
+
+       o que custa se isto quebrar E NINGUEM PERCEBER?
+
+   Um defeito que salta aos olhos na primeira tela e barato: alguem ve e
+   avisa. O caro e o que passa despercebido por semanas, e e esse que
+   precisa de rede embaixo.
+
+   EXTREMO   perde dado, tranca gente do lado de fora, ou faz o sistema
+             mentir numero. Silencioso e caro de desfazer. Roda SEMPRE,
+             por menor que seja a alteracao.
+
+   MEDIANO   quebra visivel, mas atrapalha o trabalho do dia e e cara de
+             achar depois. Roda quando a alteracao encosta no editor.
+
+   NORMAL    aparencia, tokens do painel de desenvolvimento e as suites
+             presas em versoes antigas. Some se quebrar, ninguem perde
+             nada. Roda antes de publicar.
+
+   Os niveis SOMAM: mediano roda o extremo junto, normal roda os tres.
+   ================================================================ */
+const EXTREMO = [
+  'teste_compat_v303',       /* orçamento antigo abrindo errado: silencioso e irreversível */
+  'teste_login_editor',      /* a porta: sessão, papel, troca obrigatória de senha         */
+  'teste_pessoas',           /* renomear leva a senha junto, senão a pessoa fica trancada  */
+  'teste_papel_editor',      /* o * que não pode partir a venda da Dani em duas no relatório */
+  'teste_atividade',         /* a fusão que não pode derrubar o planejamento da semana     */
+  'teste_atividade_servidor',/* a marca de acesso, e o dinheiro que não pode vazar         */
+  'teste_login_admin',       /* a senha de administrador numa máquina nova                 */
+  'teste_freio_servidor',    /* o freio que impede duplicar registro no banco              */
+  'teste_versao_servidor',   /* o servidor serve o arquivo certo: sem isto, nada subiu     */
+];
+const MEDIANO = [
+  'teste_v303_ajustes',      /* o grosso do comportamento do editor            */
+  'teste_v303_correcoes',    /* CEP após o blur, painel x fonte, visualizador  */
+  'teste_cabecalho_v303',    /* as 12 células do cabeçalho, uma a uma          */
+  'teste_arquivar_data',     /* a data de arquivamento e a pasta certa no Drive */
+  'teste_cnpj',              /* máscara, duas fontes, ficha se preenche        */
+  'teste_cores_grupos',      /* cores por grupo: menu, banco e compatibilidade */
+  'teste_filtros_trello',    /* o arquivo que vai para o Trello                */
+  'teste_celular_trello',    /* o mesmo arquivo, num celular de verdade        */
+  'teste_brilho_obs',        /* brilhar e pulsar no arquivo do Trello          */
+  'teste_dropdown_altura',   /* o menu que cortava a lista de dias             */
+  'teste_impressao_cores',   /* a paleta de papel: só no print, e sincronizada */
+  'teste_impressao_escura',  /* o documento que vai para o cliente             */
+  'teste_tabela_cantos',     /* os 4 cantos da tabela, com e sem valores       */
+  'teste_aviso_versao',      /* sem isto, ninguém fica sabendo da publicação   */
+];
+/* NORMAL é o resto do que já rodava: o que sobrar de SUITES depois de tirar
+   os dois primeiros níveis. Escrito assim de propósito — acrescentar uma
+   suíte nova a SUITES não pode deixá-la de fora da bateria por esquecimento. */
+const NORMAL = SUITES.filter(x => !EXTREMO.includes(x) && !MEDIANO.includes(x));
+
 const arg = process.argv.slice(2);
+const MODOS = ['tudo', 'subida', 'extremo', 'mediano', 'normal'];
 let lista = SUITES.slice();
-if (arg.includes('subida')) lista = SUBIDA;
-else if (arg.includes('tudo')) lista = lista.concat(EXTRA, ANTIGAS);
-/* 'subida' e 'tudo' são MODOS, não filtros de nome */
-const filtros = arg.filter(a => a !== 'tudo' && a !== 'subida');
-if (filtros.length) lista = SUITES.concat(EXTRA, ANTIGAS).filter(s => filtros.some(f => s.includes(f)));
+let nivel = 'normal (a bateria de sempre)';
+if (arg.includes('subida')) { lista = SUBIDA; nivel = 'subida'; }
+else if (arg.includes('tudo')) {
+  lista = lista.concat(EXTRA, ANTIGAS); nivel = 'tudo';
+  process.env.FT_COMPAT_TUDO = '1';       /* o varrimento completo só aqui */
+}
+else if (arg.includes('extremo')) { lista = EXTREMO; nivel = 'extremo'; }
+else if (arg.includes('mediano')) { lista = EXTREMO.concat(MEDIANO); nivel = 'extremo + mediano'; }
+else if (arg.includes('normal'))  { lista = EXTREMO.concat(MEDIANO, NORMAL); nivel = 'os tres niveis'; }
+/* os modos são MODOS, não filtros de nome */
+const filtros = arg.filter(a => !MODOS.includes(a));
+if (filtros.length) {
+  lista = SUITES.concat(EXTRA, ANTIGAS).filter(s => filtros.some(f => s.includes(f)));
+  nivel = 'filtro: ' + filtros.join(' ');
+}
+const ondeEsta = n => EXTREMO.includes(n) ? 'EXTREMO'
+                    : MEDIANO.includes(n) ? 'mediano' : 'normal';
+console.log('nivel: ' + nivel + '  ·  ' + lista.length + ' suites\n');
 
 const LIMITE = 3;
 const t0 = Date.now();
@@ -126,7 +202,8 @@ function roda(nome) {
     p.on('close', code => {
       const seg = ((Date.now() - ini) / 1000).toFixed(1);
       resultados.push({ nome, code, seg, saida });
-      process.stdout.write(`${code === 0 ? '  ok ' : 'FALHA'}  ${nome.padEnd(22)} ${seg}s\n`);
+      process.stdout.write(`${code === 0 ? '  ok ' : 'FALHA'}  ${nome.padEnd(26)}`
+        + `${String(seg).padStart(6)}s  ${ondeEsta(nome)}\n`);
       res();
     });
   });
