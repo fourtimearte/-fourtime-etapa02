@@ -35,6 +35,28 @@ export async function abreNavegador(opcoes) {
     await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
     return p;
   };
+
+  /* E O MESMO PARA newContext, QUE FICOU DE FORA POR ANOS.
+
+     O envelope acima só alcança as páginas abertas direto do navegador.
+     Toda suíte que precisa de viewport próprio, de isMobile ou de
+     localStorage separado abre um CONTEXTO e pede a página a ele, e
+     essas escapavam: cada uma voltava a pagar os 12,6 s inteiros.
+
+     Não aparecia porque o sintoma é "o teste demora", e não "o teste
+     falha". Achado ao juntar as suítes do mediano: um bloco de 68 s tinha
+     52 s só disso.
+
+     A rota vai no CONTEXTO, e não na página, para valer também para as
+     páginas que a suíte abrir depois. Rota de página vence rota de
+     contexto, então quem precisa das fontes de verdade (a medida da folha
+     A4) continua podendo servi-las por cima. */
+  const origCtx = b.newContext.bind(b);
+  b.newContext = async (...a) => {
+    const c = await origCtx(...a);
+    await c.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    return c;
+  };
   return b;
 }
 

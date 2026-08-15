@@ -441,7 +441,15 @@ checa('  e o token da equipe nao esta escrito na pagina',
   (await pPorta.content()).includes(S_EQUIPE), false);
 
 await pPorta.fill('#u', 'henrique'); await pPorta.fill('#s', S_ADMIN);
-await pPorta.click('#bt'); await pPorta.waitForTimeout(900);
+await pPorta.click('#bt');
+/* O SINAL E A TELA TROCAR, E NAO 900ms.
+
+   Com a bateria cheia, a resposta do login demorava mais que o prazo fixo
+   e a conferencia da troca obrigatoria media a tela de login ainda no
+   lugar. O sinal e o proprio painel de troca aparecer, ou o editor. */
+await pPorta.waitForFunction(() =>
+  !document.getElementById('fTroca').classList.contains('oculto')
+  || !!document.querySelector('.folha-a4'), null, { timeout: 30000 });
 r = await pPorta.evaluate(() => ({
   pediuTroca: !document.getElementById('fTroca').classList.contains('oculto'),
   sumiuOLogin: document.getElementById('fLogin').classList.contains('oculto'),

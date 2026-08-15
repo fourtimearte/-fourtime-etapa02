@@ -3,7 +3,7 @@
    RODAR — executa as suítes em paralelo e resume.
 
      node rodar.mjs extremo      o que não pode quebrar em silêncio    ~32s
-     node rodar.mjs mediano      + o que atrapalha o trabalho do dia    ~90s
+     node rodar.mjs mediano      + o que atrapalha o trabalho do dia     ~50s
      node rodar.mjs normal       + aparência e versões antigas          140s
      node rodar.mjs              o mesmo que 'normal'
      node rodar.mjs tudo         + Trello/A4 + as 9 antigas             ~3min
@@ -47,8 +47,8 @@ const SUITES = [
   /* v3.311 — Relatório de Atividade */
   'teste_atividade', 'teste_atividade_servidor',
   'teste_aviso_versao', 'teste_versao_servidor',
-  /* v3.313 — as nove do nível extremo, numa suíte só */
-  'teste_extremo',
+  /* v3.313 — os dois primeiros níveis, uma suíte cada */
+  'teste_extremo', 'teste_mediano',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
@@ -148,26 +148,31 @@ const SUBIDA = [
    pagar o preço antigo de novo. */
 const EXTREMO = ['teste_extremo'];
 const ABSORVIDAS = [
+  /* viraram teste_extremo.mjs */
   'teste_compat_v303', 'teste_login_editor', 'teste_pessoas', 'teste_papel_editor',
   'teste_atividade', 'teste_atividade_servidor', 'teste_login_admin',
   'teste_freio_servidor', 'teste_versao_servidor',
+  /* viraram teste_mediano.mjs */
+  'teste_v303_ajustes', 'teste_v303_correcoes', 'teste_cabecalho_v303',
+  'teste_arquivar_data', 'teste_cnpj', 'teste_cores_grupos', 'teste_filtros_trello',
+  'teste_celular_trello', 'teste_brilho_obs', 'teste_dropdown_altura',
+  'teste_impressao_cores', 'teste_impressao_escura', 'teste_tabela_cantos',
+  'teste_aviso_versao',
 ];
-const MEDIANO = [
-  'teste_v303_ajustes',      /* o grosso do comportamento do editor            */
-  'teste_v303_correcoes',    /* CEP após o blur, painel x fonte, visualizador  */
-  'teste_cabecalho_v303',    /* as 12 células do cabeçalho, uma a uma          */
-  'teste_arquivar_data',     /* a data de arquivamento e a pasta certa no Drive */
-  'teste_cnpj',              /* máscara, duas fontes, ficha se preenche        */
-  'teste_cores_grupos',      /* cores por grupo: menu, banco e compatibilidade */
-  'teste_filtros_trello',    /* o arquivo que vai para o Trello                */
-  'teste_celular_trello',    /* o mesmo arquivo, num celular de verdade        */
-  'teste_brilho_obs',        /* brilhar e pulsar no arquivo do Trello          */
-  'teste_dropdown_altura',   /* o menu que cortava a lista de dias             */
-  'teste_impressao_cores',   /* a paleta de papel: só no print, e sincronizada */
-  'teste_impressao_escura',  /* o documento que vai para o cliente             */
-  'teste_tabela_cantos',     /* os 4 cantos da tabela, com e sem valores       */
-  'teste_aviso_versao',      /* sem isto, ninguém fica sabendo da publicação   */
-];
+/* MEDIANO TAMBÉM É UMA SUÍTE SÓ, desde a v3.313.
+
+   Eram catorze arquivos. Contado antes de mexer: 22 aberturas de página de
+   editor, 8 montagens do orçamento de teste e 4 exportações do arquivo do
+   Trello, para fazer o que precisa de 8 páginas, 1 kit e 1 exportação. O
+   que separa uma suíte da outra não é o assunto, é o AMBIENTE (tema, mídia
+   de impressão, largura de celular, localStorage, modo admin), e por isso
+   `teste_mediano.mjs` é dividido por ambiente e não por assunto.
+
+   398 conferências em 32s, contra 14 arquivos e uns 150s.
+
+   Os catorze originais continuam na pasta e rodam por nome, para isolar
+   uma parte quando for preciso. Não entram em modo automático nenhum. */
+const MEDIANO = ['teste_mediano'];
 /* NORMAL é o resto do que já rodava: o que sobrar de SUITES depois de tirar
    os dois primeiros níveis. Escrito assim de propósito — acrescentar uma
    suíte nova a SUITES não pode deixá-la de fora da bateria por esquecimento. */
@@ -194,7 +199,13 @@ const ondeEsta = n => EXTREMO.includes(n) ? 'EXTREMO'
                     : ABSORVIDAS.includes(n) ? 'absorvida' : 'normal';
 console.log('nivel: ' + nivel + '  ·  ' + lista.length + ' suites\n');
 
-const LIMITE = 3;
+/* DOIS DE CADA VEZ, E NAO TRES, DESDE QUE EXTREMO E MEDIANO VIRARAM
+   SUITES UNICAS. Cada uma delas ja abre de tres a seis paginas por dentro;
+   multiplicar isso por tres na fila de fora punha quinze Chromium em dois
+   nucleos, e o que aparecia era leitura tirada no meio de transicao. Os
+   defeitos foram consertados esperando sinal, mas o paralelismo de fora
+   perdeu a razao de ser: quem paraleliza agora sao as proprias suites. */
+const LIMITE = 2;
 const t0 = Date.now();
 const resultados = [];
 let fila = lista.slice();
