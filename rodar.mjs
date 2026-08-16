@@ -49,6 +49,8 @@ const SUITES = [
   'teste_aviso_versao', 'teste_versao_servidor',
   /* v3.313 — os dois primeiros níveis, uma suíte cada */
   'teste_extremo', 'teste_mediano',
+  /* v3.314 — o pacote de DTF e os dois botões de cópia */
+  'teste_dtf',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
@@ -146,7 +148,12 @@ const SUBIDA = [
    (`node rodar.mjs teste_pessoas`), para quando for preciso isolar uma
    parte. Não entram em nenhum modo automático: rodá-los junto seria
    pagar o preço antigo de novo. */
-const EXTREMO = ['teste_extremo'];
+/* O DTF ENTRA NO EXTREMO, e não no mediano, por um motivo só: o que sai
+   daquele botão vira ordem de produção. Um número errado ali não aparece
+   na tela de ninguém — aparece na mesa de corte, com o material já
+   gasto. É a definição de perder dado, só que do lado de fora do
+   editor. São 15 segundos a mais na suíte. */
+const EXTREMO = ['teste_extremo', 'teste_dtf'];
 const ABSORVIDAS = [
   /* viraram teste_extremo.mjs */
   'teste_compat_v303', 'teste_login_editor', 'teste_pessoas', 'teste_papel_editor',

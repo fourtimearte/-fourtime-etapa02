@@ -1,0 +1,477 @@
+{
+ "header": {
+  "cliente": "ARENA CROSS",
+  "cpf": "",
+  "pedido": "PD004155",
+  "envio": "18/08/2026",
+  "vendedor": "Dani",
+  "departamento": "DTF + Silk",
+  "entrega": "FABRICA",
+  "obs": "",
+  "embalagem": "Fardo",
+  "pagamento": "ENTREGA",
+  "contato": ""
+ },
+ "layouts": [
+  {
+   "ref": "FT-010-000M — CAMISETA MASC TRAD",
+   "genero": "masculino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Azul Petróleo",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "P": {
+     "q": "2",
+     "u": "65"
+    },
+    "M": {
+     "q": "12",
+     "u": "65"
+    },
+    "G": {
+     "q": "5",
+     "u": "65"
+    },
+    "GG": {
+     "q": "1",
+     "u": "65"
+    }
+   },
+   "arteId": "arte-1"
+  },
+  {
+   "ref": "FT-010-004F — BABY LOOK",
+   "genero": "feminino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Azul Petróleo",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "PP": {
+     "q": "1",
+     "u": "65"
+    },
+    "P": {
+     "q": "3",
+     "u": "65"
+    },
+    "M": {
+     "q": "5",
+     "u": "65"
+    },
+    "GG": {
+     "q": "1",
+     "u": "65"
+    }
+   },
+   "arteId": "arte-1"
+  },
+  {
+   "ref": "FT-010-000M — CAMISETA MASC TRAD",
+   "genero": "masculino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Azul Petróleo",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "P": {
+     "q": "2",
+     "u": "65"
+    },
+    "M": {
+     "q": "3",
+     "u": "65"
+    },
+    "G": {
+     "q": "4",
+     "u": "65"
+    },
+    "GG": {
+     "q": "2",
+     "u": "65"
+    },
+    "XG": {
+     "q": "1",
+     "u": "65"
+    }
+   },
+   "arteId": "arte-2"
+  },
+  {
+   "ref": "FT-010-004F — BABY LOOK",
+   "genero": "feminino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Azul Petróleo",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "PP": {
+     "q": "4",
+     "u": "65"
+    },
+    "P": {
+     "q": "10",
+     "u": "65"
+    },
+    "M": {
+     "q": "7",
+     "u": "65"
+    },
+    "G": {
+     "q": "1",
+     "u": "65"
+    },
+    "GG": {
+     "q": "2",
+     "u": "65"
+    }
+   },
+   "arteId": "arte-2"
+  },
+  {
+   "ref": "FT-010-008C — CAMISETA INFANTIL UNISSEX",
+   "genero": "infantil",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Azul Petróleo",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "infantil",
+   "tamanhos": {
+    "6A": {
+     "q": "1",
+     "u": "55"
+    },
+    "8A": {
+     "q": "4",
+     "u": "55"
+    },
+    "10A": {
+     "q": "2",
+     "u": "55"
+    },
+    "12A": {
+     "q": "5",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-3"
+  },
+  {
+   "ref": "FT-010-000M — CAMISETA MASC TRAD",
+   "genero": "masculino",
+   "tecidos": [
+    "DRYFIT C/ ELASTANO PROTEÇÃO UV50"
+   ],
+   "cor": "Azul Petróleo",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "P": {
+     "q": "3",
+     "u": "55"
+    },
+    "M": {
+     "q": "1",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-3"
+  },
+  {
+   "ref": "FT-010-004F — BABY LOOK",
+   "genero": "feminino",
+   "tecidos": [
+    "DRYFIT C/ ELASTANO PROTEÇÃO UV50"
+   ],
+   "cor": "Azul Petróleo",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "P": {
+     "q": "3",
+     "u": "55"
+    },
+    "G": {
+     "q": "1",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-3"
+  },
+  {
+   "ref": "FT-010-000M — CAMISETA MASC TRAD",
+   "genero": "masculino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Branco",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "M": {
+     "q": "3",
+     "u": "55"
+    },
+    "G": {
+     "q": "4",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-4"
+  },
+  {
+   "ref": "FT-010-004F — BABY LOOK",
+   "genero": "feminino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Branco",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "M": {
+     "q": "3",
+     "u": "55"
+    },
+    "G": {
+     "q": "2",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-4"
+  },
+  {
+   "ref": "FT-010-000M — CAMISETA MASC TRAD",
+   "genero": "masculino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Preto",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "M": {
+     "q": "1",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-5"
+  },
+  {
+   "ref": "FT-010-000M — CAMISETA MASC TRAD",
+   "genero": "masculino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Preto",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "P": {
+     "q": "1",
+     "u": "55"
+    },
+    "M": {
+     "q": "1",
+     "u": "55"
+    },
+    "G": {
+     "q": "2",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-6"
+  },
+  {
+   "ref": "FT-010-004F — BABY LOOK",
+   "genero": "feminino",
+   "tecidos": [
+    "POLIAMIDA LISA COM ELASTANO"
+   ],
+   "cor": "Preto",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "M": {
+     "q": "2",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-6"
+  },
+  {
+   "ref": "FT-010-000M — CAMISETA MASC TRAD",
+   "genero": "masculino",
+   "tecidos": [
+    "AZUL MARINHO"
+   ],
+   "cor": "Azul Marinho",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "M": {
+     "q": "1",
+     "u": "55"
+    },
+    "G": {
+     "q": "3",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-7"
+  },
+  {
+   "ref": "FT-010-004F — BABY LOOK",
+   "genero": "feminino",
+   "tecidos": [
+    "AZUL MARINHO"
+   ],
+   "cor": "Azul Marinho",
+   "design": [
+    {
+     "tag": "DTF",
+     "cores": []
+    },
+    {
+     "tag": "Silk",
+     "cores": []
+    }
+   ],
+   "grade": "adulto",
+   "tamanhos": {
+    "M": {
+     "q": "2",
+     "u": "55"
+    }
+   },
+   "arteId": "arte-7"
+  }
+ ]
+}
