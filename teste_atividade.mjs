@@ -685,6 +685,125 @@ checa('o departamento chega numa semana ja lida', r.dep, 'Silk + DTF');
 checa('  e aparece na coluna', r.naTela, 'Silk + DTF');
 delete DRIVE.semanas['2026-08-17'];
 
+console.log('\n=== 8e. A SEMANA QUE VIRA NO MEIO DA LEITURA (v3.318) ===');
+/* O DEFEITO DE VERDADE POR TRAS DAS 45.
+   Lido do Drive dele: a semana de 24 a 29 de agosto tinha 45 pedidos, e 32
+   deles tinham entrega E planejamento entre 17 e 21 — a semana ANTERIOR
+   inteira, gravada dentro do arquivo errado. Os 9 salvos em 17-22 eram um
+   subconjunto exato desses 32, salvos cinco minutos antes.
+
+   A causa: atvGera le o Drive em lotes e escreve o parcial em ATV.linhas a
+   cada lote. Trocar de semana e um clique. O que voltava do Drive era da
+   semana ANTIGA e caia por cima da nova, sem erro nenhum na tela.
+
+   Aqui a leitura e feita lenta de proposito e a semana e trocada no meio. */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.semana = '2026-08-17'; });
+poeNoDrive([pedido(21, 17, 100, 100), pedido(22, 18, 200, 0), pedido(23, 19, 150, 150)]);
+let devagar = true;
+await p.route('**/api/ft/atividade-lote', async r => {
+  if (devagar) await new Promise(s => setTimeout(s, 1500));
+  const corpo = JSON.parse(r.request().postData() || '{}');
+  const itens = (corpo.arquivos || []).map(a =>
+    Object.assign({}, DRIVE.conteudo[a.id], { id: a.id, mod: a.mod }))
+    .filter(x => x.pedido !== undefined);
+  await r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, itens, falhas: [] }) });
+});
+r = await p.evaluate(async () => {
+  const promessa = atvGera();                 /* comeca a ler a semana de 17 */
+  await new Promise(r => setTimeout(r, 300));
+  ATV.semana = '2026-08-24';                  /* e a semana vira no meio */
+  ATV.linhas = []; ATV.vistos = {};
+  await promessa;
+  await new Promise(r => setTimeout(r, 300));
+  return { semana: ATV.semana, linhas: ATV.linhas.length,
+           pedidos: ATV.linhas.map(l => l.pedido).sort(),
+           planos: [...new Set(ATV.linhas.map(l => l.plan))].sort() };
+});
+devagar = false;
+console.log('     ' + JSON.stringify(r));
+checa('a semana continua sendo a nova', r.semana, '2026-08-24');
+/* O QUE NAO PODE ACONTECER: a leitura da semana velha terminar e despejar
+   os pedidos dela na semana nova. */
+checa('a leitura antiga nao despeja nada na semana nova', r.linhas, 0);
+checa('  e nenhum planejamento de outra semana sobra', r.planos, []);
+
+console.log('\n=== 8f. UM ARQUIVO GRAVADO COM OUTRA SEMANA DENTRO ===');
+/* A bagunca ja esta gravada no Drive dele. Abrir a semana tem de AVISAR, e
+   gerar tem de LIMPAR: 45 linhas viram 13. */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
+DRIVE.semanas['2026-08-24'] = { semana: '2026-08-24',
+  salvoEm: '2026-08-14T18:32:00.000Z', vistos: {},
+  linhas: [
+    /* as intrusas: entrega E plano na semana anterior, sem tarja nenhuma */
+    { id: 'IDINTR0001xx', pedido: 'PD006001', cliente: 'DA SEMANA DE ANTES 1',
+      entrega: '18/08/2026', plan: '2026-08-18', etapa: 'finalizado',
+      sub: 10, per: 0, total: 10, chegouEm: '' },
+    { id: 'IDINTR0002xx', pedido: 'PD006002', cliente: 'DA SEMANA DE ANTES 2',
+      entrega: '21/08/2026', plan: '2026-08-21', etapa: 'corte',
+      sub: 20, per: 0, total: 20, chegouEm: '' },
+    /* esta e de verdade: entrega dentro de 24 a 29 */
+    { id: 'IDDESTA001xx', pedido: 'PD006003', cliente: 'DESTA SEMANA MESMO',
+      entrega: '25/08/2026', plan: '2026-08-25', etapa: 'corte',
+      sub: 30, per: 0, total: 30, chegouEm: '' }] };
+await p.evaluate(() => { ATV.semana = '2026-08-24'; ATV.linhas = []; ATV.vistos = {}; });
+await p.evaluate(() => atvBuscaSalvo());
+await p.waitForTimeout(700);
+r = await p.evaluate(() => ({ n: ATV.linhas.length, aviso: ATV.aviso,
+  naTela: (document.querySelector('.atv-prog .txt') || {}).textContent || '' }));
+console.log('     ' + JSON.stringify(r));
+checa('abrir a semana traz as tres linhas do arquivo', r.n, 3);
+checa('  e avisa que duas nao sao daqui', r.aviso,
+  '2 pedidos salvos aqui não são desta semana. Clique em Gerar / Atualizar para tirá-los.');
+checa('  com o aviso na tela, e nao so na memoria', r.naTela.indexOf('não são desta semana') >= 0, true);
+poeNoDrive([{ id: 'IDDESTA001xx', pedido: 'PD006003', arquivo: 'DESTA-PD006003.ft',
+  cliente: 'DESTA SEMANA MESMO', vendedor: 'Dani', envio: '25/08/2026', dia: 1,
+  departamento: 'DTF', subPecas: 30, perPecas: 0, total: 30 }]);
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1400);
+r = await p.evaluate(() => ({ n: ATV.linhas.length,
+  pedidos: ATV.linhas.map(l => l.pedido).sort(), aviso: ATV.aviso }));
+console.log('     ' + JSON.stringify(r));
+checa('gerar tira as que nao sao desta semana', r.pedidos, ['PD006003']);
+delete DRIVE.semanas['2026-08-24'];
+
+console.log('\n=== 8g. ORGANIZAR: A PASSAGEM ESCOLHIDA A MAO (v3.318) ===');
+/* Um pedido nao terminado com entrega que AINDA NAO VENCEU nao sobe
+   sozinho: planejar a semana que vem nao pode encher de tarja vermelha o
+   que nem venceu. Mas se a pessoa marcar "Organizar", ele sobe — e sobe
+   SEM tarja, porque nao e atraso nenhum. */
+/* o dia de hoje e FIXADO: sem isso esta secao passaria hoje e falharia na
+   semana que vem, quando 20/08/2026 tivesse virado passado */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.semana = '2026-08-24'; ATV.hojeFixo = '2026-08-16'; });
+DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
+  salvoEm: '2026-08-16T12:00:00.000Z', vistos: {},
+  linhas: [
+    /* entrega 20/08: ainda nao venceu (hoje e 16/08 no relogio do teste) */
+    { id: 'IDNVEN0001xx', pedido: 'PD006010', cliente: 'AINDA NAO VENCEU',
+      entrega: '20/08/2026', plan: '2026-08-20', etapa: 'corte',
+      sub: 10, per: 0, total: 10, chegouEm: '' },
+    /* o mesmo caso, mas marcado a mao para passar */
+    { id: 'IDORGA0001xx', pedido: 'PD006011', cliente: 'MARCADO PARA ORGANIZAR',
+      entrega: '20/08/2026', plan: '2026-08-20', etapa: 'organizar',
+      sub: 20, per: 0, total: 20, chegouEm: '' }] };
+poeNoDrive([]);
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1400);
+r = await p.evaluate(() => {
+  const m = id => { const l = ATV.linhas.find(x => x.id === id);
+    return l ? { plan: l.plan, atrasado: !!l.atrasado, etapa: l.etapa } : null; };
+  return { naoVenceu: m('IDNVEN0001xx'), organizar: m('IDORGA0001xx') };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o que ainda nao venceu NAO sobe sozinho', r.naoVenceu, null);
+checa('o marcado como Organizar sobe para a segunda',
+  r.organizar, { plan: '2026-08-24', atrasado: false, etapa: 'organizar' });
+delete DRIVE.semanas['2026-08-17'];
+await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
+  ATV.sujo = false; ATV.hojeFixo = ''; });
+
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
    quase todas moram na mesma linha da tabela, e o que quebra uma quebra a
@@ -747,14 +866,21 @@ checa('a coluna Departamento entrou no cabecalho', r.cabecalho,
   ['', 'Pedido', 'Nome', 'Departamento', 'Entrega', 'Planejamento',
    'Total', 'Subl.', 'Person.', 'Atualização']);
 checa('  e traz o departamento do orcamento', r.dep, 'DTF + Silk');
-checa('as treze etapas, na ordem pedida', r.etapas,
-  ['Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk', 'Calandra',
-   'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem', 'Atrasado', 'Finalizado']);
+
+
+/* ORGANIZAR entrou na frente de todas na v3.318: ela nao e um posto, e a
+   decisao de levar o pedido para a semana que vem. */
+checa('as catorze etapas, na ordem pedida', r.etapas,
+  ['Organizar', 'Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk',
+   'Calandra', 'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem',
+   'Atrasado', 'Finalizado']);
 /* ATRASADO nao se escolhe: ela acontece. Oferecer o botao criaria duas
-   verdades sobre a mesma linha. */
-checa('  o menu oferece doze, sem Atrasado', r.noMenu,
-  ['Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk', 'Calandra',
-   'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem', 'Finalizado', 'sem etapa']);
+   verdades sobre a mesma linha. Organizar, ao contrario, SO existe se
+   alguem escolher. */
+checa('  o menu oferece treze, sem Atrasado', r.noMenu,
+  ['Organizar', 'Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk',
+   'Calandra', 'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem',
+   'Finalizado', 'sem etapa']);
 checa('a etapa escolhida aparece', [r.chips.V1, r.chips.V2], ['Corte', 'Futurize']);
 checa('  atrasado sem etapa vira Atrasado sozinho', r.chips.V3, 'Atrasado');
 checa('  mas a escolha do operador vence o atraso', r.chips.V4, 'Costura');
@@ -778,6 +904,32 @@ checa('a pastilha tem a mesma folga dos dois lados',
 checa('o submenu conta pela mesma regra da etiqueta', r.lateral.indexOf('Atrasado=1') >= 0, true);
 checa('  e mostra a etapa antiga so porque ainda ha alguem nela',
   r.lateral.indexOf('Separação=1') >= 0, true);
+
+/* A COLUNA TEM DE CABER O MAIOR DEPARTAMENTO QUE EXISTE (v3.318).
+   "DTF + Sublimação" estava sendo cortado. Conferir com o valor mais longo
+   dos sete, na tela E no papel, e o unico jeito de a largura nao voltar a
+   ficar apertada sem ninguem ver. */
+const DEPS = ['DTF + Sublimação', 'Silk + sublimação', 'Sublimação + DTF',
+              'DTF + Silk', 'Bordado', 'Sublimação', 'Silk', 'DTF'];
+const rDep = await p.evaluate(deps => {
+  ATV.linhas = deps.map((d, i) => ({ id: 'W' + i, pedido: 'PD008' + i,
+    cliente: 'CLIENTE ' + i, vendedor: 'Dani', entrega: '18/08/2026',
+    plan: '2026-08-18', etapa: 'corte', departamento: d,
+    sub: 1, per: 1, total: 2, chegouEm: '', novo: false }));
+  atvDesenha();
+  const cortado = e => e.scrollWidth > e.clientWidth + 0.5;
+  const tela = [...document.querySelectorAll('.atv-linha .dep')]
+    .filter(cortado).map(e => e.textContent);
+  atvMontaImpressao();
+  document.body.classList.add('atv-imprimindo');
+  const papel = [...document.querySelectorAll('.atv-folha .atv-tab td.dep')]
+    .filter(cortado).map(e => e.textContent);
+  document.body.classList.remove('atv-imprimindo');
+  atvDesmontaImpressao();
+  return { tela, papel };
+}, DEPS);
+checa('nenhum departamento e cortado na tela', rDep.tela, []);
+checa('  nem no papel', rDep.papel, []);
 
 console.log('\n=== 13b2. O NEGRITO DE VERDADE E O MENU QUE CABE (v3.317) ===');
 /* O NEGRITO QUE NAO APARECIA.
@@ -852,7 +1004,7 @@ r = await p.evaluate(async () => {
   };
 });
 console.log('     ' + JSON.stringify(r));
-checa('o menu abre com as treze escolhas', [r.aberto, r.botoes], [true, 13]);
+checa('o menu abre com as catorze escolhas', [r.aberto, r.botoes], [true, 14]);
 checa('  inteiro dentro da tela', r.dentroDaTela, true);
 checa('  sem nenhum botao recortado', r.recortados, 0);
 checa('  e sem precisar rolar', r.cabeSemRolar, true);
