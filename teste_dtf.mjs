@@ -272,6 +272,53 @@ diz('no papel ele some', await pt.evaluate(() =>
   getComputedStyle(document.querySelector('.lay-modulo .dtf-btn')).display), 'none');
 await pt.emulateMedia({ media: 'screen' });
 
+secao('B. um pedido MISTO: nem todo layout é de DTF');
+/* Foi o que o Henrique reportou na v3.314: o botão aparecia em layout de
+   bordado, que não tem o que mandar para a pipeline de DTF. Aqui os
+   layouts 2, 4 e 6 perdem a tag DTF e ficam só com Bordado. */
+const SEM_DTF = [2, 4, 6];
+const html2 = await pb.evaluate(async ({ est, artes, dequem, semDtf }) => {
+  const doc = {
+    _formato: 'FOURTIME_ORCAMENTO', _versao: 2,
+    header: est.header,
+    layouts: est.layouts.map((L, i) => ({
+      ref: L.ref, genero: L.genero, tecidos: L.tecidos, cor: L.cor,
+      design: semDtf.indexOf(i + 1) >= 0
+        ? [{ tag: 'Bordado', cores: [] }]
+        : L.design,
+      grade: L.grade, tamanhos: L.tamanhos,
+      obs: '', img: artes[dequem[i]], imgComp: true
+    })),
+    anotacoes: [], ajustes: []
+  };
+  aplicaEstado(doc, 'teste.ft', 'teste');
+  await new Promise(r => setTimeout(r, 900));
+  return gerarHTML();
+}, { est, artes: ARTES, dequem: DE_QUEM, semDtf: SEM_DTF });
+writeFileSync('/tmp/dtf-misto.html', html2);
+const { p: pm, ctx: cm } = await pagina(pathToFileURL('/tmp/dtf-misto.html').href, GRAVADOR);
+await pm.waitForTimeout(600);
+const misto = await pm.evaluate(() => ({
+  layouts: document.querySelectorAll('.lay-modulo').length,
+  botoes: document.querySelectorAll('.lay-modulo .dtf-btn').length,
+  /* quais layouts ficaram COM botão, pela ordem no documento */
+  comBotao: [...document.querySelectorAll('.lay-modulo')]
+    .map((m, i) => m.querySelector('.dtf-btn') ? i + 1 : 0).filter(Boolean)
+}));
+diz('os catorze layouts continuam lá', misto.layouts, 14);
+diz('só os onze de DTF ganham botão', misto.botoes, 11);
+diz('e são exatamente esses', misto.comBotao, [1, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14]);
+await pm.evaluate(() => { window.__copiado = null; });
+await pm.click('#ftFiltros .dtf-btn');
+await pm.waitForFunction(() => !!window.__copiado);
+const mistoTudo = JSON.parse(await pm.evaluate(() => window.__copiado));
+diz('o botão do pedido também só leva os de DTF',
+  mistoTudo.layouts.map(L => L.n), [1, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14]);
+diz('o total do pedido continua contando os catorze', mistoTudo.total.layoutsPedido, 14);
+diz('e as 111 peças também', mistoTudo.total.pecasPedido, 111);
+diz('mas o universo de DTF encolheu', mistoTudo.total.pecas, 111 - 10 - 24 - 4);
+await cm.close();
+
 secao('B. o arquivo COM valores não leva botão');
 const comValor = await pb.evaluate(() => {
   const b = document.body;

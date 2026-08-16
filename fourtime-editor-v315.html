@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.314';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.315';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -15446,11 +15446,19 @@ function dtfEstadoLeve(){
 }
 
 /* o que viaja dentro do arquivo exportado: o pedido inteiro e cada layout
-   por separado, já prontos. Nada aqui carrega imagem. */
+   por separado, já prontos. Nada aqui carrega imagem.
+
+   SÓ OS LAYOUTS COM A TAG DTF ganham pacote próprio (v3.315, a pedido).
+   Um layout de bordado não tem o que mandar para a pipeline de DTF, e um
+   botão que copia algo inútil é pior que botão nenhum: ele convida ao
+   erro. Sem pacote, o runtime não desenha o botão. */
 function dtfDados(){
   const est=dtfEstadoLeve();
   const porLayout={};
-  est.layouts.forEach((_,i)=>{ porLayout[i+1]=dtfPacote(est,i+1); });
+  est.layouts.forEach((L,i)=>{
+    if(!(L.design||[]).some(d=>d.tag==='DTF'))return;
+    porLayout[i+1]=dtfPacote(est,i+1);
+  });
   return {tudo:dtfPacote(est),layout:porLayout};
 }
 

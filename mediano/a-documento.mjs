@@ -899,7 +899,14 @@ export async function roda(F) {
     await new Promise(s => setTimeout(s, 120));
     /* escolher uma cor de dentro do grupo */
     const g = [...m.querySelectorAll('.cor-grupo')].find(x => x.dataset.g === 'VD');
-    g.querySelector('.cor-grupo-cab').click();
+    /* GARANTE ABERTO, e nao clica no cabecalho as cegas.
+       O cabecalho ALTERNA. A busca por "musgo" logo acima abre o grupo VD
+       sozinha (e outra conferencia cobra isso), e limpar a busca nem sempre
+       o fecha de volta. Quando ele sobrava aberto, este clique FECHAVA, e a
+       suite falhava com abriuGrupo=false uma vez a cada tantas rodadas.
+       Nao era o editor: era o teste supondo um estado que ele mesmo tinha
+       mexido tres linhas antes. */
+    if (!g.classList.contains('aberto')) g.querySelector('.cor-grupo-cab').click();
     await new Promise(s => setTimeout(s, 100));
     o.abriuGrupo = g.classList.contains('aberto');
     [...g.querySelectorAll('.cor-item')].find(i => i.dataset.nome === 'Verde Musgo').click();

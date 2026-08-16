@@ -317,6 +317,17 @@ fila.push(async () => {
     botao: document.querySelector('#ftLoginCorpo #ftSyncBtn')?.textContent || '',
     papel: document.querySelector('#ftLoginCorpo .bd-sync-papel')?.textContent || '',
     aberto: document.getElementById('ftLoginFundo').classList.contains('on') }));
+  /* ESPERA O SERVIDOR RESPONDER, e nao um relogio.
+     Cada Enter aqui e uma ida de verdade ao uvicorn local. As esperas fixas
+     de 600 e 900 ms davam conta sozinhas, mas na bateria (duas suites de
+     uma vez, mais o navegador) a ida passava disso e a suite falhava com
+     ehAdmin=false, sempre so na linha do sucesso. O sinal honesto e o
+     proprio FT_SYNC.ehAdmin virar. Se ele nao virar, o tempo estoura e a
+     conferencia falha dizendo exatamente o que viu. */
+  const esperaAdmin = async (v, ms = 8000) => {
+    try { await p.waitForFunction(q => FT_SYNC.ehAdmin === q, v, { timeout: ms }); }
+    catch (erro) { /* segue e deixa a conferencia mostrar o estado real */ }
+  };
   const digita = async txt => {
     await p.click('#ftLoginCorpo #ftSyncAdmin');
     await p.evaluate(() => { document.querySelector('#ftLoginCorpo #ftSyncAdmin').value = ''; });
@@ -346,7 +357,8 @@ fila.push(async () => {
   diz('  e a senha errada NAO fica no localStorage', e.gravado, '');
   diz('  o modal continua aberto para tentar de novo', e.aberto, true);
 
-  await digita(SENHA_CERTA); await p.keyboard.press('Enter'); await p.waitForTimeout(600);
+  await digita(SENHA_CERTA); await p.keyboard.press('Enter');
+  await esperaAdmin(true); await p.waitForTimeout(120);
   e = await estado();
   diz('a senha certa entra', e.ehAdmin, true);
   diz('  e diz que entrou', e.msg, 'Entrou como administrador.');
@@ -357,7 +369,8 @@ fila.push(async () => {
   diz('  o modal se fecha sozinho', (await estado()).aberto, false);
 
   await abre();
-  await p.click('#ftLoginCorpo #ftSyncBtn'); await p.waitForTimeout(400);
+  await p.click('#ftLoginCorpo #ftSyncBtn');
+  await esperaAdmin(false); await p.waitForTimeout(120);
   e = await estado();
   diz('sair deixa de ser admin', e.ehAdmin, false);
   diz('  a senha sai do localStorage', e.gravado, '');
@@ -389,7 +402,8 @@ fila.push(async () => {
 
   /* o botao ao lado nasce escrito "Conectado" e o trabalho dele e
      DESCONECTAR: quem da Enter esperando entrar nao pode acabar saindo */
-  await digita(SENHA_CERTA); await p.keyboard.press('Enter'); await p.waitForTimeout(900);
+  await digita(SENHA_CERTA); await p.keyboard.press('Enter');
+  await esperaAdmin(true); await p.waitForTimeout(120);
   e = await estado();
   diz('o Enter entra', e.ehAdmin, true);
   diz('  e a conexao continua de pe', e.on, true);

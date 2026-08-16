@@ -306,6 +306,19 @@ export async function roda(F) {
 
   /* ---------------------------------------------------------------- */
   F.secao('9. COM / SEM VALORES nao derruba o cabecalho');
+  /* ESPERA A REPAGINACAO TERMINAR, e nao so PARAR DE MUDAR.
+     Uma folha recem-criada existe por um instante sem o .folha-topo: o
+     cabecalho e montado logo depois dela. O assenta() so cobra duas
+     leituras iguais seguidas, e sob a carga da bateria (duas suites de uma
+     vez) esse instante durou mais que os 120 ms entre as duas leituras.
+     Resultado: a suite falhava aqui uma vez a cada tantas rodadas, sempre
+     so nesta linha, com as duas seguintes passando.
+     Cabecalho em toda folha 2+ E a condicao de documento pronto. Se ela
+     nunca chegar, ai sim e defeito, e o tempo estoura dizendo isso. */
+  await p.waitForFunction(() => {
+    const fs = [...document.querySelectorAll('.folha-a4')];
+    return fs.slice(1).every(f => !!f.querySelector('.folha-topo'));
+  }, null, { timeout: 15000 });
   const antes = await F.assenta(p, SINAL);
   const depois = await trocaDinheiro();
   const voltou = await trocaDinheiro();                 /* devolve o modo original */
