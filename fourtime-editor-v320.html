@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.319';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.320';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -21105,6 +21105,51 @@ function formataPedido(bruto){
   .atv-chip.velha{border-style:dashed;}
   body.atv-so-olha .atv-chip{cursor:default;}
 
+  /* ==================================================================
+     O AVISO DE PEDIDO NOVO, no canto de baixo à direita
+
+     Ele existe porque abrir a semana e ver o planejamento salvo não diz
+     NADA sobre o que chegou ao Drive desde a última leitura. Quem abre
+     acha que está vendo a semana inteira, e pode estar vendo a semana de
+     ontem. A pergunta "falta alguém aqui?" era respondida só clicando em
+     Gerar e esperando; agora ela é respondida na hora de abrir.
+
+     Fica no canto e não no meio da tela: é informação, não é decisão a
+     tomar agora. O X fecha, e o botão faz a única coisa que resolve.
+     ================================================================== */
+  .atv-notif{
+    position:fixed;right:18px;bottom:18px;z-index:9750;width:290px;
+    background:var(--ft-superficie);border:1px solid var(--ft-borda);
+    border-left:3px solid var(--atv-novo,#115E59);
+    border-radius:12px;padding:13px 15px 14px;
+    box-shadow:0 14px 38px rgba(16,20,26,.18);
+    font-family:var(--ft-fonte-ui,inherit);
+    animation:atvNotifEntra .26s cubic-bezier(.16,1,.3,1);
+  }
+  @keyframes atvNotifEntra{
+    from{opacity:0;transform:translateY(10px) scale(.98);}
+    to{opacity:1;transform:none;}
+  }
+  .atv-notif-tit{font-size:13px;font-weight:700;color:var(--ft-preto);
+    padding-right:20px;line-height:1.3;}
+  .atv-notif-txt{margin-top:4px;font-size:11.5px;color:var(--ft-cinza-70);line-height:1.45;}
+  .atv-notif-bt{
+    margin-top:11px;width:100%;display:inline-flex;align-items:center;justify-content:center;
+    gap:7px;padding:8px 12px;border-radius:9px;border:1px solid var(--ft-vermelho);
+    background:var(--ft-vermelho);color:#fff;font:600 12.5px var(--ft-fonte-ui,inherit);
+    cursor:pointer;
+  }
+  .atv-notif-bt:hover{filter:brightness(1.06);}
+  .atv-notif-bt svg{width:14px;height:14px;fill:none;stroke:currentColor;
+    stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .atv-notif-x{
+    position:absolute;top:8px;right:8px;width:22px;height:22px;border:0;background:none;
+    border-radius:6px;color:var(--ft-cinza-40);cursor:pointer;display:grid;place-items:center;
+  }
+  .atv-notif-x:hover{background:var(--ft-hover);color:var(--ft-preto);}
+  .atv-notif-x svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;}
+  @media print{ .atv-notif{display:none !important;} }
+
   /* menu de etapas */
   .atv-menu{
     position:fixed;z-index:9800;display:none;background:var(--ft-menu-bg,#fff);
@@ -21364,6 +21409,18 @@ function formataPedido(bruto){
 </style>
 
 <div class="atv-menu" id="atvMenuEtapa"></div>
+
+<div class="atv-notif" id="atvNotif" hidden>
+  <button class="atv-notif-x" id="atvNotifX" type="button" title="Fechar">
+    <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+  </button>
+  <div class="atv-notif-tit" id="atvNotifTit"></div>
+  <div class="atv-notif-txt" id="atvNotifTxt"></div>
+  <button class="atv-notif-bt" id="atvNotifBt" type="button">
+    <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
+    Gerar / Atualizar
+  </button>
+</div>
 
 <script>
 /* ==================================================================
@@ -21890,13 +21947,122 @@ function atvAlternar(abrir){
        planejamento, e não uma tela vazia com um botão. Ler o Drive inteiro
        é que fica para o botão. */
     if(!ATV.linhas.length&&!ATV.carregando)atvBuscaSalvo();
+    else atvConfere();
   }else{
     pg.hidden=true;
     if(area)area.style.display='';
+    atvNotifFecha();
   }
   if(typeof ftAtualizaBarraAbas==='function')ftAtualizaBarraAbas();
 }
 window.atvAlternar=atvAlternar;
+
+/* ==================================================================
+   A CHECAGEM BÁSICA: falta alguém nesta semana?
+
+   Em dois passos, e o segundo só acontece quando é barato.
+
+   1. A LISTA, sem abrir arquivo nenhum. O `atividade-lista` devolve id,
+      nome e modifiedTime dos orçamentos dos meses que interessam. Cruzando
+      com o `vistos` que veio do arquivo da semana, sai a conta de quantos
+      NUNCA foram lidos ou mudaram desde a última leitura. Isso é uma
+      chamada por mês e não abre nada.
+
+   2. QUAIS DELES SÃO DESTA SEMANA. O nome do arquivo traz a data em que o
+      orçamento foi FECHADO, e não a de entrega, então o passo 1 não
+      consegue dizer de que semana cada um é. Quando os não lidos cabem num
+      lote só (40), vale abrir esse lote e responder com precisão: "3
+      pedidos novos desta semana". Quando são muitos (a primeira leitura de
+      um mês), o aviso diz o que sabe, sem inventar: "N orçamentos ainda
+      não lidos".
+
+   O aviso não aparece quando não há nada a ler. Silêncio é a resposta
+   certa para "está tudo em dia".
+   ================================================================== */
+async function atvConfere(){
+  if(typeof FT_SYNC!=='object'||!FT_SYNC.url)return;
+  if(ATV.carregando)return;
+  const _sem=ATV.semana;
+  const minha=()=>ATV.semana===_sem&&atvAberto;
+  try{
+    /* 1. a lista, sem abrir nada */
+    const vistos=ATV.vistos||{};
+    const jaNaFila=new Set(), naoLidos=[];
+    for(const m of atvMesesAVarrer()){
+      const d=await atvPega('/api/ft/atividade-lista?ano='+m.ano+'&mes='+m.mes);
+      if(!minha())return;
+      (d.arquivos||[]).forEach(a=>{
+        if(jaNaFila.has(a.id))return;
+        jaNaFila.add(a.id);
+        if(vistos[a.id]!==(a.mod||''))naoLidos.push(a);
+      });
+    }
+    if(!naoLidos.length){ atvNotifFecha(); return; }
+
+    /* 2. só quando cabe num lote: aí a resposta é exata */
+    const LOTE=40;
+    if(naoLidos.length<=LOTE){
+      const seg=atvSeg(), fim=atvFim();
+      const naTela=new Set(ATV.linhas.map(l=>l.id));
+      let d={};
+      try{
+        d=await atvPega('/api/ft/atividade-lote',{method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({arquivos:naoLidos})});
+      }catch(e){ d={}; }
+      if(!minha())return;
+      if(d.itens){
+        const desta=(d.itens||[]).filter(it=>{
+          const ent=atvDeBR(it.envio);
+          return !!ent&&ent>=seg&&ent<=fim&&!naTela.has(it.id);
+        });
+        if(!desta.length){
+          /* mudou coisa, mas nada que entre nesta semana. Vale avisar
+             assim mesmo: um orçamento remarcado PARA FORA da semana
+             também muda o planejamento, e quem decide é a pessoa. */
+          atvNotifAbre(naoLidos.length+(naoLidos.length===1
+            ? ' orçamento mudou no Drive':' orçamentos mudaram no Drive'),
+            'Nenhum deles cai nesta semana, mas a leitura está atrasada.');
+          return;
+        }
+        const n=desta.length;
+        const pecas=desta.reduce((a,it)=>a+(+it.total||0),0);
+        atvNotifAbre(n===1?'1 pedido novo nesta semana':n+' pedidos novos nesta semana',
+          (pecas?(pecas.toLocaleString('pt-BR')+(pecas===1?' peça':' peças')+' que ainda não estão no planejamento. ')
+                :'Eles ainda não estão no planejamento. ')
+          +'Gere para trazê-los.');
+        return;
+      }
+    }
+    /* muitos, ou o lote falhou: diz o que sabe, e não mais */
+    atvNotifAbre(naoLidos.length+(naoLidos.length===1
+      ? ' orçamento ainda não foi lido':' orçamentos ainda não foram lidos'),
+      'Pode haver pedidos desta semana entre eles.');
+  }catch(e){ /* a checagem é um extra: falhar nela não pode atrapalhar */ }
+}
+window.atvConfere=atvConfere;
+
+function atvNotifAbre(tit,txt){
+  const cx=document.getElementById('atvNotif');
+  if(!cx||!atvAberto)return;
+  document.getElementById('atvNotifTit').textContent=tit;
+  document.getElementById('atvNotifTxt').textContent=txt;
+  cx.hidden=false;
+}
+function atvNotifFecha(){
+  const cx=document.getElementById('atvNotif');
+  if(cx)cx.hidden=true;
+}
+window.atvNotifFecha=atvNotifFecha;
+(function ligaNotif(){
+  const x=document.getElementById('atvNotifX');
+  const bt=document.getElementById('atvNotifBt');
+  if(x)x.addEventListener('click',atvNotifFecha);
+  if(bt)bt.addEventListener('click',()=>{
+    atvNotifFecha();
+    if(typeof atvGera==='function')atvGera();
+  });
+})();
 
 function atvSemanaNoPainel(){
   const t=document.getElementById('atvSemTit');
@@ -21912,6 +22078,7 @@ function atvTrocaSemana(passos){
   if(ATV.sujo&&!confirm('Há alterações não salvas nesta semana. Trocar de semana perde o que não foi gravado. Continuar?'))return;
   ATV.semana=atvISO(atvMais(atvSeg(),passos*7));
   ATV.linhas=[]; ATV.vistos={}; ATV.salvoEm=''; ATV.sujo=false; ATV.aviso='';
+  atvNotifFecha();          /* o aviso era da semana que acabou de sair */
   atvSemanaNoPainel();
   atvDesenha();
   atvBuscaSalvo();
@@ -21952,6 +22119,12 @@ async function atvBuscaSalvo(){
         ? ' pedido salvo aqui não é desta semana. Clique em Gerar / Atualizar para tirá-lo.'
         : ' pedidos salvos aqui não são desta semana. Clique em Gerar / Atualizar para tirá-los.');
       atvDesenha();
+      /* só agora dá para conferir: a checagem cruza com o `vistos` que
+         veio dentro deste arquivo, e antes dele não havia com o que cruzar */
+      atvConfere();
+    }else{
+      /* semana sem arquivo salvo: tudo o que estiver no Drive é novidade */
+      atvConfere();
     }
   }catch(e){ /* sem salvo é o estado normal de uma semana nova */ }
 }
@@ -22184,6 +22357,7 @@ async function atvGera(){
     ATV.linhas=[...porId.values()];
     atvMarcaNovos(marco);
     ATV.existe=true;
+    atvNotifFecha();          /* acabou de ler: não há mais o que avisar */
     const novos=ATV.linhas.filter(l=>l.novo).length;
     if(novos)ATV.sujo=true;
     /* ftStatus chama SUCESSO, e não ok. Escrito errado, o aviso nunca

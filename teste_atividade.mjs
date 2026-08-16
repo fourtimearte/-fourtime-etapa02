@@ -912,6 +912,92 @@ delete DRIVE.semanas['2026-08-31'];
 await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
   ATV.sujo = false; ATV.hojeFixo = ''; });
 
+console.log('\n=== 8j. O AVISO DE PEDIDO NOVO AO ABRIR A SEMANA (v3.320) ===');
+/* Abrir a semana e ver o planejamento salvo nao diz nada sobre o que
+   chegou ao Drive desde a ultima leitura. Quem abre acha que esta vendo a
+   semana inteira e pode estar vendo a de ontem.
+
+   A checagem e em dois passos: a LISTA (barata, nao abre arquivo) diz
+   quantos nunca foram lidos; se couberem num lote so, um lote diz QUAIS
+   deles caem nesta semana. */
+const NOTIF = () => p.evaluate(() => {
+  const cx = document.getElementById('atvNotif');
+  return { visivel: !!cx && !cx.hidden,
+           tit: document.getElementById('atvNotifTit').textContent,
+           txt: document.getElementById('atvNotifTxt').textContent,
+           canto: cx ? getComputedStyle(cx).position + '/' + getComputedStyle(cx).right
+                        + '/' + getComputedStyle(cx).bottom : '' };
+});
+
+/* a semana ja tem um planejamento salvo, com UM arquivo ja lido */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.semana = '2026-08-17'; ATV.hojeFixo = '2026-08-16'; });
+/* a semana anterior sai de cena: aqui o assunto e so o aviso */
+delete DRIVE.semanas['2026-08-10'];
+DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
+  salvoEm: '2026-08-16T10:00:00.000Z', vistos: { IDLIDO0001xx: 'm1' },
+  linhas: [{ id: 'IDLIDO0001xx', pedido: 'PD009201', cliente: 'JA ESTAVA',
+             entrega: '18/08/2026', plan: '2026-08-18', etapa: 'corte',
+             departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '' }] };
+/* no Drive: o que ja foi lido, mais dois novos DESTA semana e um de outra */
+poeNoDrive([
+  { id: 'IDLIDO0001xx', pedido: 'PD009201', arquivo: 'A.ft', cliente: 'JA ESTAVA',
+    vendedor: 'Dani', envio: '18/08/2026', dia: 1, subPecas: 5, perPecas: 0, total: 5 },
+  { id: 'IDNOVA0001xx', pedido: 'PD009202', arquivo: 'B.ft', cliente: 'NOVO 1',
+    vendedor: 'Dani', envio: '19/08/2026', dia: 1, subPecas: 30, perPecas: 0, total: 30 },
+  { id: 'IDNOVA0002xx', pedido: 'PD009203', arquivo: 'C.ft', cliente: 'NOVO 2',
+    vendedor: 'Dani', envio: '21/08/2026', dia: 1, subPecas: 12, perPecas: 0, total: 12 },
+  { id: 'IDOUTR0001xx', pedido: 'PD009204', arquivo: 'D.ft', cliente: 'DE OUTRA SEMANA',
+    vendedor: 'Dani', envio: '02/09/2026', dia: 1, subPecas: 99, perPecas: 0, total: 99 }]);
+DRIVE.arquivos = DRIVE.arquivos.map(a =>
+  a.id === 'IDLIDO0001xx' ? { ...a, mod: 'm1' } : a);   /* esse ja foi lido */
+await p.evaluate(() => atvBuscaSalvo());
+await p.waitForTimeout(1500);
+r = await NOTIF();
+console.log('     ' + JSON.stringify(r));
+checa('o aviso aparece ao abrir a semana', r.visivel, true);
+/* o de 02/09 nao conta: ele nao e desta semana */
+checa('  e conta so os desta semana', r.tit, '2 pedidos novos nesta semana');
+checa('  dizendo quantas pecas sao', r.txt.indexOf('42 peças') === 0, true);
+checa('  no canto de baixo a direita', r.canto, 'fixed/18px/18px');
+
+/* o botao do aviso E o Gerar: clicar nele tem de trazer os dois */
+await p.click('#atvNotifBt');
+await p.waitForTimeout(1600);
+r = await p.evaluate(() => ({ linhas: ATV.linhas.length,
+  pedidos: ATV.linhas.map(l => l.pedido).sort() }));
+console.log('     depois do botao: ' + JSON.stringify(r));
+checa('o botao do aviso gera de verdade', r.pedidos,
+  ['PD009201', 'PD009202', 'PD009203']);
+checa('  e o aviso some depois de ler', (await NOTIF()).visivel, false);
+
+/* nada novo no Drive: silencio e a resposta certa */
+await p.evaluate(() => { ATV.sujo = false; });
+await p.evaluate(() => atvConfere());
+await p.waitForTimeout(900);
+checa('com tudo lido, o aviso nao aparece', (await NOTIF()).visivel, false);
+
+/* o X fecha */
+await p.evaluate(() => atvNotifAbre('teste', 'teste'));
+await p.click('#atvNotifX');
+checa('o X fecha o aviso', (await NOTIF()).visivel, false);
+
+/* TROCAR DE SEMANA FECHA O AVISO NA HORA.
+   Conferido SEM espera de proposito: a semana nova faz a checagem dela
+   sozinha e pode abrir um aviso proprio um instante depois, que e o certo.
+   O que nao pode e o aviso da semana ANTERIOR continuar na tela enquanto
+   isso, dizendo de pedidos que nao sao mais os daquela semana. */
+const aindaLa = await p.evaluate(() => {
+  atvNotifAbre('sobra', 'da semana de antes');
+  atvTrocaSemana(1);
+  const cx = document.getElementById('atvNotif');
+  return !cx.hidden;
+});
+checa('trocar de semana fecha o aviso da anterior na hora', aindaLa, false);
+delete DRIVE.semanas['2026-08-17'];
+await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
+  ATV.sujo = false; ATV.hojeFixo = ''; atvNotifFecha(); });
+
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
    quase todas moram na mesma linha da tabela, e o que quebra uma quebra a
