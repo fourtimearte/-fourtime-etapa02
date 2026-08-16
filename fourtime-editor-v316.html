@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.315';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.316';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -21021,12 +21021,18 @@ function formataPedido(bruto){
   .atv-lista{padding:2px 0;min-height:14px;}
   .atv-vazio{padding:9px 13px;font-size:11.5px;color:#B9BEC6;font-style:italic;}
 
-  .atv-cols{26px 96px minmax(120px,1fr) 78px 96px 58px 62px 74px 150px;}
+  /* A COLUNA DE DEPARTAMENTO ENTROU AQUI (v3.316).
+     Ela cabe porque o Nome cedeu: é o único campo que aguenta encolher sem
+     virar sigla, e o title= devolve o inteiro no passar do mouse. */
   .atv-linha,.atv-cab-lista{
     display:grid;
-    grid-template-columns:26px 96px minmax(120px,1fr) 78px 96px 58px 62px 74px 150px;
-    align-items:center;gap:9px;padding:4px 13px;font-size:12px;
+    grid-template-columns:26px 92px minmax(104px,1fr) 96px 74px 88px 52px 52px 56px 138px;
+    align-items:stretch;gap:9px;padding:4px 13px;font-size:12px;
   }
+  /* os itens continuam centrados: quem estica é a CÉLULA, para o trilho
+     vertical das colunas de número ir de borda a borda da linha */
+  .atv-linha>*,.atv-cab-lista>*{display:flex;align-items:center;min-width:0;}
+  .atv-linha>.n,.atv-cab-lista>.n{justify-content:flex-end;}
   .atv-cab-lista{
     background:var(--ft-superficie);border:1px solid var(--ft-borda);border-radius:10px;
     margin-bottom:8px;padding:7px 13px;font-size:9.5px;font-weight:700;
@@ -21040,8 +21046,21 @@ function formataPedido(bruto){
     font-size:11.5px;font-variant-numeric:tabular-nums;}
   .atv-linha .n,.atv-cab-lista .n{text-align:right;}
   .atv-linha .nome{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ft-preto);}
+  .atv-linha .dep{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ft-cinza-70);}
+  /* NEGRITO onde a decisão mora (v3.316, a pedido): o número do pedido e o
+     total de peças são as duas colunas que a produção procura primeiro. */
   .atv-linha .tot{font-weight:700;}
+  .atv-linha .ped{font-weight:700;color:var(--ft-preto);}
+  /* PLANEJAMENTO QUE MUDOU DE DATA: vermelho e negrito. Não é enfeite —
+     é a marca de que alguém decidiu contra a data de envio do orçamento. */
+  .atv-linha .plan.mudou{color:var(--ft-vermelho);font-weight:700;}
   .atv-linha .vazio{color:#B9BEC6;}
+  /* TRILHOS VERTICAIS, as mesmas cores do relatório de pedidos: eles abrem
+     o bloco de números sem tingir fundo nenhum, que competiria com o
+     vermelho do planejamento movido. */
+  .atv-linha .tr-t,.atv-cab-lista .tr-t{box-shadow:inset 2px 0 0 #F0C3C5;padding-left:7px;}
+  .atv-linha .tr-s,.atv-cab-lista .tr-s{box-shadow:inset 2px 0 0 #BBD3F2;padding-left:7px;}
+  .atv-linha .tr-p,.atv-cab-lista .tr-p{box-shadow:inset 2px 0 0 #F0DCB6;padding-left:7px;}
   /* a marca do que chegou depois do último salvamento */
   .atv-linha.novo{background:var(--atv-novo-bg);box-shadow:inset 3px 0 0 var(--atv-novo);}
   .atv-linha.novo .ped{color:var(--atv-novo);font-weight:700;}
@@ -21058,15 +21077,32 @@ function formataPedido(bruto){
   body.atv-so-olha .atv-puxador{cursor:default;color:#DDE1E6;}
   body.atv-so-olha .atv-puxador:hover{background:none;color:#DDE1E6;}
 
+  /* A PÍLULA SEM O PONTO (v3.316).
+
+     Medido, e não achado: com o ponto, o texto ficava a 21px da borda
+     esquerda e a 10px da direita, em TODAS as etiquetas. O "sem etapa",
+     que nunca teve ponto, media 10 e 10 — era ele, ao lado das outras, que
+     denunciava o desalinhamento. Os 11px de diferença eram o ponto (5px)
+     mais o vão até o texto (6px), e nada do lado direito compensava.
+
+     Podia-se equilibrar aumentando o recuo da direita, mas isso engorda a
+     pílula para pagar por um enfeite: o ponto repetia uma cor que a borda,
+     o texto e o fundo já diziam. Tirando ele, os dois lados ficam em 9px
+     por construção, e sobram 11px de texto — o suficiente para "Impressão
+     sublimação" caber inteiro, que antes era cortado com reticências.
+
+     No submenu e no menu de escolha o ponto FICA: lá ele é o único a
+     carregar a cor. */
   .atv-chip{
-    display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:99px;
+    display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:99px;
     font-size:10.5px;font-weight:600;background:var(--tg-bg);color:var(--tg-tx);
     border:1px solid var(--tg);white-space:nowrap;cursor:pointer;max-width:100%;
   }
-  .atv-chip::before{content:'';width:5px;height:5px;border-radius:99px;background:var(--tg);flex:0 0 auto;}
   .atv-chip span{overflow:hidden;text-overflow:ellipsis;}
   .atv-chip.sem{background:none;border:1px dashed var(--ft-borda);color:#B9BEC6;}
-  .atv-chip.sem::before{display:none;}
+  /* etapa de arquivo antigo, que saiu da lista: continua legível, e o
+     tracejado diz que ela não é mais uma escolha válida */
+  .atv-chip.velha{border-style:dashed;}
   body.atv-so-olha .atv-chip{cursor:default;}
 
   /* menu de etapas */
@@ -21171,31 +21207,68 @@ function formataPedido(bruto){
   }
   .atv-folha:last-child{page-break-after:auto;break-after:auto;}
   .atv-folha-corpo{flex:1;min-height:0;display:flex;flex-direction:column;}
-  .atv-f-topo{display:flex;align-items:flex-end;gap:14px;padding-bottom:6px;
+  /* O TOPO, ALINHADO PELO CENTRO E NAO PELO PE (v3.316).
+     Com align-items:flex-end os quatro resumos se alinhavam pela base, e o
+     de Saturacao, que tem uma barra a mais, empurrava o proprio rotulo
+     2,3px para baixo dos outros tres. Era esse degrau que aparecia
+     impresso. Agora os resumos sao cartoes de altura igual numa grade. */
+  .atv-f-topo{display:flex;align-items:center;gap:14px;padding-bottom:6px;
     border-bottom:1.5px solid #C6161B;margin-bottom:7px;}
-  .atv-f-marca{font-size:15px;font-weight:700;letter-spacing:.14em;color:#C6161B;line-height:1;}
+  /* a logo no lugar do nome escrito: e a mesma marca do orcamento, na
+     versao de texto escuro, porque a folha e sempre branca */
+  .atv-f-logo{height:15px;width:auto;display:block;flex:0 0 auto;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .atv-f-tit{flex:1;line-height:1.2;}
   .atv-f-tit h3{margin:0;font-size:13px;font-weight:700;letter-spacing:-.01em;}
   .atv-f-tit p{margin:1px 0 0;font-size:9.5px;color:#6B7280;}
-  .atv-f-res{display:flex;gap:13px;align-items:flex-end;}
-  .atv-f-res .cx{text-align:right;line-height:1.15;}
-  .atv-f-res .r{font-size:7px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6B7280;}
-  .atv-f-res .v{font-family:var(--ft-fonte-mono,monospace);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;}
-  .atv-f-res .pe{font-size:6.8px;color:#8A93A0;margin-top:0;white-space:nowrap;}
+  .atv-f-res{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(78px,auto);
+    gap:6px;align-items:stretch;}
+  .atv-f-res .cx{
+    display:flex;flex-direction:column;justify-content:flex-start;
+    text-align:right;line-height:1.15;
+    border:1px solid #E4E8ED;border-radius:5px;background:#F6F8FA;
+    padding:3px 6px 3.5px;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  }
+  .atv-f-res .r{font-size:6.6px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5D6775;}
+  .atv-f-res .v{font-family:var(--ft-fonte-mono,monospace);font-size:13px;font-weight:700;
+    font-variant-numeric:tabular-nums;line-height:1.1;margin-top:1px;}
+  /* a terceira linha existe em TODOS os cartoes, mesmo quando so carrega a
+     barra: e ela que faz os quatro terem a mesma altura por construcao */
+  .atv-f-res .pe{font-size:6.8px;color:#8A93A0;margin-top:auto;padding-top:1.5px;
+    white-space:nowrap;min-height:8px;display:flex;align-items:center;justify-content:flex-end;}
+  /* as mesmas faixas de cor do relatorio de pedidos */
+  .atv-f-res .cx.c-pec{border-left:2.5px solid #0E7C7B;}
+  .atv-f-res .cx.c-cap{border-left:2.5px solid #1D6FE0;}
+  .atv-f-res .cx.c-ped{border-left:2.5px solid #E8A93B;}
+  .atv-f-res .cx.c-sat{border-left:2.5px solid var(--sat);}
   .atv-f-res .cx.sat .v{color:var(--sat);}
-  .atv-f-satbar{height:3px;border-radius:99px;background:#E4E8ED;overflow:hidden;margin-top:2.5px;}
+  .atv-f-satbar{display:block;width:100%;height:3px;border-radius:99px;
+    background:#E4E8ED;overflow:hidden;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .atv-f-satbar i{display:block;height:100%;border-radius:99px;background:var(--sat);}
   .atv-tab{width:100%;border-collapse:collapse;table-layout:fixed;}
+  /* o cabecalho tambem se recorta: sem isto, uma palavra sem espaco (e
+     "PLANEJAMENTO" e uma) transborda por cima da coluna do lado, e o
+     table-layout:fixed nao impede nada disso */
   .atv-tab th{font-size:7.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-    color:#6B7280;text-align:left;padding:3px 4px;border-bottom:1px solid #E4E8ED;}
+    color:#6B7280;text-align:left;padding:3px 4px;border-bottom:1px solid #E4E8ED;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .atv-tab th.n,.atv-tab td.n{text-align:right;}
   .atv-tab td{font-size:9.5px;padding:3.1px 4px;border-bottom:1px solid #EEF0F4;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .atv-tab td.ped,.atv-tab td.data,.atv-tab td.n{font-family:var(--ft-fonte-mono,monospace);
     font-size:9px;font-variant-numeric:tabular-nums;}
   .atv-tab td.nome{font-weight:500;}
+  .atv-tab td.dep{color:#5D6775;}
   .atv-tab td.tot{font-weight:700;}
+  .atv-tab td.ped{font-weight:700;color:#161A20;}
+  .atv-tab td.plan.mudou{color:#C6161B;font-weight:700;}
   .atv-tab td.vazio{color:#B9BEC6;}
+  /* os mesmos trilhos do relatorio de pedidos, com as mesmas cores */
+  .atv-tab td.tr-t,.atv-tab th.tr-t{border-left:2px solid #F0C3C5;}
+  .atv-tab td.tr-s,.atv-tab th.tr-s{border-left:2px solid #BBD3F2;}
+  .atv-tab td.tr-p,.atv-tab th.tr-p{border-left:2px solid #F0DCB6;}
   .atv-tab tr.novo td{background:var(--atv-novo-bg);}
   .atv-tab tr.novo td.ped{color:var(--atv-novo);font-weight:700;}
   .atv-tab tr.f-dia td{background:#F4F6F8;border-top:1px solid #E4E8ED;
@@ -21209,23 +21282,36 @@ function formataPedido(bruto){
   .atv-tab tr.f-dia .barra i{display:block;height:100%;border-radius:99px;background:var(--sat);}
   .atv-tab tr.f-dia .num{font-family:var(--ft-fonte-mono,monospace);font-size:8.5px;font-weight:600;color:var(--sat);}
   .atv-tab tr.f-dia .folga{font-size:8px;font-weight:700;color:var(--sat);white-space:nowrap;}
-  .atv-f-chip{display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:99px;
+  /* sem o ponto, pelo mesmo motivo da tela: ele empurrava o texto para a
+     direita e deixava a pilula torta */
+  .atv-f-chip{display:inline-flex;align-items:center;padding:1px 6px;border-radius:99px;
     font-size:8px;font-weight:700;background:var(--tg-bg);color:var(--tg-tx);border:1px solid var(--tg);white-space:nowrap;}
-  .atv-f-chip::before{content:'';width:4px;height:4px;border-radius:99px;background:var(--tg);}
+  .atv-f-chip.velha{border-style:dashed;}
+  /* O RODAPE, ALINHADO PELO TOPO (v3.316).
+     Com align-items:center cada bloco era centrado pela PROPRIA altura: o
+     texto da esquerda comecava a 6px do filete, o medidor a 10,8px e a
+     numeracao a 15px. Tres comecos diferentes numa linha so, que e
+     exatamente o desalinhamento que aparecia impresso. Alinhados pelo
+     topo, os tres partem do mesmo lugar e a linha volta a ser uma linha. */
   .atv-f-rodape{margin-top:auto;padding-top:5px;border-top:1px solid #E4E8ED;
-    display:flex;align-items:center;gap:14px;font-size:8.5px;color:#6B7280;}
+    display:flex;align-items:flex-start;gap:14px;font-size:8.5px;color:#6B7280;}
   .atv-f-rodape .esq{flex:1;line-height:1.4;}
   .atv-f-rodape .esq b{color:#374151;font-size:10px;}
   .atv-f-rodape .esq .det b,.atv-f-rodape .esq b b{color:var(--sat);}
   /* o medidor da semana, o mesmo da tela: número e barra, e não só o número.
      No papel a barra é o que se lê de longe. */
   .atv-f-med{min-width:150px;}
-  .atv-f-med .lin{display:flex;justify-content:space-between;gap:10px;font-size:7.5px;
-    color:#6B7280;margin-bottom:2.5px;}
+  /* rotulo e porcentagem pela LINHA DE BASE: eles tem tamanhos diferentes
+     (7,5px e 9px), e centralizados deixavam o numero flutuando acima do
+     texto ao lado */
+  .atv-f-med .lin{display:flex;justify-content:space-between;align-items:baseline;
+    gap:10px;font-size:7.5px;color:#6B7280;margin-bottom:2.5px;line-height:1.4;}
   .atv-f-med .lin b{color:var(--sat);font-family:var(--ft-fonte-mono,monospace);font-size:9px;font-weight:700;}
   .atv-f-med .tr{height:6px;border-radius:99px;background:#E4E8ED;overflow:hidden;}
   .atv-f-med .tr i{display:block;height:100%;border-radius:99px;background:var(--sat);}
-  .atv-f-pag{font-family:var(--ft-fonte-mono,monospace);font-size:8.5px;color:#6B7280;white-space:nowrap;}
+  /* a numeracao acompanha a primeira linha dos vizinhos, e nao o meio */
+  .atv-f-pag{font-family:var(--ft-fonte-mono,monospace);font-size:8.5px;color:#6B7280;
+    white-space:nowrap;line-height:1.4;}
 
   /* ---- o interruptor da marca, na tela de Pessoas ---- */
   .ft-us-atv{
@@ -21303,20 +21389,54 @@ function formataPedido(bruto){
       as outras, quase de graça.
    ================================================================== */
 
+/* AS ETAPAS, NA ORDEM DO CHÃO DE FÁBRICA (v3.316, a pedido).
+
+   A ordem não é alfabética nem por cor: é a ordem em que a peça passa
+   pelos postos. Ler a coluna de cima para baixo no submenu é ler o
+   caminho da produção, e é por isso que ela é fixa.
+
+   ATRASADO é a única que ninguém escolhe: ela APARECE. Um pedido que
+   virou a semana sem terminar desce para a segunda seguinte marcado, e é
+   esse `atrasado` que a etiqueta lê. Por isso ela fica de fora do menu de
+   escolha (o `auto:true`) e continua contando no submenu, onde a
+   pergunta é "quantos estão em cada situação". Se o operador escolher uma
+   etapa a mão, a escolha dele vence: saber que a peça atrasada já está no
+   Corte vale mais que repetir que ela atrasou. A tarja vermelha ao lado
+   do nome continua lá de qualquer jeito, então o atraso nunca some. */
 const ATV_ETAPAS=[
-  {k:'separacao',  n:'Separação',            c:'#64748B'},
   {k:'corte',      n:'Corte',                c:'#7C3AED'},
   {k:'subli',      n:'Impressão sublimação', c:'#0EA5E9'},
   {k:'dtf',        n:'Impressão DTF',        c:'#2563EB'},
-  {k:'prensa',     n:'Prensa',               c:'#EA580C'},
+  {k:'prensa',     n:'Prensa DTF',           c:'#EA580C'},
+  {k:'silk',       n:'Silk',                 c:'#D97706'},
+  {k:'calandra',   n:'Calandra',             c:'#0891B2'},
+  {k:'futurize',   n:'Futurize',             c:'#4F46E5'},
+  {k:'conferencia',n:'Conferência',          c:'#475569'},
+  {k:'cdcostura',  n:'Cd costura',           c:'#BE185D'},
   {k:'costura',    n:'Costura',              c:'#DB2777'},
-  {k:'conferencia',n:'Conferência',          c:'#CA8A04'},
   {k:'embalagem',  n:'Embalagem',            c:'#65A30D'},
-  {k:'despacho',   n:'Despacho',             c:'#0891B2'},
+  {k:'atrasado',   n:'Atrasado',             c:'#C6161B', auto:true},
   {k:'finalizado', n:'Finalizado',           c:'#16A34A'},
 ];
+/* AS QUE SAÍRAM DA LISTA, MAS NÃO DOS ARQUIVOS.
+   Semanas já salvas trazem `separacao` e `despacho`. Deixá-las cair fora
+   do mapa faria a linha aparecer como "sem etapa" — o planejamento de uma
+   semana inteira apagado em silêncio, que é o pior jeito de perder dado.
+   Elas continuam sendo DESENHADAS, em cinza, e não são oferecidas para
+   escolher: quem abrir a semana vê o que estava lá e troca quando quiser. */
+const ATV_ETAPAS_VELHAS=[
+  {k:'separacao',  n:'Separação',            c:'#9AA3AF', velha:true},
+  {k:'despacho',   n:'Despacho',             c:'#9AA3AF', velha:true},
+];
 const ATV_ETAPA={};
-ATV_ETAPAS.forEach(e=>{ATV_ETAPA[e.k]=e;});
+ATV_ETAPAS.concat(ATV_ETAPAS_VELHAS).forEach(e=>{ATV_ETAPA[e.k]=e;});
+/* a etapa que a linha MOSTRA: a escolhida, ou o atraso quando não há
+   escolha nenhuma */
+function atvEtapaDe(l){
+  if(l.etapa)return ATV_ETAPA[l.etapa]||null;
+  if(l.atrasado)return ATV_ETAPA.atrasado;
+  return null;
+}
 const ATV_DIAS_NOME=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 const ATV_MESES=['janeiro','fevereiro','março','abril','maio','junho','julho',
                  'agosto','setembro','outubro','novembro','dezembro'];
@@ -21486,11 +21606,23 @@ function atvEsc(s){
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 }
 function atvChip(l){
-  const e=ATV_ETAPA[l.etapa];
+  const e=atvEtapaDe(l);
   if(!e)return '<span class="atv-chip sem" data-id="'+atvEsc(l.id)+'"><span>sem etapa</span></span>';
-  return '<span class="atv-chip" data-id="'+atvEsc(l.id)+'" style="--tg:'+e.c
-        +';--tg-bg:'+e.c+'14;--tg-tx:'+e.c+'"><span>'+atvEsc(e.n)+'</span></span>';
+  return '<span class="atv-chip'+(e.velha?' velha':'')+'" data-id="'+atvEsc(l.id)
+        +'" style="--tg:'+e.c+';--tg-bg:'+e.c+'14;--tg-tx:'+e.c+'"><span>'
+        +atvEsc(e.n)+'</span></span>';
 }
+
+/* O PLANEJAMENTO QUE MUDOU DE DATA.
+   A régua é a data de ENVIO do orçamento: é dela que o plano nasce, e é
+   ela que o arrasto contraria. Mudou de dia = alguém decidiu, e decisão
+   tomada a mão é o que precisa saltar aos olhos numa folha de 24 linhas. */
+function atvPlanMudou(l){
+  if(!l.plan||!l.entrega)return false;
+  const orig=atvDeBR(l.entrega);
+  return !!orig&&atvISO(orig)!==l.plan;
+}
+
 function atvCelulas(l){
   const pux='<span class="atv-puxador" title="Arraste para outro dia">'
     +'<svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/>'
@@ -21498,14 +21630,18 @@ function atvCelulas(l){
     +'<circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>';
   const vaz=v=>v?atvEsc(v):'<span class="vazio">—</span>';
   const tarja=l.atrasado?'<span class="atv-atraso">atrasado</span>':'';
+  const mud=atvPlanMudou(l);
   return pux
     +'<span class="ped">'+vaz(l.pedido)+'</span>'
     +'<span class="nome" title="'+atvEsc(l.cliente)+'">'+vaz(l.cliente)+tarja+'</span>'
+    +'<span class="dep" title="'+atvEsc(l.departamento||'')+'">'+vaz(l.departamento)+'</span>'
     +'<span class="data">'+vaz(l.entrega)+'</span>'
-    +'<span class="data">'+vaz(atvBR(l.plan))+'</span>'
-    +'<span class="n tot">'+(+l.total||0)+'</span>'
-    +'<span class="n">'+(l.sub?l.sub:'<span class="vazio">—</span>')+'</span>'
-    +'<span class="n">'+(l.per?l.per:'<span class="vazio">—</span>')+'</span>'
+    +'<span class="data plan'+(mud?' mudou':'')+'"'
+      +(mud?' title="Mudou do envio ('+atvEsc(l.entrega)+')"':'')+'>'
+      +vaz(atvBR(l.plan))+'</span>'
+    +'<span class="n tot tr-t">'+(+l.total||0)+'</span>'
+    +'<span class="n tr-s">'+(l.sub?l.sub:'<span class="vazio">—</span>')+'</span>'
+    +'<span class="n tr-p">'+(l.per?l.per:'<span class="vazio">—</span>')+'</span>'
     +'<span>'+atvChip(l)+'</span>';
 }
 
@@ -21555,8 +21691,10 @@ function atvDesenha(){
   if(ATV.aviso)html+='<div class="atv-prog"><div class="txt">'+atvEsc(ATV.aviso)+'</div></div>';
 
   html+='<div class="atv-cab-lista"><span></span><span>Pedido</span><span>Nome</span>'
-    +'<span>Entrega</span><span>Planejamento</span><span class="n">Total</span>'
-    +'<span class="n">Subl.</span><span class="n">Person.</span><span>Atualização</span></div>';
+    +'<span>Departamento</span>'
+    +'<span>Entrega</span><span>Planejamento</span><span class="n tr-t">Total</span>'
+    +'<span class="n tr-s">Subl.</span><span class="n tr-p">Person.</span>'
+    +'<span>Atualização</span></div>';
 
   if(!ATV.linhas.length && !ATV.carregando){
     html+='<div class="atv-dia"><div class="atv-vazio">'
@@ -21629,13 +21767,22 @@ function atvQuando(iso){
 function atvLateral(){
   const el=document.getElementById('atvLat');
   if(!el)return;
+  /* a conta segue a MESMA regra da etiqueta da linha: sem escolha e
+     atrasado conta como Atrasado. Se contasse de outro jeito, a soma da
+     coluna não fecharia com o que se vê na tela. */
   const conta={};
-  ATV.linhas.forEach(l=>{ const k=l.etapa||'';
-    conta[k]=(conta[k]||0)+1; });
+  ATV.linhas.forEach(l=>{ const e=atvEtapaDe(l);
+    const k=e?e.k:''; conta[k]=(conta[k]||0)+1; });
   let h='<div class="g"><div class="t">Etapas</div>';
   ATV_ETAPAS.forEach(e=>{
     h+='<div class="l" style="--tg:'+e.c+'"><i></i><span class="n">'+atvEsc(e.n)+'</span>'
       +'<span class="q">'+(conta[e.k]||0)+'</span></div>';
+  });
+  /* as que saíram da lista só aparecem se ainda houver alguém nelas */
+  ATV_ETAPAS_VELHAS.forEach(e=>{
+    if(!conta[e.k])return;
+    h+='<div class="l velha" style="--tg:'+e.c+'"><i></i><span class="n">'+atvEsc(e.n)+'</span>'
+      +'<span class="q">'+conta[e.k]+'</span></div>';
   });
   if(conta['']){
     h+='<div class="l" style="--tg:#D1D5DB"><i></i><span class="n">sem etapa</span>'
@@ -21855,10 +22002,12 @@ async function atvGera(){
              novo" ser seguro. */
           velho.pedido=it.pedido; velho.cliente=it.cliente;
           velho.vendedor=it.vendedor; velho.entrega=it.envio;
+          velho.departamento=it.departamento||'';
           velho.sub=it.subPecas; velho.per=it.perPecas; velho.total=it.total;
         }else if(dentro){
           porId.set(it.id,{id:it.id,pedido:it.pedido,cliente:it.cliente,
             vendedor:it.vendedor,entrega:it.envio,plan:atvISO(ent),etapa:'',
+            departamento:it.departamento||'',
             sub:it.subPecas,per:it.perPecas,total:it.total,chegouEm:agora});
         }
       });
@@ -21916,6 +22065,7 @@ async function atvSalva(){
     const limpas=ATV.linhas.map(l=>({
       id:l.id,pedido:l.pedido,cliente:l.cliente,vendedor:l.vendedor,
       entrega:l.entrega,plan:l.plan,etapa:l.etapa||'',
+      departamento:l.departamento||'',
       sub:+l.sub||0,per:+l.per||0,total:+l.total||0,
       atrasado:!!l.atrasado, chegouEm:l.chegouEm||''}));
     const d=await atvPega('/api/ft/atividade-guardar',{method:'POST',
@@ -21947,7 +22097,10 @@ window.atvSalva=atvSalva;
   if(!menu)return;
   let alvo=null;
   const fecha=()=>{menu.classList.remove('on');alvo=null;};
-  menu.innerHTML=ATV_ETAPAS.map(e=>
+  /* ATRASADO fica FORA do menu: ela não se escolhe, ela acontece. Oferecer
+     um botão para marcar à mão o que o relatório já marca sozinho só
+     criaria duas verdades sobre a mesma linha. */
+  menu.innerHTML=ATV_ETAPAS.filter(e=>!e.auto).map(e=>
     '<button data-k="'+e.k+'" style="--tg:'+e.c+'"><i></i>'+atvEsc(e.n)+'</button>').join('')
     +'<button class="lim" data-k=""><i></i>sem etapa</button>';
   menu.addEventListener('click',e=>{
@@ -22132,31 +22285,46 @@ function atvMontaImpressao(){
     +'<b>'+pct+'%</b></div>'
     +'<div class="tr"><i style="width:'+Math.min(100,pct)+'%"></i></div></div>'
     +'<span class="atv-f-pag">Página</span>';
-  const COLS='<colgroup><col style="width:74px"><col><col style="width:64px">'
-    +'<col style="width:64px"><col style="width:46px"><col style="width:46px">'
-    +'<col style="width:46px"><col style="width:118px"></colgroup>';
-  const CAB='<tr><th>Pedido</th><th>Nome</th><th>Entrega</th><th>Planejamento</th>'
-    +'<th class="n">Total</th><th class="n">Subl.</th><th class="n">Person.</th>'
-    +'<th>Atualização</th></tr>';
+  /* AS LARGURAS SAO MEDIDAS PELO MAIOR CONTEUDO DE CADA COLUNA, e nao
+     divididas em partes iguais: "PLANEJAMENTO" e uma palavra so, entao ela
+     nao quebra em duas linhas — ou cabe, ou invade a coluna vizinha, que
+     foi o que aconteceu na primeira tentativa. O Nome fica com o `auto`
+     porque e o unico campo que aguenta encolher. */
+  const COLS='<colgroup><col style="width:78px"><col><col style="width:110px">'
+    +'<col style="width:72px"><col style="width:92px"><col style="width:48px">'
+    +'<col style="width:48px"><col style="width:56px">'
+    +'<col style="width:132px"></colgroup>';
+  const CAB='<tr><th>Pedido</th><th>Nome</th><th>Departamento</th>'
+    +'<th>Entrega</th><th>Planejamento</th>'
+    +'<th class="n tr-t">Total</th><th class="n tr-s">Subl.</th>'
+    +'<th class="n tr-p">Person.</th><th>Atualização</th></tr>';
 
   let folha=null,tbody=null,corpo=null;
   const novaFolha=()=>{
     folha=document.createElement('section');
     folha.className='atv-folha';
     atvPinta(folha,pct);
+    /* OS QUATRO CARTÕES DO PAPEL (v3.316, a pedido).
+       Eram quatro blocos de texto encostados no canto: o de Saturação
+       levava uma barra a mais, ficava 2,3px mais baixo que os outros três,
+       e era esse degrau que se via impresso. Como CARTÕES, cada um vira
+       uma caixa de altura própria numa grade — o desalinhamento deixa de
+       ser possível, e a folha passa a abrir igual à tela. */
     folha.innerHTML='<div class="atv-folha-corpo">'
-      +'<div class="atv-f-topo"><span class="atv-f-marca">FOURTIME</span>'
+      +'<div class="atv-f-topo">'
+      +'<img class="atv-f-logo" src="'+LOGO_H_ESCURA+'" alt="Fourtime">'
       +'<div class="atv-f-tit"><h3>Relatório de Atividade</h3>'
       +'<p>Semana de '+atvSemanaTitulo()+'</p></div>'
       +'<div class="atv-f-res">'
-      +'<div class="cx"><div class="r">Peças na semana</div><div class="v">'+n(pecas)+'</div>'
+      +'<div class="cx c-pec"><div class="r">Peças na semana</div><div class="v">'+n(pecas)+'</div>'
         +'<div class="pe">'+n(c.sub)+' subl. · '+n(c.per)+' person.</div></div>'
-      +'<div class="cx"><div class="r">Capacidade</div><div class="v">'+n(cap)+'</div>'
+      +'<div class="cx c-cap"><div class="r">Capacidade</div><div class="v">'+n(cap)+'</div>'
         +'<div class="pe">'+n(ATV_CAP.dia)+'/dia · '+ATV_CAP.dias+' dias</div></div>'
-      +'<div class="cx"><div class="r">Pedidos</div><div class="v">'+c.pedidos+'</div>'
+      +'<div class="cx c-ped"><div class="r">Pedidos</div><div class="v">'+c.pedidos+'</div>'
         +'<div class="pe">'+c.finalizados+' finalizados · '+n(c.prontas)+' prontas</div></div>'
-      +'<div class="cx sat"><div class="r">Saturação</div><div class="v">'+pct+'%</div>'
-        +'<div class="atv-f-satbar"><i style="width:'+Math.min(100,pct)+'%"></i></div></div>'
+      +'<div class="cx c-sat sat"><div class="r">Saturação</div><div class="v">'+pct+'%</div>'
+        +'<div class="pe"><span class="atv-f-satbar"><i style="width:'
+        +Math.min(100,pct)+'%"></i></span></div></div>'
       +'</div></div>'
       +'<table class="atv-tab">'+COLS+'<thead>'+CAB+'</thead><tbody></tbody></table>'
       +'</div><div class="atv-f-rodape">'+RODAPE+'</div>';
@@ -22173,7 +22341,7 @@ function atvMontaImpressao(){
     const pc=teto?Math.round(p/teto*100):0;
     const f=atvFaixa(pc);
     const folga=teto-p;
-    return '<tr class="f-dia" style="--sat:'+f.c+'"><td colspan="8"><div class="cx">'
+    return '<tr class="f-dia" style="--sat:'+f.c+'"><td colspan="9"><div class="cx">'
       +'<b>'+atvEsc(g.nome)+'</b>'
       +'<span class="dt">'+atvCurta(g.chave)+'</span>'
       +(cont?'<span class="cont">continuação</span>':'')
@@ -22184,16 +22352,20 @@ function atvMontaImpressao(){
       +'</div></td></tr>';
   };
   const celulas=l=>{
-    const e=ATV_ETAPA[l.etapa];
+    const e=atvEtapaDe(l);
     const vaz=v=>v?atvEsc(v):'<span class="vazio">—</span>';
+    const mud=atvPlanMudou(l);
     return '<td class="ped">'+vaz(l.pedido)+'</td>'
       +'<td class="nome">'+vaz(l.cliente)
       +(l.atrasado?'<span class="atv-f-atraso">atrasado</span>':'')+'</td>'
-      +'<td class="data">'+vaz(l.entrega)+'</td><td class="data">'+vaz(atvBR(l.plan))+'</td>'
-      +'<td class="n tot">'+(+l.total||0)+'</td>'
-      +'<td class="n">'+(l.sub?l.sub:'<span class="vazio">—</span>')+'</td>'
-      +'<td class="n">'+(l.per?l.per:'<span class="vazio">—</span>')+'</td>'
-      +'<td>'+(e?'<span class="atv-f-chip" style="--tg:'+e.c+';--tg-bg:'+e.c+'14;--tg-tx:'+e.c+'">'
+      +'<td class="dep">'+vaz(l.departamento)+'</td>'
+      +'<td class="data">'+vaz(l.entrega)+'</td>'
+      +'<td class="data plan'+(mud?' mudou':'')+'">'+vaz(atvBR(l.plan))+'</td>'
+      +'<td class="n tot tr-t">'+(+l.total||0)+'</td>'
+      +'<td class="n tr-s">'+(l.sub?l.sub:'<span class="vazio">—</span>')+'</td>'
+      +'<td class="n tr-p">'+(l.per?l.per:'<span class="vazio">—</span>')+'</td>'
+      +'<td>'+(e?'<span class="atv-f-chip'+(e.velha?' velha':'')
+        +'" style="--tg:'+e.c+';--tg-bg:'+e.c+'14;--tg-tx:'+e.c+'">'
         +atvEsc(e.n)+'</span>':'')+'</td>';
   };
 

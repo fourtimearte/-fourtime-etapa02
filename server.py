@@ -3328,6 +3328,10 @@ async def ft_atividade_lote(request: Request):
             "mod": str((a or {}).get("mod") or ""),
             "cliente": cli, "pedido": ped,
             "vendedor": str(header.get("vendedor") or "").strip(),
+            # O DEPARTAMENTO sai do cabecalho do orcamento e diz por quais
+            # postos a peca passa (DTF, Silk, Sublimacao, e as combinacoes).
+            # Sem ele o relatorio dizia o QUANTO e o QUANDO, e nunca o ONDE.
+            "departamento": str(header.get("departamento") or "").strip(),
             # QUANDO a mercadoria sai. E a data que coloca o pedido na
             # semana, ate alguem arrastar a linha para outro dia.
             "envio": str(header.get("envio") or "").strip(),

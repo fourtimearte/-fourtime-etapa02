@@ -452,8 +452,14 @@ console.log('     vira 2 folhas a partir de ' + virada.comChip.corte
 /* A PASTILHA DA ETAPA E MAIS ALTA QUE O TEXTO, e por isso uma folha em que
    toda linha tem etapa cabe um pedido a menos. Nao e defeito: e o preco de
    uma coluna que se le de relance. O que o teste cobra e que o numero nao
-   mude sem alguem perceber, e que nada vaze da margem em nenhum dos casos. */
-checa('com etapa em toda linha, a folha vira em 24 pedidos', virada.comChip.corte, 24);
+   mude sem alguem perceber, e que nada vaze da margem em nenhum dos casos.
+
+   V3.316: era 23 com etapa e 25 sem; passou a 24 e 25. A folha ganhou uma
+   coluna (Departamento) e um cabecalho mais alto (os quatro cartoes), e
+   mesmo assim cabe MAIS um pedido: a pastilha perdeu o ponto colorido e o
+   vao dele, e o que ela deixou de gastar em altura pagou o cabecalho. O
+   numero e medido a cada rodada justamente para nao ser suposto. */
+checa('com etapa em toda linha, a folha vira em 25 pedidos', virada.comChip.corte, 25);
 checa('  sem etapa, vira em 26', virada.semChip.corte, 26);
 checa('  e em nenhum dos casos alguma coisa vaza da folha',
   virada.comChip.vaza + virada.semChip.vaza, 0);
@@ -554,6 +560,174 @@ checa('os campos mudam a capacidade', [r.semana, r.dia], [1500, 250]);
 checa('  e ficam guardados', r.guardado.semana, 1500);
 checa('250 x 6 = 1500: sem briga, sem aviso', r.aviso, true);
 checa('325 x 6 = 1950 contra 1500: o aviso aparece', r.avisoDepois, false);
+
+console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
+/* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
+   quase todas moram na mesma linha da tabela, e o que quebra uma quebra a
+   do lado (uma coluna a mais desloca todas as outras). */
+r = await p.evaluate(() => {
+  ATV.linhas = [
+    /* plan IGUAL ao envio: nao mudou de data */
+    { id: 'V1', pedido: 'PD009001', cliente: 'CLIENTE A', vendedor: 'Dani',
+      entrega: '17/08/2026', plan: '2026-08-17', etapa: 'corte',
+      departamento: 'DTF + Silk', sub: 60, per: 40, total: 100, chegouEm: '', novo: false },
+    /* plan DIFERENTE do envio: mudou */
+    { id: 'V2', pedido: 'PD009002', cliente: 'CLIENTE B', vendedor: 'Dani',
+      entrega: '17/08/2026', plan: '2026-08-19', etapa: 'futurize',
+      departamento: 'Sublimação', sub: 10, per: 0, total: 10, chegouEm: '', novo: false },
+    /* atrasado e SEM etapa escolhida: a etiqueta tem de aparecer sozinha */
+    { id: 'V3', pedido: 'PD009003', cliente: 'CLIENTE C', vendedor: 'Dani',
+      entrega: '17/08/2026', plan: '2026-08-17', etapa: '', atrasado: true,
+      departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '', novo: false },
+    /* atrasado MAS com etapa escolhida: a escolha do operador vence */
+    { id: 'V4', pedido: 'PD009004', cliente: 'CLIENTE D', vendedor: 'Dani',
+      entrega: '17/08/2026', plan: '2026-08-17', etapa: 'costura', atrasado: true,
+      departamento: 'Silk', sub: 5, per: 0, total: 5, chegouEm: '', novo: false },
+    /* etapa de arquivo antigo, que saiu da lista */
+    { id: 'V5', pedido: 'PD009005', cliente: 'CLIENTE E', vendedor: 'Dani',
+      entrega: '17/08/2026', plan: '2026-08-17', etapa: 'separacao',
+      departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '', novo: false },
+  ];
+  atvDesenha();
+  const li = id => document.querySelector('.atv-linha[data-id="' + id + '"]');
+  const chip = id => (li(id).querySelector('.atv-chip span') || {}).textContent;
+  const peso = (id, sel) => getComputedStyle(li(id).querySelector(sel)).fontWeight;
+  const cor = (id, sel) => getComputedStyle(li(id).querySelector(sel)).color;
+  const trilho = sel => getComputedStyle(document.querySelector('.atv-linha ' + sel)).boxShadow;
+  /* a distancia da tinta ate cada borda da pastilha */
+  const folga = id => { const c = li(id).querySelector('.atv-chip');
+    const g = document.createRange(); g.selectNodeContents(c.querySelector('span'));
+    const rc = c.getBoundingClientRect(), ri = g.getBoundingClientRect();
+    return [+(ri.left - rc.left).toFixed(1), +(rc.right - ri.right).toFixed(1)]; };
+  return {
+    cabecalho: [...document.querySelectorAll('.atv-cab-lista > span')].map(s => s.textContent),
+    dep: li('V1').querySelector('.dep').textContent,
+    /* as etapas, na ordem pedida */
+    etapas: ATV_ETAPAS.map(e => e.n),
+    noMenu: [...document.getElementById('atvMenuEtapa').querySelectorAll('button')]
+      .map(b => b.textContent),
+    chips: { V1: chip('V1'), V2: chip('V2'), V3: chip('V3'), V4: chip('V4'), V5: chip('V5') },
+    velha: li('V5').querySelector('.atv-chip').classList.contains('velha'),
+    pesoPed: peso('V1', '.ped'), pesoTot: peso('V1', '.tot'),
+    planParado: [peso('V1', '.plan'), cor('V1', '.plan')],
+    planMudou: [peso('V2', '.plan'), cor('V2', '.plan')],
+    trilhos: [trilho('.tr-t'), trilho('.tr-s'), trilho('.tr-p')],
+    folgas: ['V1', 'V2', 'V4'].map(folga),
+    /* o submenu conta pela MESMA regra da etiqueta */
+    lateral: [...document.querySelectorAll('#atvLat .l')].map(l =>
+      l.querySelector('.n').textContent + '=' + l.querySelector('.q').textContent),
+  };
+});
+console.log('     ' + JSON.stringify(r.chips) + '  ' + JSON.stringify(r.folgas));
+checa('a coluna Departamento entrou no cabecalho', r.cabecalho,
+  ['', 'Pedido', 'Nome', 'Departamento', 'Entrega', 'Planejamento',
+   'Total', 'Subl.', 'Person.', 'Atualização']);
+checa('  e traz o departamento do orcamento', r.dep, 'DTF + Silk');
+checa('as treze etapas, na ordem pedida', r.etapas,
+  ['Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk', 'Calandra',
+   'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem', 'Atrasado', 'Finalizado']);
+/* ATRASADO nao se escolhe: ela acontece. Oferecer o botao criaria duas
+   verdades sobre a mesma linha. */
+checa('  o menu oferece doze, sem Atrasado', r.noMenu,
+  ['Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk', 'Calandra',
+   'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem', 'Finalizado', 'sem etapa']);
+checa('a etapa escolhida aparece', [r.chips.V1, r.chips.V2], ['Corte', 'Futurize']);
+checa('  atrasado sem etapa vira Atrasado sozinho', r.chips.V3, 'Atrasado');
+checa('  mas a escolha do operador vence o atraso', r.chips.V4, 'Costura');
+/* uma semana ja salva nao pode perder o planejamento so porque a lista de
+   etapas mudou: a etapa antiga continua desenhada, tracejada */
+checa('  etapa de arquivo antigo nao some', r.chips.V5, 'Separação');
+checa('    e vem marcada como fora da lista', r.velha, true);
+checa('negrito no numero do pedido', r.pesoPed, '700');
+checa('  e no total de pecas', r.pesoTot, '700');
+checa('planejamento na data do envio: sem destaque', r.planParado[0] === '700', false);
+checa('  planejamento que mudou: negrito', r.planMudou[0], '700');
+checa('  e vermelho', r.planMudou[1], 'rgb(198, 22, 27)');
+checa('trilho vertical antes de Total, Subl. e Person.',
+  r.trilhos.map(t => /rgb\(240, 195, 197\)|rgb\(187, 211, 242\)|rgb\(240, 220, 182\)/.test(t)),
+  [true, true, true]);
+/* O DEFEITO QUE ELE VIU: o ponto colorido empurrava o texto 11px para a
+   direita e a pastilha ficava torta em TODAS as etapas. Aqui a folga dos
+   dois lados tem de ser a mesma, e nao "parecida". */
+checa('a pastilha tem a mesma folga dos dois lados',
+  r.folgas.map(f => f[0] === f[1]), [true, true, true]);
+checa('o submenu conta pela mesma regra da etiqueta', r.lateral.indexOf('Atrasado=1') >= 0, true);
+checa('  e mostra a etapa antiga so porque ainda ha alguem nela',
+  r.lateral.indexOf('Separação=1') >= 0, true);
+
+console.log('\n=== 13c. A FOLHA IMPRESSA DA v3.316 ===');
+r = await p.evaluate(() => {
+  atvMontaImpressao();
+  document.body.classList.add('atv-imprimindo');
+  const f = document.querySelector('.atv-folha');
+  const topo = f.querySelector('.atv-f-topo').getBoundingClientRect();
+  const cx = [...f.querySelectorAll('.atv-f-res .cx')];
+  const rod = f.querySelector('.atv-f-rodape');
+  const rr = rod.getBoundingClientRect();
+  const dentro = el => +(el.getBoundingClientRect().top - rr.top).toFixed(1);
+  const chip = f.querySelector('.atv-f-chip');
+  const g = document.createRange(); g.selectNodeContents(chip);
+  const rc = chip.getBoundingClientRect(), ri = g.getBoundingClientRect();
+  const lin = rod.querySelector('.atv-f-med .lin');
+  const out = {
+    logo: !!f.querySelector('.atv-f-logo'),
+    marcaEscrita: !!f.querySelector('.atv-f-marca'),
+    /* OS CARTOES: quatro caixas iguais. O de Saturacao levava uma barra a
+       mais e ficava 2,3px abaixo dos outros tres. */
+    cartoes: cx.length,
+    topos: cx.map(c => +(c.getBoundingClientRect().top - topo.top).toFixed(1)),
+    alturas: cx.map(c => +c.getBoundingClientRect().height.toFixed(1)),
+    rotulos: cx.map(c => +(c.querySelector('.r').getBoundingClientRect().top - topo.top).toFixed(1)),
+    temCaixa: cx.every(c => getComputedStyle(c).borderLeftWidth !== '0px'),
+    /* O RODAPE: os tres blocos comecavam em 6, 10.8 e 15px do filete. */
+    rodape: [dentro(rod.querySelector('.esq')), dentro(rod.querySelector('.atv-f-med')),
+             dentro(rod.querySelector('.atv-f-pag'))],
+    /* A LINHA DE BASE, E NAO O FUNDO DA CAIXA.
+       O rotulo tem 7,5px e a porcentagem 9px: alinhados pela base, a caixa
+       maior desce 1px a mais, e comparar os fundos acusaria desalinhamento
+       onde nao ha. A sonda e um inline-block vazio: a base dele E a linha
+       de base do texto em volta. */
+    ...(() => {
+      const sonda = () => { const e = document.createElement('span');
+        e.style.cssText = 'display:inline-block;width:0;height:0'; return e; };
+      const a = sonda(), b = sonda();
+      lin.querySelector('span').appendChild(a); lin.querySelector('b').appendChild(b);
+      const v = { baseRotulo: +a.getBoundingClientRect().bottom.toFixed(2),
+                  baseNumero: +b.getBoundingClientRect().bottom.toFixed(2) };
+      a.remove(); b.remove();
+      return v;
+    })(),
+    colunas: [...f.querySelectorAll('.atv-tab thead th')].map(t => t.textContent),
+    /* nada pode transbordar: "PLANEJAMENTO" e uma palavra sem espaco e
+       chegou a invadir a coluna do lado */
+    cortadas: [...f.querySelectorAll('.atv-tab th, .atv-tab tbody td:not([colspan])')]
+      .filter(t => t.scrollWidth > t.clientWidth + 0.5).length,
+    folgaChip: [+(ri.left - rc.left).toFixed(1), +(rc.right - ri.right).toFixed(1)],
+    trilhos: ['tr-t', 'tr-s', 'tr-p'].map(k =>
+      getComputedStyle(f.querySelector('th.' + k)).borderLeftColor),
+  };
+  document.body.classList.remove('atv-imprimindo');
+  atvDesmontaImpressao();
+  return out;
+});
+console.log('     ' + JSON.stringify(r.topos) + ' ' + JSON.stringify(r.rodape)
+  + '  base rotulo=' + r.baseRotulo + ' numero=' + r.baseNumero);
+checa('a logo entrou no lugar do nome escrito', [r.logo, r.marcaEscrita], [true, false]);
+checa('os quatro cartoes estao na folha', r.cartoes, 4);
+checa('  todos comecam na mesma altura', new Set(r.topos).size, 1);
+checa('  todos com a mesma altura', new Set(r.alturas).size, 1);
+checa('  e os quatro rotulos na mesma linha', new Set(r.rotulos).size, 1);
+checa('  cada um numa caixa, como na tela', r.temCaixa, true);
+checa('no rodape os tres blocos partem do mesmo lugar', new Set(r.rodape).size, 1);
+checa('  e o numero da saturacao pousa na linha de base do rotulo',
+  Math.abs(r.baseRotulo - r.baseNumero) < 0.5, true);
+checa('a folha tem as nove colunas', r.colunas,
+  ['Pedido', 'Nome', 'Departamento', 'Entrega', 'Planejamento',
+   'Total', 'Subl.', 'Person.', 'Atualização']);
+checa('  e nenhuma delas transborda', r.cortadas, 0);
+checa('a pastilha do papel tambem esta reta', r.folgaChip[0], r.folgaChip[1]);
+checa('os trilhos do papel usam as cores do relatorio de pedidos', r.trilhos,
+  ['rgb(240, 195, 197)', 'rgb(187, 211, 242)', 'rgb(240, 220, 182)']);
 
 console.log('\n=== 14. A TELA DE PESSOAS LIGA A MARCA ===');
 r = await p.evaluate(async () => {

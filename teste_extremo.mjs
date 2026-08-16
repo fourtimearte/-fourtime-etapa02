@@ -1127,7 +1127,11 @@ const virada = await pEd.evaluate(() => {
   ATV.linhas = guarda; atvDesenha();
   return { com, sem }; });
 console.log('     ' + JSON.stringify(virada));
-checa('com etapa em toda linha, a folha vira em 24 pedidos', virada.com.corte, 24);
+/* v3.316: era 24 e passou a 25. A folha ganhou a coluna Departamento e um
+   cabecalho mais alto (os quatro cartoes), e AINDA ASSIM cabe um pedido a
+   mais, porque a pastilha da etapa perdeu o ponto colorido e o vao dele. O
+   numero e medido a cada rodada para nao ser suposto. */
+checa('com etapa em toda linha, a folha vira em 25 pedidos', virada.com.corte, 25);
 checa('  sem etapa, vira em 26', virada.sem.corte, 26);
 checa('  e nada vaza em nenhum dos casos', virada.com.vaza + virada.sem.vaza, 0);
 
