@@ -115,6 +115,19 @@ export async function roda(F) {
     return true;
   }, id);
 
+  /* ESPERA O MENU ESTAR ABERTO E CHEIO, e nao 300ms.
+     O menu abre e so entao e preenchido com os 31 dias. Os 300ms davam
+     conta sozinhos, mas sob a carga da bateria a medida caia no meio: a
+     suite falhava com "1 opcao" em vez de 32, uma vez a cada tantas
+     rodadas. Se ele nunca abrir, o tempo estoura e a conferencia mostra o
+     que viu do mesmo jeito. */
+  const esperaMenu = async () => {
+    await p.waitForFunction(() => {
+      const m = document.querySelector('.ft-dd-menu.aberto');
+      return !!m && m.querySelectorAll('.ft-dd-op').length > 1;
+    }, null, { timeout: 8000 }).catch(() => {});
+  };
+
   /* mede o menu como o olho ve: o que esta DENTRO da caixa e o que ficou fora */
   const mede = () => p.evaluate(() => {
     const m = document.querySelector('.ft-dd-menu.aberto');
@@ -142,7 +155,7 @@ export async function roda(F) {
 
   F.secao('1. O CASO RELATADO: NOVE DIAS, NENHUM ESCONDIDO');
   await carregaRelatorio();
-  await abreMenu('rlDia'); await p.waitForTimeout(300);
+  await abreMenu('rlDia'); await esperaMenu();
   let m = await mede();
   F.diz('as nove opcoes estao no menu', m.opcoes, 9);
   /* CORTADA a conferencia de que a ultima opcao e o "Dia 12": o array de
@@ -159,7 +172,7 @@ export async function roda(F) {
   DIAS = MES;
   await redimensiona(p, { width:1920, height:937 });
   await redesenha();
-  await abreMenu('rlDia'); await p.waitForTimeout(300);
+  await abreMenu('rlDia'); await esperaMenu();
   const mil = await mede();
   F.diz('1080p: o menu nao vaza da janela', mil.dentroDaJanela, true);
   F.diz('  precisa rolar (31 dias nao cabem em 1080p)', mil.rolavel, true);
@@ -185,7 +198,7 @@ export async function roda(F) {
   F.secao('2b. TELA BAIXA (620px): mesma regra, sem vazar');
   await redimensiona(p, { width:1700, height:620 });
   await redesenha();
-  await abreMenu('rlDia'); await p.waitForTimeout(300);
+  await abreMenu('rlDia'); await esperaMenu();
   m = await mede();
   F.diz('as 32 opcoes existem (31 dias + Todos)', m.opcoes, 32);
   F.diz('o menu nao vaza da janela', m.dentroDaJanela, true);
@@ -198,7 +211,7 @@ export async function roda(F) {
   await p.evaluate(() => { const s = document.getElementById('rlDia');
     s.value = '31'; s.dispatchEvent(new Event('change', { bubbles:true })); });
   await p.waitForTimeout(400);
-  await abreMenu('rlDia'); await p.waitForTimeout(300);
+  await abreMenu('rlDia'); await esperaMenu();
   m = await mede();
   F.diz('abrir ja mostra o que esta marcado', m.marcadoAVista, true);
 
@@ -209,7 +222,7 @@ export async function roda(F) {
     const r = s.closest('.ft-dd').getBoundingClientRect();
     return r.top > innerHeight * 0.45;      /* ja esta na metade de baixo? */
   });
-  await abreMenu('rlDia'); await p.waitForTimeout(300);
+  await abreMenu('rlDia'); await esperaMenu();
   m = await mede();
   F.diz('o menu continua inteiro dentro da janela', m.dentroDaJanela, true);
   F.diz('  e nao comeca acima do topo', m.topo >= 0, true);
@@ -218,7 +231,7 @@ export async function roda(F) {
   /* o listener de scroll e em CAPTURA, para o menu nao flutuar solto quando a
      pagina rola. Agora que a lista pode ser mais alta que a tela, rolar dentro
      dela e uso normal, e era exatamente isso que fechava o menu. */
-  await abreMenu('rlDia'); await p.waitForTimeout(300);
+  await abreMenu('rlDia'); await esperaMenu();
   const rolou = await p.evaluate(async () => {
     const m = document.querySelector('.ft-dd-menu.aberto');
     if (!m) return { naoAbriu:true };

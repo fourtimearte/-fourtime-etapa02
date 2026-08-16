@@ -90,7 +90,18 @@ r = await page.evaluate(async () => {
   document.getElementById('cli_cidade').value = 'NOVA CIDADE';
   FT_SYNC.on = false;                                     // sem servidor: salva local
   document.getElementById('cliSalvar').click();
-  await new Promise(s => setTimeout(s, 300));
+  /* ESPERA O RECADO, E NAO UM RELOGIO.
+     O salvamento passa por 'salvando...' antes de assentar em 'salvo
+     nesta maquina ... servidor desligado'. Os 300ms davam conta sozinhos,
+     mas na bateria (duas suites de uma vez, mais o navegador) o assentar
+     passava disso e a suite falhava so nesta linha, com as tres de cima
+     passando. O sinal honesto e o proprio texto parar de dizer que ainda
+     esta salvando. */
+  for (let i = 0; i < 60; i++) {
+    const t = document.getElementById('cliEstado').textContent || '';
+    if (t && !/salvando/i.test(t)) break;
+    await new Promise(s => setTimeout(s, 60));
+  }
   return { rua: DB.clientes[0].rua, cidade: DB.clientes[0].cidade,
            limpezas: JSON.parse(JSON.stringify(FT_SYNC.limpezas)),
            estado: document.getElementById('cliEstado').textContent };

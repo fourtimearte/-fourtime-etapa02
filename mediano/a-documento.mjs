@@ -1058,19 +1058,43 @@ export async function roda(F) {
   /* o alvo e o CAMPO em si, e nao os primeiros 30px da caixa: com o
      documento de teste montado, ali mora o rotulo do combo e o clique cairia
      num <span> que nao abre nada */
+  /* ESPERA O MENU, E NAO O RELOGIO.
+     Ele abre com transicao, e sob a carga da bateria os 350ms nao davam:
+     a suite falhava so nestas linhas, uma vez a cada tantas rodadas. Se
+     ele nunca abrir, o tempo estoura e a conferencia mostra o 'none' do
+     mesmo jeito.
+     O 'seguiuAberto' CONTINUA com espera de relogio de proposito: ali a
+     pergunta e se ele FICA aberto, e para isso e preciso deixar o tempo
+     passar mesmo. */
+  const esperaCor = async alvo => {
+    await p.waitForFunction(q => {
+      const m = document.getElementById('corMenu');
+      return !!m && getComputedStyle(m).display === q;
+    }, alvo, { timeout: 8000 }).catch(() => {});
+  };
   let pt = await centro('.lay-modulo .combo-cor textarea');
   await p.mouse.click(pt.x, pt.y);
-  await p.waitForTimeout(350);
+  await esperaCor('block');
   const abriuNoClique = await displayCor();
   await p.waitForTimeout(400);
   const seguiuAberto = await displayCor();
-  await p.mouse.click(60, 620); await p.waitForTimeout(250);
+  await p.mouse.click(60, 620);
+  await esperaCor('none');
   const fechouFora = await displayCor();
   F.diz('clique de verdade no campo ABRE o menu', abriuNoClique, 'block');
   F.diz('  e ele NAO some no mesmo gesto', seguiuAberto, 'block');
   F.diz('  um clique fora fecha', fechouFora, 'none');
   pt = await centro('.lay-modulo .combo-cor .cor-sw');
-  await p.mouse.click(pt.x, pt.y); await p.waitForTimeout(350);
+  await p.mouse.click(pt.x, pt.y);
+  /* ESPERA O MENU APARECER, e nao 350ms.
+     O menu abre com transicao, e sob a carga da bateria os 350ms nao
+     davam: a suite falhava so nesta linha, uma vez a cada tantas rodadas.
+     Se ele nunca abrir, o tempo estoura e a conferencia mostra o 'none'
+     do mesmo jeito. */
+  await p.waitForFunction(() => {
+    const m = document.getElementById('corMenu');
+    return !!m && getComputedStyle(m).display === 'block';
+  }, null, { timeout: 8000 }).catch(() => {});
   F.diz('o quadradinho tambem abre com clique de verdade', await displayCor(), 'block');
   await p.mouse.click(60, 620); await p.waitForTimeout(250);
 

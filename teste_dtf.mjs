@@ -319,6 +319,41 @@ diz('e as 111 peças também', mistoTudo.total.pecasPedido, 111);
 diz('mas o universo de DTF encolheu', mistoTudo.total.pecas, 111 - 10 - 24 - 4);
 await cm.close();
 
+secao('B. nada do editor vaza para o arquivo do cliente');
+/* O DEFEITO QUE ELE VIU: um "Pessoas" solto no canto de cima da tela,
+   empurrando o orcamento inteiro 19px para baixo.
+
+   O modal de Pessoas nasceu com o CSS dentro do <style id="cssRel">, que
+   o exportador apaga inteiro de proposito. O MARCADO dele nunca entrou na
+   lista de remocao: o estilo ia embora, o elemento ficava, e um <div> sem
+   estilo nenhum nao e invisivel — vira um bloco comum com a palavra
+   dentro.
+
+   Por isso a conferencia nao e "o Pessoas sumiu": e que NADA de nivel
+   mais alto sobrou alem da barra fixa e do documento. Assim o proximo
+   modal que alguem criar e esquecer de remover cai aqui, e nao na tela de
+   um cliente. */
+const solto = await pt.evaluate(() => {
+  const fora = [];
+  document.querySelectorAll('body > *').forEach(el => {
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    if (cs.display === 'none' || cs.visibility === 'hidden' || !r.height) return;
+    fora.push({ id: el.id || '', cls: (el.className || '').toString().split(' ')[0] });
+  });
+  return { fora,
+    /* nada pode estar EMPURRANDO o documento para baixo */
+    topoDoDocumento: Math.round(document.querySelector('.app').getBoundingClientRect().top),
+    /* e as telas do editor nao existem mais aqui dentro */
+    sobrouDoEditor: ['ftUsersFundo', 'ftLoginFundo', 'relPage', 'bdPage', 'cliPage',
+      'bugPage', 'atvPage', 'atvMenuEtapa', 'atvNotif', 'atvCarga', 'cssRel', 'ftAtvCss']
+      .filter(id => !!document.getElementById(id)) };
+});
+diz('no arquivo só existem a barra fixa e o documento',
+  solto.fora.map(x => x.id || x.cls), ['ftBarra', 'app']);
+diz('  e o documento começa no alto da página', solto.topoDoDocumento, 0);
+diz('  nenhuma tela do editor viajou junto', solto.sobrouDoEditor, []);
+
 secao('B. o arquivo COM valores não leva botão');
 const comValor = await pb.evaluate(() => {
   const b = document.body;

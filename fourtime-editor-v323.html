@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.322';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.323';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -15680,12 +15680,28 @@ function gerarHTML(imagens){
     bodyClone.removeAttribute('data-tema');
   }
   /* some tudo que só existe para editar */
-  raiz.querySelectorAll('#ftTabBar,.ft-menu,.ft-rail,#ftLoginFundo,#cliPage,#bugPage,#bdPage,#relPage,#cssRel,#corMenu,#calMenu,#pickMenu,#ctxCustom,#ccPrev,#ctxConfig,#cfgFundo,#ctxCores,#ctxTags,#ctxObs,.hd-tags-add,#selbar,#fileOpen,'+
+  /* O "Pessoas" NO CANTO DA TELA (corrigido na v3.323).
+
+     O modal de Pessoas nasceu na v3.308 com o CSS dele dentro do
+     <style id="cssRel">, que o exportador apaga inteiro de propósito
+     ("lá não existe nenhum elemento que o use"). Só que o MARCADO dele
+     nunca entrou nesta lista de remoção. O estilo ia embora, o elemento
+     ficava, e um <div> sem estilo nenhum não é invisível: virava um
+     bloco comum de 19px no alto do arquivo, com a palavra "Pessoas"
+     dentro, empurrando o orçamento inteiro para baixo.
+
+     Duas mudanças certas, cada uma apoiada numa suposição sobre a outra,
+     e ninguém releu a do lado. O #ftLoginFundo, que é irmão dele e nasceu
+     antes, já estava aqui. */
+  raiz.querySelectorAll('#ftTabBar,.ft-menu,.ft-rail,#ftLoginFundo,#ftUsersFundo,#cliPage,#bugPage,#bdPage,#relPage,#cssRel,#corMenu,#calMenu,#pickMenu,#ctxCustom,#ccPrev,#ctxConfig,#cfgFundo,#ctxCores,#ctxTags,#ctxObs,.hd-tags-add,#selbar,#fileOpen,'+
     '#ftFill,#ftDropFt,#ftStatusFundo,#ftEscFundo,#ftTxtFundo,#ftLinkFundo,'+   /* flutuantes do editor: não vão para o arquivo exportado */
     /* controles que só fazem sentido DENTRO do editor. A barra de zoom era a
        mais grave: ficava flutuando por cima do orçamento do cliente, com os
        botões "Largura" e "Página" — parecia parte do navegador, mas era nossa. */
     '#zoomBar,#origMenu,#bugFundo,#gdFundo,#ftdFundo,#ftrFundo,#valFundo,.ft-contexto,'+
+    /* os do Relatório de Atividade, pelo mesmo motivo: o CSS deles vive no
+       #ftAtvCss, que também não viaja */
+    '#atvPage,#atvMenuEtapa,#atvNotif,#atvCarga,#atvPrint,#atvMedindo,#ftAtvCss,'+
     '.lay-del,.tec-btn,.design-add,.ft-combo-abrir,.hd-abrir,#pickMenu,.hd-cal,.cor-sw,.lay-img-limpar,script,datalist')
     .forEach(el=>el.remove());
 
