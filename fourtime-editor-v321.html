@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.320';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.321';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -20919,9 +20919,40 @@ function formataPedido(bruto){
     --atv-ambar:#B45309;  --atv-ambar-bg:#FEF3E2;
     --atv-vermelho:#C6161B; --atv-vermelho-bg:#FDEDED;
   }
+  /* AS MESMAS FAIXAS, NO TEMA ESCURO (v3.321).
+     Os fundos de cima foram escolhidos para papel e para tela clara.
+     Repetidos numa tela escura viram seis ilhas brancas por semana, uma
+     por dia, e a tela toda passa a piscar. No escuro o recado é dado com
+     fundo quase preto e a cor mais viva, que é como o resto do editor
+     faz. Nenhuma delas tinha versão escura: o bloco inteiro do relatório
+     nasceu sem passar pelo tema. */
+  body[data-tema="escuro"]{
+    --atv-novo:#2DD4BF;     --atv-novo-bg:#10312F;
+    --atv-verde:#4ADE80;    --atv-verde-bg:#12301E;
+    --atv-ambar:#FBBF24;    --atv-ambar-bg:#33240B;
+    --atv-vermelho:#F87171; --atv-vermelho-bg:#3A1414;
+  }
+  /* MAS A FOLHA IMPRESSA É SEMPRE BRANCA, mesmo com o editor no escuro.
+     Sem esta redeclaração, imprimir do tema escuro levaria os tons de
+     tela escura para o papel: barra de saturação quase preta sobre
+     branco. É o mesmo motivo pelo qual a logo do papel é fixa. */
+  .atv-print,.atv-medindo{
+    --atv-novo:#115E59;     --atv-novo-bg:#ECFDF9;
+    --atv-verde:#16A34A;    --atv-verde-bg:#EAF7EE;
+    --atv-ambar:#B45309;    --atv-ambar-bg:#FEF3E2;
+    --atv-vermelho:#C6161B; --atv-vermelho-bg:#FDEDED;
+  }
+  /* DUAS VARIÁVEIS QUE NUNCA EXISTIRAM (corrigido na v3.321).
+     Esta regra pedia `--ft-fundo` e a linha da lista pedia `--ft-linha`.
+     Nenhuma das duas é declarada em lugar nenhum do editor: os nomes de
+     verdade são `--ft-fundo-pagina` e `--ft-borda`. O CSS não reclama de
+     variável inexistente, ele usa o valor de reserva escrito ao lado — e
+     os dois valores de reserva eram claros. Resultado: a página inteira
+     do relatório continuava com fundo cinza claro e as linhas com filete
+     branco no tema escuro, sem nada na tela dizendo o motivo. */
   .atv-page{
     display:none;padding:18px 22px 60px;overflow:auto;height:100%;
-    background:var(--ft-fundo,#F5F6F8);
+    background:var(--ft-fundo-pagina);
   }
   .atv-page:not([hidden]){display:block;}
 
@@ -21039,7 +21070,7 @@ function formataPedido(bruto){
     letter-spacing:.05em;text-transform:uppercase;color:var(--ft-cinza-40);
     position:sticky;top:0;z-index:20;
   }
-  .atv-linha{border-bottom:1px solid var(--ft-linha,#F2F4F7);background:var(--ft-superficie);}
+  .atv-linha{border-bottom:1px solid var(--ft-borda);background:var(--ft-superficie);}
   .atv-linha:last-child{border-bottom:0;}
   .atv-linha:hover{background:var(--ft-hover,#F7F8FA);}
   .atv-linha .ped,.atv-linha .data,.atv-linha .n{font-family:var(--ft-fonte-mono,monospace);
@@ -22676,7 +22707,14 @@ function atvMontaImpressao(){
        ser possível, e a folha passa a abrir igual à tela. */
     folha.innerHTML='<div class="atv-folha-corpo">'
       +'<div class="atv-f-topo">'
-      +'<img class="atv-f-logo" src="'+LOGO_H_ESCURA+'" alt="Fourtime">'
+      /* A LOGO CLARA, E NÃO A ESCURA (corrigido na v3.321).
+         Os nomes dizem para que FUNDO cada uma serve, e não a cor do
+         texto: LOGO_H_CLARA é a de fundo claro, com texto escuro. Eu
+         tinha posto a ESCURA, que tem o texto branco, numa folha branca —
+         o "FOUR" vermelho aparecia e o "TIME" sumia. A folha impressa é
+         sempre branca, mesmo com o editor no tema escuro, então aqui a
+         escolha é fixa e não depende do tema. */
+      +'<img class="atv-f-logo" src="'+LOGO_H_CLARA+'" alt="Fourtime">'
       +'<div class="atv-f-tit"><h3>Relatório de Atividade</h3>'
       +'<p>Semana de '+atvSemanaTitulo()+'</p></div>'
       +'<div class="atv-f-res">'

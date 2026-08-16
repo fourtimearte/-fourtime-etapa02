@@ -1204,6 +1204,60 @@ checa('  sem nenhum botao recortado', r.recortados, 0);
 checa('  e sem precisar rolar', r.cabeSemRolar, true);
 await p.evaluate(() => document.body.click());
 
+console.log('\n=== 13b3. O TEMA ESCURO E A LOGO DO PAPEL (v3.321) ===');
+/* DUAS VARIAVEIS QUE NUNCA EXISTIRAM. O fundo da pagina pedia
+   `--ft-fundo` e a linha da lista pedia `--ft-linha`; os nomes de verdade
+   sao `--ft-fundo-pagina` e `--ft-borda`. CSS nao reclama de variavel
+   inexistente: usa o valor de reserva escrito ao lado, e os dois eram
+   claros. O relatorio inteiro ficava com fundo cinza claro no tema
+   escuro, sem nada na tela dizendo o motivo.
+
+   Por isso a conferencia NAO e "a cor e tal": e que a cor MUDA quando o
+   tema muda. Uma cor fixa passaria por qualquer valor esperado. */
+r = await p.evaluate(() => {
+  const pg = document.getElementById('atvPage');
+  const le = () => {
+    const li = document.querySelector('.atv-linha');
+    return { fundo: getComputedStyle(pg).backgroundColor,
+             linha: getComputedStyle(li).borderBottomColor,
+             folga: getComputedStyle(document.querySelector('.atv-dia-cab .folga')).backgroundColor };
+  };
+  delete document.body.dataset.tema;
+  const claro = le();
+  document.body.dataset.tema = 'escuro';
+  const escuro = le();
+  /* a folha impressa e sempre branca, mesmo com o editor no escuro */
+  atvMontaImpressao();
+  document.body.classList.add('atv-imprimindo');
+  const f = document.querySelector('.atv-folha');
+  const papel = {
+    barra: getComputedStyle(f.querySelector('.atv-f-satbar i')).backgroundColor,
+    logoClara: f.querySelector('.atv-f-logo').src === LOGO_H_CLARA,
+    logoEscura: f.querySelector('.atv-f-logo').src === LOGO_H_ESCURA };
+  document.body.classList.remove('atv-imprimindo');
+  atvDesmontaImpressao();
+  delete document.body.dataset.tema;
+  return { claro, escuro, papel };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o fundo da pagina muda com o tema', r.claro.fundo !== r.escuro.fundo, true);
+checa('  e o escuro e escuro mesmo',
+  r.escuro.fundo.replace(/[^\d,]/g, '').split(',').every(n => +n < 60), true);
+checa('a linha da lista muda com o tema', r.claro.linha !== r.escuro.linha, true);
+/* as seis pastilhas de folga, uma por dia, viravam ilhas brancas */
+checa('a pastilha de folga muda com o tema', r.claro.folga !== r.escuro.folga, true);
+checa('  e para de brilhar no escuro',
+  r.escuro.folga.replace(/[^\d,]/g, '').split(',').every(n => +n < 70), true);
+/* A LOGO DO PAPEL. Os nomes dizem para que FUNDO cada uma serve: a CLARA
+   e a de fundo claro, com texto escuro. Estava a ESCURA, de texto branco,
+   numa folha branca: o "FOUR" vermelho aparecia e o "TIME" sumia. */
+checa('a folha usa a logo de fundo claro', [r.papel.logoClara, r.papel.logoEscura],
+  [true, false]);
+/* e imprimir com o editor no escuro nao pode levar tom de tela escura
+   para o papel */
+checa('  e a barra do papel nao vem do tema escuro',
+  r.papel.barra, 'rgb(22, 163, 74)');
+
 console.log('\n=== 13c. A FOLHA IMPRESSA DA v3.316 ===');
 r = await p.evaluate(() => {
   atvMontaImpressao();
