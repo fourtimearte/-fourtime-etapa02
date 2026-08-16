@@ -804,6 +804,114 @@ delete DRIVE.semanas['2026-08-17'];
 await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
   ATV.sujo = false; ATV.hojeFixo = ''; });
 
+console.log('\n=== 8h. ATRASADO ANDA UMA SEMANA SO (v3.319) ===');
+/* O QUE ELE VIU: a semana de 31/08 a 05/09 tinha 40 pedidos salvos, e a
+   semana a que cada ENTREGA pertencia era 10/08 (4), 17/08 (20), 24/08 (8)
+   e 31/08 (8). Trinta e dois de tres semanas atras, todos marcados como
+   atrasado, marchando para a frente uma semana por geracao.
+
+   A regra, como foi pedida:
+     nao venceu  -> nao sobe para semana nenhuma
+     venceu      -> sobe UMA semana, a seguinte a da entrega, e para
+     alem disso  -> so com Organizar, que e decisao de gente
+
+   Aqui a semana aberta e a de 31/08, e a anterior (24/08) traz de tudo. */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.semana = '2026-08-31'; ATV.hojeFixo = '2026-08-30'; });
+DRIVE.semanas['2026-08-24'] = { semana: '2026-08-24',
+  salvoEm: '2026-08-29T12:00:00.000Z', vistos: {},
+  linhas: [
+    /* entrega na semana de 24/08, ja vencida: a de 31 E a seguinte dela */
+    { id: 'IDUMA00001xx', pedido: 'PD009101', cliente: 'ATRASOU NA SEMANA DE 24',
+      entrega: '26/08/2026', plan: '2026-08-26', etapa: 'costura',
+      sub: 10, per: 0, total: 10, chegouEm: '' },
+    /* entrega na semana de 17/08: a seguinte dela e a de 24, nao a de 31 */
+    { id: 'IDDUAS0001xx', pedido: 'PD009102', cliente: 'ATRASOU DUAS SEMANAS ATRAS',
+      entrega: '19/08/2026', plan: '2026-08-24', etapa: 'costura',
+      atrasado: true, herdada: true, sub: 20, per: 0, total: 20, chegouEm: '' },
+    /* entrega na semana de 24/08 mas AINDA NAO VENCEU (hoje e 30/08? nao:
+       29/08 e sabado, entao 28 ja passou. Este vence depois de hoje) */
+    { id: 'IDFUTU0002xx', pedido: 'PD009103', cliente: 'AINDA NAO VENCEU',
+      entrega: '02/09/2026', plan: '2026-08-28', etapa: 'corte',
+      sub: 30, per: 0, total: 30, chegouEm: '' },
+    /* ja desceu uma vez sozinha nesta mesma semana de 24: nao pode descer
+       de novo, senao marcha para sempre */
+    { id: 'IDHERD0001xx', pedido: 'PD009104', cliente: 'JA DESCEU UMA VEZ',
+      entrega: '20/08/2026', plan: '2026-08-24', etapa: 'corte',
+      atrasado: true, herdada: true, sub: 40, per: 0, total: 40, chegouEm: '' }] };
+poeNoDrive([{ id: 'IDFUTU0002xx', pedido: 'PD009103', arquivo: 'F-PD009103.ft',
+  cliente: 'AINDA NAO VENCEU', vendedor: 'Dani', envio: '02/09/2026', dia: 1,
+  departamento: 'DTF', subPecas: 30, perPecas: 0, total: 30 }]);
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1400);
+r = await p.evaluate(() => {
+  const m = id => { const l = ATV.linhas.find(x => x.id === id);
+    return l ? { plan: l.plan, atrasado: !!l.atrasado } : null; };
+  return { uma: m('IDUMA00001xx'), duas: m('IDDUAS0001xx'),
+           futuro: m('IDFUTU0002xx'), jaDesceu: m('IDHERD0001xx'),
+           total: ATV.linhas.length };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o que venceu na semana anterior desce, atrasado',
+  r.uma, { plan: '2026-08-31', atrasado: true });
+/* ESTE E O DEFEITO: entrega de 19/08 aparecendo na semana de 31/08 */
+checa('o que venceu DUAS semanas atras nao vem', r.duas, null);
+checa('o que ja desceu uma vez nao desce de novo', r.jaDesceu, null);
+/* entrega 02/09 esta na semana de 31/08: e um pedido normal dela */
+checa('o que ainda nao venceu entra pelo dia dele',
+  r.futuro, { plan: '2026-09-02', atrasado: false });
+checa('sao dois pedidos na semana, e nao quarenta', r.total, 2);
+delete DRIVE.semanas['2026-08-24'];
+
+console.log('\n=== 8i. A SEMANA DE 31/08 DELE, COM OS NUMEROS DE VERDADE ===');
+/* As 40 linhas que estavam gravadas, na mesma proporcao: 4 da semana de
+   10/08, 20 da de 17/08, 8 da de 24/08 e 8 da propria semana. Todas as 32
+   de fora marcadas como atrasado, que e o que impedia a limpeza da v3.318
+   de alcanca-las. Tem de sobrar 8. */
+const monta = (id, pedido, entrega, plan, atr) => ({ id, pedido,
+  cliente: 'C ' + pedido, vendedor: 'Dani', entrega, plan, etapa: 'corte',
+  atrasado: atr, sub: 1, per: 0, total: 1, chegouEm: '' });
+const dela = [];
+for (let i = 0; i < 4; i++) dela.push(monta('IDA' + i + '0000000x', 'PD0091' + i, '13/08/2026', '2026-08-31', true));
+for (let i = 0; i < 20; i++) dela.push(monta('IDB' + i + '0000000x', 'PD0092' + i, '19/08/2026', '2026-08-31', true));
+for (let i = 0; i < 8; i++) dela.push(monta('IDC' + i + '0000000x', 'PD0093' + i, '26/08/2026', '2026-08-31', true));
+/* as oito de verdade: entrega de 31/08 a 05/09, que e a semana inteira */
+const DIAS_DELA = ['31/08/2026', '01/09/2026', '02/09/2026', '03/09/2026',
+                   '04/09/2026', '05/09/2026', '02/09/2026', '04/09/2026'];
+for (let i = 0; i < 8; i++) {
+  const e = DIAS_DELA[i];
+  const [dd, mm, aa] = e.split('/');
+  dela.push(monta('IDD' + i + '0000000x', 'PD0094' + i, e, aa + '-' + mm + '-' + dd, false));
+}
+/* o dia de hoje e o DELE: 16 de agosto. E com essa regua que as 32 nao
+   pertencem — 20 delas nem venceram ainda. */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.semana = '2026-08-31'; ATV.hojeFixo = '2026-08-16'; DRIVE_PRONTO = true; });
+DRIVE.semanas['2026-08-31'] = { semana: '2026-08-31', salvoEm: '2026-08-14T18:35:00.000Z',
+  vistos: {}, linhas: dela };
+poeNoDrive(dela.filter(l => l.id.startsWith('IDD')).map(l => ({ id: l.id, pedido: l.pedido,
+  arquivo: l.pedido + '.ft', cliente: l.cliente, vendedor: 'Dani', envio: l.entrega,
+  dia: 1, departamento: 'DTF', subPecas: 1, perPecas: 0, total: 1 })));
+await p.evaluate(() => atvBuscaSalvo());
+await p.waitForTimeout(700);
+r = await p.evaluate(() => ({ n: ATV.linhas.length, aviso: ATV.aviso }));
+console.log('     ao abrir: ' + JSON.stringify(r));
+checa('abrir traz as quarenta e avisa que trinta e duas nao sao daqui', r.n, 40);
+checa('  e o aviso conta as trinta e duas', r.aviso.indexOf('32 pedidos') === 0, true);
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1600);
+r = await p.evaluate(() => ({ n: ATV.linhas.length,
+  semanasDeEntrega: [...new Set(ATV.linhas.map(l => l.entrega.slice(3)))].sort(),
+  atrasados: ATV.linhas.filter(l => l.atrasado).length }));
+console.log('     depois de gerar: ' + JSON.stringify(r));
+/* AS QUATRO DE 13/08 TAMBEM SAEM: a semana seguinte a delas e a de 17/08,
+   e e la que elas tem de estar. Nao aqui, tres semanas depois. */
+checa('gerar deixa so as oito da semana', r.n, 8);
+checa('  nenhuma com tarja de atraso', r.atrasados, 0);
+delete DRIVE.semanas['2026-08-31'];
+await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
+  ATV.sujo = false; ATV.hojeFixo = ''; });
+
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
    quase todas moram na mesma linha da tabela, e o que quebra uma quebra a

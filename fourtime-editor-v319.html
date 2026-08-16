@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.318';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.319';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -20195,7 +20195,7 @@ const FT_TESTE_IMG_ALTA='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD
       +' <span class="sep">›</span> '+marca(ano+' - '+mes+' - '+(MESES_ARQ[d.getMonth()]||'?'))
       +' <span class="sep">›</span> '+marca('DIA '+dia)+'<br>'
       +'<span class="arq">'+base+'-'+marca(dia+mes+ano.slice(2))+'.ft</span>';
-    const hoje=atvHoje();
+    const hoje=new Date(); hoje.setHours(0,0,0,0);
     const futura=d>hoje;
     arqNota.classList.toggle('alerta',futura);
     arqNota.textContent = futura
@@ -21521,6 +21521,39 @@ function atvSeg(){ return atvDeISO(ATV.semana)||atvSegundaDe(atvHoje()); }
    hoje e falharia na semana que vem, sem nada ter mudado. `ATV.hojeFixo`
    existe para o teste dizer que dia é, e é o único jeito de a conferência
    valer para sempre. Em uso normal ele é vazio e vale o relógio. */
+/* ESTA LINHA E DESTA SEMANA?
+
+   Uma pergunta so, num lugar so. Ela e feita em tres lugares (ao abrir o
+   arquivo, ao gerar, e ao contar o aviso), e tres copias divergem: foi
+   assim que a limpeza da v3.318 acabou tirando uma coisa e o aviso
+   contando outra.
+
+   A regra, como foi pedida:
+
+     1. a entrega cai nesta semana            -> e daqui, sem discussao
+     2. alguem marcou Organizar               -> a passagem foi escolhida
+     3. desceu por atraso                     -> so vale se a entrega JA
+        venceu E se esta semana e a IMEDIATAMENTE seguinte a da entrega.
+        Um pedido do dia 18 pode aparecer atrasado na semana de 24; na de
+        31 ele nao tem o que fazer. Sem esse limite a linha marcha semana
+        apos semana e a semana de 31 amanhece com 40 pedidos, 32 deles de
+        tres semanas atras.
+     4. ninguem marcou nada                   -> so fica se alguem a
+        arrastou para ca de proposito (o plano cai nesta semana).       */
+function atvPertence(l,segIso,fimIso,anteriorIso,hoje){
+  const ent=atvDeBR(l.entrega);
+  const entIso=ent?atvISO(ent):'';
+  if(entIso&&entIso>=segIso&&entIso<=fimIso)return true;
+  if(l.etapa==='organizar')return true;
+  const planAqui=l.plan>=segIso&&l.plan<=fimIso;
+  if(!ent)return planAqui;
+  /* o `atrasado` sem `herdada` e linha gravada por versao anterior: ela
+     desceu sozinha do mesmo jeito, e responde a mesma pergunta */
+  if(l.herdada||l.atrasado)
+    return ent<hoje&&atvISO(atvSegundaDe(ent))===anteriorIso;
+  return planAqui;
+}
+
 function atvHoje(){
   const d=ATV.hojeFixo?atvDeISO(ATV.hojeFixo):new Date();
   d.setHours(0,0,0,0);
@@ -21912,12 +21945,9 @@ async function atvBuscaSalvo(){
          semana de 17 a 22 ficaram meses dentro do arquivo da de 24 a 29 sem
          ninguém ver: eles apareciam na lista como se fossem de lá. */
       const iSeg=atvISO(atvSeg()), iFim=atvISO(atvFim());
-      const intrusas=ATV.linhas.filter(l=>{
-        const e=atvDeBR(l.entrega);
-        const planAqui=l.plan>=iSeg&&l.plan<=iFim;
-        const entAqui=!!e&&atvISO(e)>=iSeg&&atvISO(e)<=iFim;
-        return !planAqui&&!entAqui&&!l.atrasado;
-      }).length;
+      const iAnt=atvISO(atvMais(atvSeg(),-7));
+      const hoje=atvHoje();
+      const intrusas=ATV.linhas.filter(l=>!atvPertence(l,iSeg,iFim,iAnt,hoje)).length;
       if(intrusas)ATV.aviso=intrusas+(intrusas===1
         ? ' pedido salvo aqui não é desta semana. Clique em Gerar / Atualizar para tirá-lo.'
         : ' pedidos salvos aqui não são desta semana. Clique em Gerar / Atualizar para tirá-los.');
@@ -22029,7 +22059,7 @@ async function atvGera(){
        semana de 24/08 — no dia 16, quando ele nem venceu. Era isso que
        enchia as semanas da frente de tarja vermelha.
        Atrasado é quem já devia ter saído: entrega ANTES de hoje. */
-    const hoje=new Date(); hoje.setHours(0,0,0,0);
+    const hoje=atvHoje();
     try{
       const ant=atvISO(atvMais(segAtual,-7));
       const d=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(ant));
@@ -22037,7 +22067,12 @@ async function atvGera(){
         (d.linhas||[]).forEach(l=>{
           if(l.etapa==='finalizado')return;
           if(porId.has(l.id))return;
-          const ent=atvDeBR(l.entrega);
+          /* JÁ DESCEU UMA VEZ SOZINHA: não desce de novo.
+             Sem esta linha o pedido atrasado passa da semana da entrega
+             para a seguinte, é gravado lá, e na geração seguinte é puxado
+             outra vez, e outra. Mexer na etapa a mão devolve a linha para
+             as mãos da pessoa e libera outra passagem. */
+          if(l.herdada)return;
           /* ORGANIZAR é a passagem escolhida a mão: desce mesmo sem ter
              vencido, e desce SEM tarja, porque não é atraso nenhum. */
           if(l.etapa==='organizar'){
@@ -22045,8 +22080,11 @@ async function atvGera(){
               {chegouEm:agora,atrasado:false,plan:ATV.semana,herdada:true}));
             return;
           }
-          if(ent&&ent>=hoje)return;          /* ainda não venceu */
-          if(ent&&ent>=segAtual)return;      /* e não é assunto desta semana */
+          const ent=atvDeBR(l.entrega);
+          if(!ent)return;
+          if(ent>=hoje)return;               /* ainda não venceu */
+          /* SÓ DA SEMANA DA ENTREGA PARA A SEGUINTE */
+          if(atvISO(atvSegundaDe(ent))!==ant)return;
           porId.set(l.id,Object.assign({},l,
             {chegouEm:agora,atrasado:true,plan:ATV.semana,herdada:true}));
         });
@@ -22123,29 +22161,24 @@ async function atvGera(){
          · continua no passado          -> segue atrasado, na segunda.
        Sem esta revisão, um pedido remarcado ficava preso na segunda-feira
        para sempre, e cada geração o empurrava mais uma semana à frente. */
+    /* A REVISÃO FINAL, com o orçamento já relido.
+       O passo 2 decidiu com a cópia congelada da semana passada; agora as
+       entregas estão frescas. Toda linha responde à mesma pergunta do
+       atvPertence, e quem não pertence sai. É isto que desfaz sozinha a
+       bagunça já gravada: a semana de 31/08 tinha 40 linhas, 32 delas de
+       três semanas atrás, todas marcadas como atrasado. */
     const _seg=atvSeg(), _fim=atvFim();
     const _isoSeg=atvISO(_seg), _isoFim=atvISO(_fim);
+    const _isoAnt=atvISO(atvMais(_seg,-7));
     [...porId.values()].forEach(l=>{
-      /* A LIMPEZA DO QUE NÃO É DESTA SEMANA.
-         Nem o planejamento nem a entrega caem aqui, e ninguém marcou nada
-         a mão: a linha veio de uma geração que terminou depois de a semana
-         ter mudado, e ficou gravada no arquivo errado. É o caso das 32 que
-         estavam dentro do arquivo de 24 a 29 de agosto. */
+      if(!atvPertence(l,_isoSeg,_isoFim,_isoAnt,hoje)){ porId.delete(l.id); return; }
       const ent=atvDeBR(l.entrega);
-      const planAqui=l.plan>=_isoSeg&&l.plan<=_isoFim;
-      const entAqui=!!ent&&ent>=_seg&&ent<=_fim;
-      if(!planAqui&&!entAqui&&!l.atrasado&&!l.herdada&&l.etapa!=='organizar'){
-        porId.delete(l.id); return;
-      }
-      /* o `atrasado` sem `herdada` é linha gravada por uma versão anterior:
-         ela também precisa ser revista, senão a bagunça já gravada nunca se
-         desfaz sozinha */
-      if(!l.herdada&&!l.atrasado)return;
       if(!ent)return;
-      if(ent>_fim){ porId.delete(l.id); return; }
-      if(ent>=_seg){ l.atrasado=false; l.plan=atvISO(ent); delete l.herdada; }
-      /* herdada que ainda não venceu não pode carregar tarja de atraso */
-      else if(ent>=hoje){ l.atrasado=false; }
+      /* a entrega caiu DENTRO desta semana: a linha volta a ser um pedido
+         normal, no dia dela, sem tarja nenhuma */
+      if(ent>=_seg&&ent<=_fim&&(l.herdada||l.atrasado)){
+        l.atrasado=false; l.plan=atvISO(ent); delete l.herdada;
+      }
     });
 
     ATV.linhas=[...porId.values()];
@@ -22241,7 +22274,14 @@ window.atvSalva=atvSalva;
     const b=e.target.closest('button');
     if(!b||!alvo)return;
     const l=ATV.linhas.find(x=>x.id===alvo);
-    if(l&&l.etapa!==b.dataset.k){ l.etapa=b.dataset.k; ATV.sujo=true; atvDesenha(); }
+    if(l&&l.etapa!==b.dataset.k){
+      l.etapa=b.dataset.k;
+      /* escolher a etapa a mão devolve a linha para as mãos da pessoa: a
+         marca de "já desceu sozinha" sai, e um Organizar volta a poder
+         levá-la mais uma semana à frente */
+      delete l.herdada;
+      ATV.sujo=true; atvDesenha();
+    }
     fecha();
   });
   document.addEventListener('click',e=>{
