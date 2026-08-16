@@ -15,7 +15,7 @@
 <title>Fourtime — Editor Layout v3 (header + menu completos)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;0,700;0,800;1,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;0,700;0,800;1,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --ft-vermelho:#C6161B;
@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.316';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.317';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -15719,7 +15719,7 @@ function gerarHTML(imagens){
   if(cab){
     const f=document.createElement('link');
     f.rel='stylesheet';
-    f.href='https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap';
+    f.href='https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap';
     cab.appendChild(f);
   }
 
@@ -21940,6 +21940,16 @@ async function atvGera(){
     const marco=salvo.existe?eramSalvos:null;
     ATV.vistos=Object.assign({},salvo.vistos,ATV.vistos);
     ATV.salvoEm=salvo.salvoEm||ATV.salvoEm;
+    /* UM CAMPO NOVO NAO CHEGA SOZINHO NUMA SEMANA JA GRAVADA.
+       A leitura e incremental: so abre o arquivo do Drive cujo modifiedTime
+       mudou. Um campo acrescentado ao servidor DEPOIS (o departamento, na
+       v3.316) nunca seria lido, porque nenhum orcamento mudou por causa
+       disso — a coluna nascia vazia e continuava vazia por mais que se
+       clicasse em Gerar. Quando falta o campo em quem ja estava salvo, a
+       memoria do que foi lido e jogada fora UMA vez, e a semana e relida
+       inteira. */
+    if(base.length&&base.some(l=>l.departamento===undefined||l.departamento===null))
+      ATV.vistos={};
 
     const porId=new Map();
     base.forEach(l=>porId.set(l.id,Object.assign({},l)));
@@ -21947,16 +21957,29 @@ async function atvGera(){
 
     /* 2. o que sobrou da semana passada e não foi finalizado desce para a
           SEGUNDA desta semana, com a tarja de atrasado. É o que a fábrica
-          faz de qualquer jeito; o relatório só para de fingir que não. */
+          faz de qualquer jeito; o relatório só para de fingir que não.
+
+          MAS SÓ QUEM ESTÁ MESMO ATRASADO (v3.317).
+          A primeira versão trazia TUDO o que não estava finalizado, sem
+          olhar a data de entrega. Um pedido que ficou na semana passada e
+          teve o envio remarcado para daqui a duas semanas voltava para a
+          segunda-feira desta, com tarja vermelha de atrasado. Pior: ele
+          ficava gravado assim, e na semana seguinte era arrastado de novo,
+          somando semana após semana — foi por isso que a segunda-feira
+          apareceu com 1.559 peças e pedidos com entrega em 21/08.
+          Atrasado é quem tinha de sair ANTES desta segunda e não saiu. */
+    const segAtual=atvSeg();
     try{
-      const ant=atvISO(atvMais(atvSeg(),-7));
+      const ant=atvISO(atvMais(segAtual,-7));
       const d=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(ant));
       if(d&&d.existe){
         (d.linhas||[]).forEach(l=>{
           if(l.etapa==='finalizado')return;
           if(porId.has(l.id))return;
+          const ent=atvDeBR(l.entrega);
+          if(ent&&ent>=segAtual)return;      /* a entrega é daqui pra frente */
           porId.set(l.id,Object.assign({},l,
-            {chegouEm:agora,atrasado:true,plan:ATV.semana}));
+            {chegouEm:agora,atrasado:true,plan:ATV.semana,herdada:true}));
         });
       }
     }catch(e){}
@@ -22017,6 +22040,29 @@ async function atvGera(){
       atvDesenha();
     }
 
+    /* A ÚLTIMA PALAVRA É DO ORÇAMENTO, e não do arquivo da semana passada.
+       O passo 2 decidiu com a cópia CONGELADA da semana anterior; o passo 4
+       acabou de reler o orçamento de verdade. Se o envio mudou no meio do
+       caminho, a herança é revista aqui:
+         · virou uma data DESTA semana  -> volta a ser um pedido normal,
+           no dia dele, sem tarja;
+         · virou uma data DEPOIS desta  -> sai, porque não é assunto desta
+           semana;
+         · continua no passado          -> segue atrasado, na segunda.
+       Sem esta revisão, um pedido remarcado ficava preso na segunda-feira
+       para sempre, e cada geração o empurrava mais uma semana à frente. */
+    const _seg=atvSeg(), _fim=atvFim();
+    [...porId.values()].forEach(l=>{
+      /* o `atrasado` sem `herdada` é linha gravada por uma versão anterior:
+         ela também precisa ser revista, senão a bagunça já gravada nunca se
+         desfaz sozinha */
+      if(!l.herdada&&!l.atrasado)return;
+      const ent=atvDeBR(l.entrega);
+      if(!ent)return;
+      if(ent>_fim){ porId.delete(l.id); return; }
+      if(ent>=_seg){ l.atrasado=false; l.plan=atvISO(ent); delete l.herdada; }
+    });
+
     ATV.linhas=[...porId.values()];
     atvMarcaNovos(marco);
     ATV.existe=true;
@@ -22066,6 +22112,9 @@ async function atvSalva(){
       id:l.id,pedido:l.pedido,cliente:l.cliente,vendedor:l.vendedor,
       entrega:l.entrega,plan:l.plan,etapa:l.etapa||'',
       departamento:l.departamento||'',
+      /* a marca viaja: sem ela, uma linha herdada relida na semana
+         seguinte deixaria de ser revista pela regra acima */
+      herdada:!!l.herdada,
       sub:+l.sub||0,per:+l.per||0,total:+l.total||0,
       atrasado:!!l.atrasado, chegouEm:l.chegouEm||''}));
     const d=await atvPega('/api/ft/atividade-guardar',{method:'POST',
@@ -22120,10 +22169,26 @@ window.atvSalva=atvSalva;
     e.preventDefault();
     alvo=chip.dataset.id;
     const r=chip.getBoundingClientRect();
+    /* O MENU CABE NA TELA, SEMPRE (v3.317).
+       Com dez etapas ele cabia embaixo do chip em qualquer lugar da lista.
+       Com treze passou de 440px e, clicado numa linha do meio para baixo,
+       nao cabia nem embaixo nem em cima: o max-height de 340px cortava as
+       ultimas, e como o editor apaga TODA barra de rolagem (*{scrollbar
+       -width:none}) nao sobrava nem o sinal de que havia mais coisa. Era
+       exatamente o "cortando algumas tags".
+       Agora o lado com mais espaco e que decide, e o teto e o espaco de
+       verdade daquele lado: ou cabe inteiro, ou rola de propósito. */
+    menu.style.maxHeight='';
     menu.classList.add('on');
-    const alt=menu.offsetHeight, larg=menu.offsetWidth;
-    const abaixo=innerHeight-r.bottom>alt+12;
-    menu.style.top=(abaixo?r.bottom+6:Math.max(8,r.top-alt-6))+'px';
+    const larg=menu.offsetWidth;
+    const espacoAbaixo=innerHeight-r.bottom-14;
+    const espacoAcima=r.top-14;
+    const alt=menu.scrollHeight;
+    const abaixo=espacoAbaixo>=Math.min(alt,espacoAcima);
+    const teto=Math.max(160,Math.floor(abaixo?espacoAbaixo:espacoAcima));
+    menu.style.maxHeight=teto+'px';
+    const usada=Math.min(alt,teto);
+    menu.style.top=(abaixo?r.bottom+6:Math.max(8,r.top-usada-6))+'px';
     menu.style.left=Math.max(8,Math.min(innerWidth-larg-8,r.left))+'px';
   });
   window.addEventListener('resize',fecha);

@@ -561,6 +561,130 @@ checa('  e ficam guardados', r.guardado.semana, 1500);
 checa('250 x 6 = 1500: sem briga, sem aviso', r.aviso, true);
 checa('325 x 6 = 1950 contra 1500: o aviso aparece', r.avisoDepois, false);
 
+console.log('\n=== 8b. SO DESCE QUEM ESTA MESMO ATRASADO (v3.317) ===');
+/* O DEFEITO, COMO ELE APARECEU NA TELA.
+   A segunda-feira da semana de 10/08 amanheceu com 1.559 pecas para uma
+   capacidade de 325, e entre elas pedidos com ENTREGA em 21/08 marcados de
+   vermelho como atrasados. O passo que desce o resto da semana passada
+   trazia TUDO o que nao estava finalizado, sem olhar a data de entrega:
+   bastava o envio ter sido remarcado para a frente. E como a linha ficava
+   gravada assim, a geracao da semana seguinte a arrastava de novo, somando
+   semana apos semana.
+
+   Aqui a semana passada tem quatro casos ao mesmo tempo:
+     A  entrega no passado           -> desce, atrasado
+     B  entrega DENTRO desta semana  -> entra no dia dela, sem tarja
+     C  entrega DEPOIS desta semana  -> nao aparece
+     D  finalizado                   -> nao desce, como sempre       */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
+DRIVE.semanas['2026-08-10'] = { semana: '2026-08-10',
+  salvoEm: '2026-08-15T12:00:00.000Z', vistos: {},
+  linhas: [
+    { id: 'IDATRA0001xx', pedido: 'PD005001', cliente: 'ATRASADO DE VERDADE',
+      entrega: '12/08/2026', plan: '2026-08-12', etapa: 'costura',
+      sub: 10, per: 0, total: 10, chegouEm: '2026-08-10T10:00:00.000Z' },
+    { id: 'IDREMA0001xx', pedido: 'PD005002', cliente: 'REMARCADO PARA ESTA SEMANA',
+      entrega: '20/08/2026', plan: '2026-08-12', etapa: 'corte',
+      sub: 20, per: 0, total: 20, chegouEm: '2026-08-10T10:00:00.000Z' },
+    { id: 'IDFUTU0001xx', pedido: 'PD005003', cliente: 'REMARCADO PARA DEPOIS',
+      entrega: '28/08/2026', plan: '2026-08-12', etapa: 'corte',
+      sub: 30, per: 0, total: 30, chegouEm: '2026-08-10T10:00:00.000Z' },
+    { id: 'IDFIMM0001xx', pedido: 'PD005004', cliente: 'JA ENTREGUE',
+      entrega: '12/08/2026', plan: '2026-08-12', etapa: 'finalizado',
+      sub: 40, per: 0, total: 40, chegouEm: '2026-08-10T10:00:00.000Z' }] };
+/* os dois remarcados existem no Drive com a entrega nova */
+poeNoDrive([pedido(1, 17, 100, 100),
+  { id: 'IDREMA0001xx', pedido: 'PD005002', arquivo: 'REMARCADO-PD005002.ft',
+    cliente: 'REMARCADO PARA ESTA SEMANA', vendedor: 'Dani', envio: '20/08/2026',
+    dia: 1, subPecas: 20, perPecas: 0, total: 20 },
+  { id: 'IDFUTU0001xx', pedido: 'PD005003', arquivo: 'FUTURO-PD005003.ft',
+    cliente: 'REMARCADO PARA DEPOIS', vendedor: 'Dani', envio: '28/08/2026',
+    dia: 1, subPecas: 30, perPecas: 0, total: 30 }]);
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1400);
+r = await p.evaluate(() => {
+  const acha = id => ATV.linhas.find(l => l.id === id) || null;
+  const m = id => { const l = acha(id); return l && { plan: l.plan, atrasado: !!l.atrasado }; };
+  return { atrasado: m('IDATRA0001xx'), remarcado: m('IDREMA0001xx'),
+           futuro: m('IDFUTU0001xx'), finalizado: m('IDFIMM0001xx'),
+           /* nada com entrega depois desta semana pode estar na tela */
+           entregasFuturas: ATV.linhas.filter(l => {
+             const e = atvDeBR(l.entrega); return e && e > atvFim(); }).map(l => l.pedido),
+           /* e nada de fora da semana pode estar marcado de vermelho */
+           tarjasErradas: ATV.linhas.filter(l => {
+             const e = atvDeBR(l.entrega); return l.atrasado && e && e >= atvSeg(); })
+             .map(l => l.pedido) };
+});
+console.log('     ' + JSON.stringify(r));
+checa('quem tinha de sair antes da segunda desce atrasado',
+  r.atrasado, { plan: '2026-08-17', atrasado: true });
+/* NAO e so nao marcar de vermelho: ele tem de ir para o DIA da entrega */
+checa('quem foi remarcado para esta semana entra no dia dele',
+  r.remarcado, { plan: '2026-08-20', atrasado: false });
+checa('quem foi remarcado para depois some da semana', r.futuro, null);
+checa('o finalizado continua sem descer', r.finalizado, null);
+checa('nenhuma entrega futura sobrou na semana', r.entregasFuturas, []);
+checa('nenhuma tarja de atrasado em pedido que nao atrasou', r.tarjasErradas, []);
+
+console.log('\n=== 8c. UMA SEMANA JA GRAVADA TORTA SE DESFAZ SOZINHA ===');
+/* A bagunca ja esta gravada no Drive dele: linhas com plan na segunda,
+   tarja de atrasado e entrega no futuro, salvas por uma versao anterior.
+   Elas nao tem a marca `herdada`, entao a revisao precisa alcancar tambem
+   quem so tem o `atrasado` — senao o estrago nunca se desfaz. */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
+DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
+  salvoEm: '2026-08-16T12:00:00.000Z', vistos: {},
+  linhas: [{ id: 'IDVELHA001xx', pedido: 'PD005010', cliente: 'GRAVADO TORTO',
+             entrega: '20/08/2026', plan: '2026-08-17', etapa: 'corte',
+             atrasado: true, sub: 15, per: 0, total: 15,
+             chegouEm: '2026-08-16T10:00:00.000Z' }] };
+poeNoDrive([{ id: 'IDVELHA001xx', pedido: 'PD005010', arquivo: 'TORTO-PD005010.ft',
+  cliente: 'GRAVADO TORTO', vendedor: 'Dani', envio: '20/08/2026', dia: 1,
+  subPecas: 15, perPecas: 0, total: 15 }]);
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1400);
+r = await p.evaluate(() => {
+  const l = ATV.linhas.find(x => x.id === 'IDVELHA001xx') || {};
+  return { plan: l.plan, atrasado: !!l.atrasado, etapa: l.etapa };
+});
+console.log('     ' + JSON.stringify(r));
+checa('a linha volta para o dia da entrega', r.plan, '2026-08-20');
+checa('  e perde a tarja que nao devia ter', r.atrasado, false);
+/* o que o operador escolheu a mao continua de pe: a revisao mexe em DIA e
+   TARJA, nunca na etapa */
+checa('  mas a etapa escolhida a mao fica', r.etapa, 'corte');
+delete DRIVE.semanas['2026-08-17'];
+
+console.log('\n=== 8d. UM CAMPO NOVO CHEGA NUMA SEMANA JA GRAVADA ===');
+/* A leitura e incremental: so abre o arquivo cujo modifiedTime mudou. O
+   departamento entrou no servidor na v3.316, e nenhum orcamento mudou por
+   causa disso — a coluna nascia vazia e continuava vazia por mais que se
+   clicasse em Gerar. Era o que estava na tela dele: 41 pedidos, coluna
+   inteira com travessao. */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
+DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
+  salvoEm: '2026-08-16T12:00:00.000Z',
+  /* o arquivo ja foi lido: sem o conserto, ele nao seria aberto de novo */
+  vistos: { IDDEPT0001xx: 'm0' },
+  linhas: [{ id: 'IDDEPT0001xx', pedido: 'PD005020', cliente: 'SEM DEPARTAMENTO',
+             entrega: '18/08/2026', plan: '2026-08-18', etapa: 'corte',
+             sub: 5, per: 0, total: 5, chegouEm: '2026-08-16T10:00:00.000Z' }] };
+poeNoDrive([{ id: 'IDDEPT0001xx', pedido: 'PD005020', arquivo: 'DEPT-PD005020.ft',
+  cliente: 'SEM DEPARTAMENTO', vendedor: 'Dani', envio: '18/08/2026', dia: 1,
+  departamento: 'Silk + DTF', subPecas: 5, perPecas: 0, total: 5 }]);
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1400);
+r = await p.evaluate(() => {
+  const l = ATV.linhas.find(x => x.id === 'IDDEPT0001xx') || {};
+  return { dep: l.departamento,
+           naTela: (document.querySelector('.atv-linha[data-id="IDDEPT0001xx"] .dep')
+             || {}).textContent };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o departamento chega numa semana ja lida', r.dep, 'Silk + DTF');
+checa('  e aparece na coluna', r.naTela, 'Silk + DTF');
+delete DRIVE.semanas['2026-08-17'];
+
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
    quase todas moram na mesma linha da tabela, e o que quebra uma quebra a
@@ -654,6 +778,85 @@ checa('a pastilha tem a mesma folga dos dois lados',
 checa('o submenu conta pela mesma regra da etiqueta', r.lateral.indexOf('Atrasado=1') >= 0, true);
 checa('  e mostra a etapa antiga so porque ainda ha alguem nela',
   r.lateral.indexOf('Separação=1') >= 0, true);
+
+console.log('\n=== 13b2. O NEGRITO DE VERDADE E O MENU QUE CABE (v3.317) ===');
+/* O NEGRITO QUE NAO APARECIA.
+   As colunas de numero usam IBM Plex Mono, e a folha de estilo pedia
+   wght@400;500;600 — sem 700. Quando o CSS pede 700 e a familia so tem ate
+   600, o navegador NAO inventa negrito: ele escolhe a face mais proxima que
+   existe, a de 600, que a 11,5px e quase igual a de 500. O peso estava no
+   CSS, o teste lia "700", e na tela nao havia negrito nenhum. Por isso a
+   conferencia aqui nao e do CSS: e da FONTE. */
+r = await p.evaluate(async () => {
+  await document.fonts.ready;
+  const mede = (txt, peso) => {
+    const e = document.createElement('span');
+    e.style.cssText = 'position:fixed;left:-9999px;white-space:pre;font-size:11.5px;'
+      + 'font-family:' + getComputedStyle(document.documentElement)
+        .getPropertyValue('--ft-fonte-mono') + ';font-weight:' + peso;
+    e.textContent = txt;
+    document.body.appendChild(e);
+    const w = e.getBoundingClientRect().width;
+    e.remove();
+    return w;
+  };
+  /* IBM Plex Mono e MONOESPACADA: 400, 600 e 700 tem exatamente a mesma
+     largura de avanco. Medir texto nao prova nada aqui — o que prova e o
+     INVENTARIO das faces declaradas. Se a de 700 nao existe, o navegador
+     cai na de 600 em silencio, que foi o defeito. */
+  const faces = [...document.fonts].filter(f => f.family === 'IBM Plex Mono');
+  return {
+    pesosMono: [...new Set(faces.map(f => f.weight))].sort(),
+    l400: mede('PD004119', 400), l700: mede('PD004119', 700),
+    pedidoPede: getComputedStyle(
+      document.querySelector('.atv-linha .ped')).fontWeight,
+    totalPede: getComputedStyle(
+      document.querySelector('.atv-linha .tot')).fontWeight,
+  };
+});
+console.log('     ' + JSON.stringify(r));
+checa('a fonte mono declara ate a face de 700', r.pesosMono,
+  ['400', '500', '600', '700']);
+checa('a coluna Pedido pede 700', r.pedidoPede, '700');
+checa('  e a coluna Total tambem', r.totalPede, '700');
+
+/* O MENU CORTANDO ETAPAS.
+   Com dez etapas ele cabia embaixo de qualquer chip. Com treze passou de
+   440px: clicado numa linha do meio para baixo, nao cabia nem embaixo nem
+   em cima, o teto de 340px cortava as ultimas e o editor apaga TODA barra
+   de rolagem — nao sobrava nem o sinal de que havia mais coisa.
+   O teste abre pelo ULTIMO chip da lista, que e o pior caso. */
+r = await p.evaluate(async () => {
+  ATV.linhas = Array.from({ length: 26 }, (_, i) => ({
+    id: 'M' + i, pedido: 'PD007' + String(i).padStart(3, '0'), cliente: 'CLIENTE ' + i,
+    vendedor: 'Dani', entrega: '17/08/2026', plan: '2026-08-17', etapa: 'corte',
+    departamento: 'DTF', sub: 1, per: 0, total: 1, chegouEm: '', novo: false }));
+  atvDesenha();
+  const chips = [...document.querySelectorAll('.atv-chip')];
+  const ultimo = chips[chips.length - 1];
+  ultimo.scrollIntoView({ block: 'end' });
+  await new Promise(r => setTimeout(r, 250));
+  ultimo.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 250));
+  const m = document.getElementById('atvMenuEtapa');
+  const rm = m.getBoundingClientRect();
+  const bts = [...m.querySelectorAll('button')];
+  return {
+    aberto: m.classList.contains('on'),
+    botoes: bts.length,
+    dentroDaTela: rm.top >= 0 && rm.bottom <= innerHeight + 0.5
+      && rm.left >= 0 && rm.right <= innerWidth + 0.5,
+    recortados: bts.filter(b => b.offsetTop + b.offsetHeight > m.scrollHeight + 0.5).length,
+    cabeSemRolar: m.scrollHeight <= m.clientHeight + 0.5,
+    alturaMenu: Math.round(rm.height), tela: innerHeight,
+  };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o menu abre com as treze escolhas', [r.aberto, r.botoes], [true, 13]);
+checa('  inteiro dentro da tela', r.dentroDaTela, true);
+checa('  sem nenhum botao recortado', r.recortados, 0);
+checa('  e sem precisar rolar', r.cabeSemRolar, true);
+await p.evaluate(() => document.body.click());
 
 console.log('\n=== 13c. A FOLHA IMPRESSA DA v3.316 ===');
 r = await p.evaluate(() => {
