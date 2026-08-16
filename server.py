@@ -3423,6 +3423,113 @@ async def ft_atividade_guardar(request: Request):
             "nome": nome, "salvoEm": doc["salvoEm"]}
 
 
+# =====================================================================
+#  O CACHE DA ATIVIDADE  (.ftk)
+#
+#  A leitura ja era incremental: cada semana guarda no proprio .fta o
+#  mapa id -> modifiedTime do que ja abriu, e so reabre o que mudou. Mas
+#  esse mapa e DE UMA SEMANA SO. Abrir a semana seguinte comecava do
+#  zero e reabria os mesmos orcamentos, um por um, porque o que a semana
+#  anterior aprendeu ficou trancado no arquivo dela.
+#
+#  O cache tira esse aprendizado de dentro da semana e o poe num arquivo
+#  por MES, ao lado dos relatorios: 2026-08.ftk. Dentro dele, por id do
+#  arquivo, exatamente os mesmos campos que o atividade-lote devolve,
+#  mais o modifiedTime que os validou. Gerar qualquer semana passa a
+#  aproveitar o que qualquer outra ja leu.
+#
+#  Por MES e nao num arquivo unico por dois motivos: a varredura ja e por
+#  mes (entao le-se so o que interessa), e um arquivo unico cresceria sem
+#  fim e seria reescrito inteiro a cada gravacao.
+#
+#  A CHAVE DE VALIDADE E O modifiedTime, e nao o tempo. Um orcamento
+#  reaberto e salvo muda o modifiedTime, e a entrada envelhece na hora.
+#  Cache que expira por relogio erra nos dois sentidos: guarda demais o
+#  que mudou e joga fora o que continua bom.
+# =====================================================================
+def _atv_cache_nome(ano, mes):
+    if not (1 <= int(mes) <= 12) or not (2000 <= int(ano) <= 2999):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    return "%04d-%02d.ftk" % (int(ano), int(mes))
+
+
+@app.get("/api/ft/atividade-cache")
+def ft_atividade_cache_le(request: Request, ano: int = 0, mes: int = 0):
+    """O que ja foi lido daquele mes, se houver."""
+    exige_atividade(request)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    h = datetime.now(timezone.utc)
+    nome = _atv_cache_nome(int(ano or h.year), int(mes or h.month))
+    try:
+        pid = _rel_pasta()
+        achados = _drive_get("/files", {
+            "q": ("'%s' in parents and trashed = false and name = '%s'"
+                  % (pid, nome.replace("'", "\\'"))),
+            "fields": "files(id,name,modifiedTime)", "pageSize": "5",
+            "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"}).get("files", [])
+        if not achados:
+            return {"ok": True, "existe": False, "nome": nome, "itens": {}}
+        bruto, _ = _drive_get("/files/" + achados[0]["id"],
+                              {"alt": "media", "supportsAllDrives": "true"}, binario=True)
+        doc = json.loads(bruto.decode("utf-8"))
+        itens = doc.get("itens")
+        if not isinstance(itens, dict):
+            itens = {}
+        return {"ok": True, "existe": True, "nome": nome, "itens": itens}
+    except Exception:
+        # cache e um ATALHO: falhar nele nao pode derrubar a geracao, so
+        # devolve-la ao caminho longo.
+        return {"ok": True, "existe": False, "nome": nome, "itens": {}}
+
+
+@app.post("/api/ft/atividade-cache")
+async def ft_atividade_cache_grava(request: Request):
+    """Guarda o que foi lido daquele mes, para a proxima semana aproveitar."""
+    exige_atividade(request)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    h = datetime.now(timezone.utc)
+    nome = _atv_cache_nome(int(corpo.get("ano") or h.year),
+                           int(corpo.get("mes") or h.month))
+    itens = corpo.get("itens")
+    if not isinstance(itens, dict):
+        raise HTTPException(status_code=400, detail="Cache sem itens.")
+    # um teto para o arquivo nao virar um problema por conta propria
+    if len(itens) > 4000:
+        raise HTTPException(status_code=400, detail="Cache grande demais.")
+    doc = {"_formato": "fourtime-atividade-cache", "_versao": 1,
+           "salvoEm": h.isoformat(), "nome": nome, "itens": itens}
+    texto = json.dumps(doc, ensure_ascii=False)
+    fid, acao, via = None, "", ""
+    try:
+        pid = _rel_pasta()
+        existente = _orc_acha_arquivo(nome, pid)
+        if existente:
+            _orc_grava_por_id(existente, texto.encode("utf-8"))
+            fid, acao, via = existente, "atualizado", "service-account"
+    except Exception:
+        pass
+    if not fid and FT_SCRIPT_ORCAMENTOS:
+        try:
+            r = _script_post({"acao": "salvar", "nome": nome, "conteudo": texto,
+                              "destino": "relatorio",
+                              "pastaRelatorios": FT_PASTA_RELATORIOS})
+            fid, acao, via = r.get("id"), "criado", "apps-script"
+        except Exception as e:
+            return {"ok": False, "aviso": "Não consegui guardar o cache: %s" % str(e)[:160]}
+    if not fid:
+        return {"ok": False, "aviso": "Não consegui guardar o cache."}
+    return {"ok": True, "id": fid, "acao": acao, "via": via, "nome": nome,
+            "quantos": len(itens)}
+
+
 # ------------- PWA (offline + instalável) -------------
 def _acha_pwa_dir():
     """Procura a pasta 'pwa' em locais comuns. Funciona esteja ela na raiz

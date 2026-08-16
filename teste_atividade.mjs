@@ -101,6 +101,25 @@ await p.route('**/api/ft/atividade-lote', async r => {
   await r.fulfill({ status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, itens, falhas: [] }) });
 });
+/* O CACHE DO MES (.ftk). Sem esta rota o editor bate no uvicorn de
+   verdade tres vezes por geracao e a suite fica lenta a toa. Com ela, o
+   cache e exercitado como no Drive: le, grava e e reaproveitado. */
+const FTK = {};          /* 'ano-mes' -> { id: item } */
+let CACHE_GRAVACOES = 0;
+await p.route('**/api/ft/atividade-cache*', async r => {
+  const u = new URL(r.request().url());
+  if (r.request().method() === 'POST') {
+    const c = JSON.parse(r.request().postData() || '{}');
+    FTK[c.ano + '-' + c.mes] = Object.assign({}, FTK[c.ano + '-' + c.mes], c.itens);
+    CACHE_GRAVACOES++;
+    await r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ ok: true, quantos: Object.keys(c.itens || {}).length }) });
+    return;
+  }
+  const k = u.searchParams.get('ano') + '-' + u.searchParams.get('mes');
+  await r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, existe: !!FTK[k], itens: FTK[k] || {} }) });
+});
 await p.route('**/api/ft/atividade-guardado*', async r => {
   const sem = new URL(r.request().url()).searchParams.get('semana') || '';
   const d = DRIVE.semanas[sem];
@@ -704,9 +723,12 @@ let devagar = true;
 await p.route('**/api/ft/atividade-lote', async r => {
   if (devagar) await new Promise(s => setTimeout(s, 1500));
   const corpo = JSON.parse(r.request().postData() || '{}');
-  const itens = (corpo.arquivos || []).map(a =>
-    Object.assign({}, DRIVE.conteudo[a.id], { id: a.id, mod: a.mod }))
-    .filter(x => x.pedido !== undefined);
+  const itens = (corpo.arquivos || []).map(a => {
+    /* a contabilidade das aberturas continua valendo aqui: e ela que
+       prova, mais adiante, que o cache poupou leitura */
+    DRIVE.aberturas.push(a.id);
+    return Object.assign({}, DRIVE.conteudo[a.id], { id: a.id, mod: a.mod });
+  }).filter(x => x.pedido !== undefined);
   await r.fulfill({ status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, itens, falhas: [] }) });
 });
@@ -997,6 +1019,142 @@ checa('trocar de semana fecha o aviso da anterior na hora', aindaLa, false);
 delete DRIVE.semanas['2026-08-17'];
 await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
   ATV.sujo = false; ATV.hojeFixo = ''; atvNotifFecha(); });
+
+console.log('\n=== 8k. O CACHE DO MES (v3.322) ===');
+/* A leitura ja era incremental, mas o que ela aprendia ficava trancado
+   DENTRO do arquivo da semana: abrir a semana seguinte comecava do zero e
+   reabria os mesmos orcamentos um por um. O cache tira esse aprendizado
+   de dentro da semana e o poe num arquivo por mes.
+
+   A conferencia e sobre ABERTURAS: o cache so vale se a segunda semana
+   NAO abrir de novo o que a primeira ja leu. */
+Object.keys(FTK).forEach(k => delete FTK[k]);
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.semana = '2026-08-17'; ATV.hojeFixo = '2026-08-16'; });
+delete DRIVE.semanas['2026-08-10'];
+delete DRIVE.semanas['2026-08-17'];
+delete DRIVE.semanas['2026-08-24'];
+/* tres pedidos da semana de 17 e dois da de 24, todos no mesmo mes */
+poeNoDrive([pedido(31, 18, 10, 10), pedido(32, 19, 20, 20), pedido(33, 20, 30, 30),
+            pedido(34, 25, 40, 40), pedido(35, 26, 50, 50)]);
+DRIVE.aberturas = [];
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1600);
+const primeira = DRIVE.aberturas.length;
+const gravou1 = CACHE_GRAVACOES;
+r = await p.evaluate(() => ATV.linhas.length);
+console.log('     1a semana: abriu ' + primeira + ' arquivos, ' + r + ' linhas');
+checa('a primeira semana abre os cinco do mes', primeira, 5);
+checa('  e fica com os tres dela', r, 3);
+checa('  e o cache foi gravado', gravou1 > 0, true);
+
+/* AGORA A SEMANA SEGUINTE: o cache tem de poupar TODAS as aberturas */
+DRIVE.aberturas = [];
+await p.evaluate(() => { ATV.semana = '2026-08-24'; ATV.linhas = []; ATV.vistos = {};
+  ATV.sujo = false; });
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1600);
+const segunda = DRIVE.aberturas.length;
+r = await p.evaluate(() => ({ n: ATV.linhas.length,
+  pedidos: ATV.linhas.map(l => l.pedido).sort() }));
+console.log('     2a semana: abriu ' + segunda + ' arquivos, ' + JSON.stringify(r));
+/* ESTE E O GANHO: zero aberturas, e ainda assim a semana montada certa */
+checa('a segunda semana nao abre nenhum arquivo', segunda, 0);
+checa('  e mesmo assim monta a semana dela', r.pedidos, ['PD004134', 'PD004135']);
+
+/* UM ORCAMENTO QUE MUDA NO DRIVE ENVELHECE A ENTRADA NA HORA.
+   A chave de validade e o modifiedTime, e nao o relogio: cache que expira
+   por tempo guarda demais o que mudou e joga fora o que continua bom. */
+DRIVE.arquivos = DRIVE.arquivos.map(a =>
+  a.id === 'ID00000034xx' ? { ...a, mod: 'MUDOU' } : a);
+DRIVE.conteudo['ID00000034xx'] = { ...DRIVE.conteudo['ID00000034xx'],
+  cliente: 'CLIENTE 34 RENOMEADO', total: 999, subPecas: 999, perPecas: 0 };
+DRIVE.aberturas = [];
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1600);
+r = await p.evaluate(() => {
+  const l = ATV.linhas.find(x => x.id === 'ID00000034xx') || {};
+  return { abriu: null, cliente: l.cliente, total: l.total };
+});
+console.log('     depois de mudar um: abriu ' + JSON.stringify(DRIVE.aberturas)
+  + ' ' + JSON.stringify(r));
+checa('so o arquivo que mudou e reaberto', DRIVE.aberturas, ['ID00000034xx']);
+checa('  e o dado novo dele chega na tela', [r.cliente, r.total],
+  ['CLIENTE 34 RENOMEADO', 999]);
+await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
+  ATV.sujo = false; ATV.hojeFixo = ''; });
+
+console.log('\n=== 8l. O CARREGAMENTO E UM MODAL CENTRAL (v3.322) ===');
+/* Era uma tira fina no alto da lista, junto do conteudo: dizia o que
+   estava acontecendo e ao mesmo tempo deixava a pagina parecer utilizavel,
+   com linhas velhas mudando sozinhas por baixo dela. */
+r = await p.evaluate(() => {
+  ATV.carregando = true; ATV.prog = { feito: 3, total: 12, onde: '8/2026' };
+  atvDesenha();
+  const cx = document.getElementById('atvCarga');
+  const e = getComputedStyle(cx);
+  const c = cx.getBoundingClientRect();
+  const jan = cx.querySelector('.atv-carga').getBoundingClientRect();
+  const fora = { visivel: !cx.hidden, pos: e.position,
+    cobreATela: Math.round(c.width) === innerWidth && Math.round(c.height) === innerHeight,
+    /* centrado: as sobras dos dois lados sao iguais */
+    centrado: Math.abs(jan.left - (innerWidth - jan.right)) < 2
+           && Math.abs(jan.top - (innerHeight - jan.bottom)) < 2,
+    pct: document.getElementById('atvCargaPct').textContent,
+    rot: document.getElementById('atvCargaRot').textContent,
+    conta: document.getElementById('atvCargaConta').textContent,
+    barra: document.getElementById('atvCargaBarra').style.width,
+    /* a tira antiga nao pode ter sobrado na pagina */
+    tiraNaPagina: document.querySelectorAll('#atvPage .atv-prog').length };
+  ATV.carregando = false; ATV.prog = { feito: 0, total: 0, onde: '' };
+  atvDesenha();
+  fora.sumiu = document.getElementById('atvCarga').hidden;
+  return fora;
+});
+console.log('     ' + JSON.stringify(r));
+checa('o carregamento e um modal por cima de tudo', [r.visivel, r.pos], [true, 'fixed']);
+checa('  cobrindo a tela inteira', r.cobreATela, true);
+checa('  com a caixa no centro', r.centrado, true);
+checa('  mostrando a porcentagem de verdade', r.pct, '25%');
+checa('  e a conta de arquivos', r.conta, '3 de 12 arquivos  ·  8/2026');
+checa('  com a barra no mesmo tanto', r.barra, '25%');
+checa('a tira antiga saiu da pagina', r.tiraNaPagina, 0);
+checa('e o modal some quando a leitura acaba', r.sumiu, true);
+
+console.log('\n=== 8m. A SECAO SOBREVIVE AO F5 (v3.322) ===');
+/* Atualizar a pagina voltava sempre para o editor. Nao era decisao de
+   ninguem: a secao so existia numa variavel de memoria. */
+r = await p.evaluate(() => {
+  const antes = localStorage.getItem('ft_secao');
+  ftSecao('relatorio');
+  const gravouRel = localStorage.getItem('ft_secao');
+  ftSecao('atividade');
+  const gravouAtv = localStorage.getItem('ft_secao');
+  /* a devolucao: finge o recarregamento voltando para o orcamento e
+     mandando devolver */
+  ftSecao('orcamento');
+  localStorage.setItem('ft_secao', 'atividade');
+  ftSecaoDevolve();
+  const voltou = ftSecao();
+  /* e uma secao cujo botao esta escondido por permissao NAO e destino */
+  const bt = document.querySelector('.ft-rail-bt[data-sec="banco"]');
+  const eraHidden = bt.hidden;
+  bt.hidden = true;
+  ftSecao('orcamento');
+  localStorage.setItem('ft_secao', 'banco');
+  ftSecaoDevolve();
+  const naoVoltou = ftSecao();
+  bt.hidden = eraHidden;
+  ftSecao('atividade');
+  return { antes, gravouRel, gravouAtv, voltou, naoVoltou };
+});
+console.log('     ' + JSON.stringify(r));
+checa('trocar de secao grava a escolha', [r.gravouRel, r.gravouAtv],
+  ['relatorio', 'atividade']);
+checa('  e o recarregamento devolve a pessoa para ela', r.voltou, 'atividade');
+/* a rede de seguranca: botao escondido por permissao nao e destino */
+checa('secao sem permissao nao e devolvida', r.naoVoltou, 'orcamento');
 
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:

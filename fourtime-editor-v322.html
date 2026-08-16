@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.321';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.322';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -11914,10 +11914,48 @@ window.rlSincroniza=rlSincroniza;
   if(p)p.onclick=()=>{const b=document.getElementById('miPrint'); if(b)b.click();};
 })();
 
+/* ==================================================================
+   A SEÇÃO SOBREVIVE AO F5  (v3.322)
+
+   Atualizar a página voltava sempre para o editor, estivesse quem
+   estivesse no Relatório, no Banco ou na Atividade. Não era decisão de
+   ninguém: é que a seção só existia numa variável de memória, e memória
+   morre no recarregamento.
+
+   Agora ela é gravada a cada troca e devolvida na volta. Três cuidados:
+
+     · a devolução espera o `ftEuCarrega()`, porque só depois dele se sabe
+       quem é a pessoa. Voltar para a Atividade antes disso abriria uma
+       tela que ela talvez nem possa ver;
+     · o `ftAplicaAcesso()` já tem a regra "se está numa seção que não é
+       sua, volta para o orçamento" — ela continua valendo e é a rede de
+       segurança;
+     · guarda por NAVEGADOR e não por pessoa: quem troca de usuário na
+       mesma máquina cai na seção do outro por um instante, e a regra
+       acima o tira de lá. Guardar por pessoa exigiria saber quem é antes
+       de ler, que é justamente o que ainda não se sabe.
+   ================================================================== */
+const FT_SEC_CHAVE='ft_secao';
+function ftSecaoGuarda(sec){
+  try{ localStorage.setItem(FT_SEC_CHAVE,sec); }catch(e){}
+}
+function ftSecaoDevolve(){
+  let sec='';
+  try{ sec=localStorage.getItem(FT_SEC_CHAVE)||''; }catch(e){}
+  if(!sec||sec==='orcamento')return;
+  /* só volta para seção que existe E que está no trilho: um botão
+     escondido por permissão não é destino */
+  const bt=document.querySelector('.ft-rail-bt[data-sec="'+sec+'"]');
+  if(!bt||bt.hidden||bt.style.display==='none')return;
+  if(typeof ftSecao==='function')ftSecao(sec);
+}
+window.ftSecaoDevolve=ftSecaoDevolve;
+
 let FT_SEC='orcamento';
 function ftSecao(sec){
   if(!sec)return FT_SEC;
   FT_SEC=sec;
+  ftSecaoGuarda(sec);
   document.querySelectorAll('.ft-rail-bt').forEach(b=>b.classList.toggle('on',b.dataset.sec===sec));
   document.querySelectorAll('.ft-painel').forEach(p=>{p.hidden=(p.dataset.sec!==sec);});
   /* a seção fica marcada no body: o CSS decide o que existe em cada uma */
@@ -17878,7 +17916,13 @@ async function ftUsersFaz(corpo){
 
 
 (function ligaEu(){
-  const vai=async()=>{ await ftEuCarrega(); setTimeout(ftVendedorPadrao,400); };
+  const vai=async()=>{
+    await ftEuCarrega();
+    /* só agora: antes disto não se sabe quem é a pessoa nem quais botões
+       do trilho existem para ela */
+    if(typeof ftSecaoDevolve==='function')ftSecaoDevolve();
+    setTimeout(ftVendedorPadrao,400);
+  };
   if(document.readyState!=='loading')setTimeout(vai,120);
   else addEventListener('DOMContentLoaded',()=>setTimeout(vai,120));
 })();
@@ -21137,6 +21181,47 @@ function formataPedido(bruto){
   body.atv-so-olha .atv-chip{cursor:default;}
 
   /* ==================================================================
+     O CARREGAMENTO, NO MEIO DA TELA  (v3.322, a pedido)
+
+     Era uma tira fina no alto da lista, junto do resto do conteúdo: ela
+     dizia o que estava acontecendo e ao mesmo tempo deixava a página
+     parecer utilizável, com linhas velhas na tela mudando sozinhas por
+     baixo dela. O relatório mensal já resolvia isso do jeito certo, com
+     o número grande no meio, e é o mesmo desenho aqui.
+
+     Os números são os do .rel-prog de propósito: 40px na porcentagem,
+     420px de largura, a mesma trilha de 8px. Duas telas que fazem a
+     mesma coisa não podem parecer duas coisas.
+     ================================================================== */
+  .atv-carga-fundo{
+    position:fixed;inset:0;z-index:9780;background:var(--ft-veu);
+    display:flex;align-items:center;justify-content:center;padding:24px;
+  }
+  .atv-carga-fundo[hidden]{display:none;}
+  .atv-carga{
+    background:var(--ft-superficie);border:1px solid var(--ft-borda);
+    border-radius:var(--ft-modal-raio,14px);box-shadow:var(--ft-sh-4,0 18px 48px rgba(16,20,26,.22));
+    width:min(420px,100%);padding:38px 30px 32px;text-align:center;
+    font-family:var(--ft-fonte-ui,inherit);
+  }
+  .atv-carga .pct{
+    font-family:var(--ft-fonte-mono,monospace);font-size:40px;font-weight:700;
+    color:var(--ft-vermelho);line-height:1;font-variant-numeric:tabular-nums;
+  }
+  .atv-carga .rot{margin-top:9px;font-size:12.5px;color:var(--ft-cinza-70);}
+  .atv-carga .trilho{
+    margin-top:16px;height:8px;border-radius:99px;
+    background:var(--ft-hover-2,#EEF0F4);overflow:hidden;
+  }
+  .atv-carga .barra{
+    height:100%;border-radius:99px;background:var(--ft-vermelho);
+    transition:width .2s linear;
+  }
+  .atv-carga .conta{margin-top:10px;font-size:11.5px;color:var(--ft-cinza-40);
+    font-variant-numeric:tabular-nums;min-height:14px;}
+  @media print{ .atv-carga-fundo{display:none !important;} }
+
+  /* ==================================================================
      O AVISO DE PEDIDO NOVO, no canto de baixo à direita
 
      Ele existe porque abrir a semana e ver o planejamento salvo não diz
@@ -21440,6 +21525,15 @@ function formataPedido(bruto){
 </style>
 
 <div class="atv-menu" id="atvMenuEtapa"></div>
+
+<div class="atv-carga-fundo" id="atvCarga" hidden>
+  <div class="atv-carga">
+    <div class="pct" id="atvCargaPct">0%</div>
+    <div class="rot" id="atvCargaRot">Procurando os orçamentos…</div>
+    <div class="trilho"><div class="barra" id="atvCargaBarra" style="width:0%"></div></div>
+    <div class="conta" id="atvCargaConta"></div>
+  </div>
+</div>
 
 <div class="atv-notif" id="atvNotif" hidden>
   <button class="atv-notif-x" id="atvNotifX" type="button" title="Fechar">
@@ -21820,12 +21914,7 @@ function atvDesenha(){
       +'<div class="pe">'+c.finalizados+' finalizados · '+n(c.prontas)+' peças prontas</div></div>'
     +'</div>';
 
-  if(ATV.carregando){
-    const t=ATV.prog.total||1;
-    html+='<div class="atv-prog"><div class="txt">Lendo o Drive: '+ATV.prog.feito+' de '+t
-      +(ATV.prog.onde?' — '+atvEsc(ATV.prog.onde):'')+'</div>'
-      +'<div class="tr"><i style="width:'+Math.round(ATV.prog.feito/t*100)+'%"></i></div></div>';
-  }
+  /* o progresso saiu daqui e virou modal (v3.322): ver atvCargaPinta */
   if(ATV.aviso)html+='<div class="atv-prog"><div class="txt">'+atvEsc(ATV.aviso)+'</div></div>';
 
   html+='<div class="atv-cab-lista"><span></span><span>Pedido</span><span>Nome</span>'
@@ -21882,12 +21971,33 @@ function atvDesenha(){
   }
 
   pg.innerHTML=html;
+  atvCargaPinta();
   const sat=pg.querySelector('#atvCardSat');
   if(sat)atvPinta(sat,pct);
   const rod=pg.querySelector('#atvRodape');
   if(rod)atvPinta(rod,pct);
   atvLateral();
 }
+
+/* O MODAL DO CARREGAMENTO.
+   Ele lê o mesmo ATV.prog de sempre, e por isso continua sendo progresso
+   de VERDADE: a conta vem de quantos arquivos já voltaram do Drive, e não
+   de uma estimativa de tempo. */
+function atvCargaPinta(){
+  const cx=document.getElementById('atvCarga');
+  if(!cx)return;
+  if(!ATV.carregando||!atvAberto){ cx.hidden=true; return; }
+  const P=ATV.prog, pct=P.total?Math.round(P.feito/P.total*100):0;
+  cx.hidden=false;
+  document.getElementById('atvCargaPct').textContent=pct+'%';
+  document.getElementById('atvCargaRot').textContent=
+    P.total?'Lendo os orçamentos do Drive':'Procurando os orçamentos…';
+  document.getElementById('atvCargaBarra').style.width=pct+'%';
+  document.getElementById('atvCargaConta').textContent=
+    P.total?(P.feito+' de '+P.total+' arquivos'+(P.onde?'  ·  '+P.onde:''))
+           :(P.onde||'');
+}
+window.atvCargaPinta=atvCargaPinta;
 
 /* "salvo 14:32" diz mais que "salvo em 13/08/2026 14:32:07": quem acabou de
    clicar quer saber se foi agora. A data completa só entra quando não foi
@@ -21983,6 +22093,7 @@ function atvAlternar(abrir){
     pg.hidden=true;
     if(area)area.style.display='';
     atvNotifFecha();
+    atvCargaPinta();       /* sair da seção não pode deixar o véu na tela */
   }
   if(typeof ftAtualizaBarraAbas==='function')ftAtualizaBarraAbas();
 }
@@ -22301,22 +22412,79 @@ async function atvGera(){
       if(!minha())return;
       ATV.prog.onde=m.mes+'/'+m.ano; atvDesenha();
       const d=await atvPega('/api/ft/atividade-lista?ano='+m.ano+'&mes='+m.mes);
-      (d.arquivos||[]).forEach(a=>arquivos.push(a));
+      /* de que MÊS de arquivamento veio cada um: é por isso que o cache
+         sabe em qual arquivo gravar cada item */
+      (d.arquivos||[]).forEach(a=>arquivos.push(Object.assign({_mes:m.ano+'-'+m.mes},a)));
     }
+    /* 3b. O CACHE DO MÊS (v3.322, a pedido).
+
+       A leitura já era incremental, mas o que ela aprendia ficava trancado
+       DENTRO do arquivo da semana: abrir a semana seguinte começava do zero
+       e reabria os mesmos orçamentos um por um. O cache tira esse
+       aprendizado de dentro da semana e o põe num arquivo por mês, ao lado
+       dos relatórios. Gerar qualquer semana passa a aproveitar o que
+       qualquer outra já leu.
+
+       A chave de validade é o modifiedTime do arquivo no Drive, e não o
+       tempo: um orçamento reaberto e salvo envelhece a entrada na hora.
+       Cache que expira por relógio erra dos dois lados. */
+    const cache={};                    /* id -> item, do que já se sabe */
+    const mesesLidos=[];
+    for(const m of atvMesesAVarrer()){
+      try{
+        const c=await atvPega('/api/ft/atividade-cache?ano='+m.ano+'&mes='+m.mes);
+        if(!minha())return;
+        mesesLidos.push(m);
+        Object.entries(c.itens||{}).forEach(([id,it])=>{ cache[id]=it; });
+      }catch(e){ /* cache é atalho: sem ele o caminho longo continua lá */ }
+    }
+
     /* 4. só o que nunca foi visto, ou o que mudou desde a última leitura.
           O de sempre, dedup incluído: os meses varridos se sobrepõem nas
-          bordas, e abrir o mesmo arquivo duas vezes é lento à toa. */
+          bordas, e abrir o mesmo arquivo duas vezes é lento à toa.
+
+          Agora com uma peneira a mais: o que o CACHE já conhece com o mesmo
+          modifiedTime não precisa ser aberto. */
     const vistos=ATV.vistos;
     const jaNaFila=new Set();
+    const doCache=[];
     const abrir=arquivos.filter(a=>{
       if(jaNaFila.has(a.id))return false;
       jaNaFila.add(a.id);
-      return vistos[a.id]!==(a.mod||'');
+      if(vistos[a.id]===(a.mod||''))return false;      /* esta semana já leu */
+      const c=cache[a.id];
+      if(c&&c.mod===(a.mod||'')){ doCache.push(c); return false; }
+      return true;
     });
     ATV.prog={feito:0,total:abrir.length,onde:''};
     atvDesenha();
 
     const seg=atvSeg(), fim=atvFim();
+    /* A FUSÃO É UMA SÓ, e serve tanto ao que veio do cache quanto ao que
+       veio do Drive. Duas cópias desta regra é o jeito mais rápido de o
+       cache começar a divergir da leitura de verdade. */
+    const funde=it=>{
+      vistos[it.id]=it.mod||'';
+      const ent=atvDeBR(it.envio);
+      const dentro=!!(ent&&ent>=seg&&ent<=fim);
+      const velho=porId.get(it.id);
+      if(velho){
+        /* O QUE VEM DO ORÇAMENTO É REESCRITO. O que foi decidido a mão
+           (plan e etapa) não é tocado: é essa linha que faz "gerar de
+           novo" ser seguro. */
+        velho.pedido=it.pedido; velho.cliente=it.cliente;
+        velho.vendedor=it.vendedor; velho.entrega=it.envio;
+        velho.departamento=it.departamento||'';
+        velho.sub=it.subPecas; velho.per=it.perPecas; velho.total=it.total;
+      }else if(dentro){
+        porId.set(it.id,{id:it.id,pedido:it.pedido,cliente:it.cliente,
+          vendedor:it.vendedor,entrega:it.envio,plan:atvISO(ent),etapa:'',
+          departamento:it.departamento||'',
+          sub:it.subPecas,per:it.perPecas,total:it.total,chegouEm:agora});
+      }
+    };
+    doCache.forEach(funde);
+    const novosDoDrive=[];
     const LOTE=8;
     for(let i=0;i<abrir.length;i+=LOTE){
       const lote=abrir.slice(i,i+LOTE);
@@ -22326,26 +22494,7 @@ async function atvGera(){
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({arquivos:lote})});
       }catch(e){ ATV.aviso='Um lote falhou: '+String(e.message||e).slice(0,120); }
-      (d.itens||[]).forEach(it=>{
-        vistos[it.id]=it.mod||'';
-        const ent=atvDeBR(it.envio);
-        const dentro=!!(ent&&ent>=seg&&ent<=fim);
-        const velho=porId.get(it.id);
-        if(velho){
-          /* O QUE VEM DO ORÇAMENTO É REESCRITO. O que foi decidido a mão
-             (plan e etapa) não é tocado: é essa linha que faz "gerar de
-             novo" ser seguro. */
-          velho.pedido=it.pedido; velho.cliente=it.cliente;
-          velho.vendedor=it.vendedor; velho.entrega=it.envio;
-          velho.departamento=it.departamento||'';
-          velho.sub=it.subPecas; velho.per=it.perPecas; velho.total=it.total;
-        }else if(dentro){
-          porId.set(it.id,{id:it.id,pedido:it.pedido,cliente:it.cliente,
-            vendedor:it.vendedor,entrega:it.envio,plan:atvISO(ent),etapa:'',
-            departamento:it.departamento||'',
-            sub:it.subPecas,per:it.perPecas,total:it.total,chegouEm:agora});
-        }
-      });
+      (d.itens||[]).forEach(it=>{ funde(it); novosDoDrive.push(it); });
       if(!minha())return;                 /* a semana virou: isto aqui e lixo */
       ATV.prog.feito=Math.min(abrir.length,i+lote.length);
       ATV.linhas=[...porId.values()];
@@ -22389,6 +22538,34 @@ async function atvGera(){
     atvMarcaNovos(marco);
     ATV.existe=true;
     atvNotifFecha();          /* acabou de ler: não há mais o que avisar */
+
+    /* O CACHE VOLTA PARA O DRIVE, um arquivo por mês.
+       Grava-se só quando houve leitura nova: sem isso, toda geração
+       reescreveria os mesmos bytes por nada. E cada item vai com o
+       modifiedTime que o validou, que é o que permite descartá-lo depois
+       sem consultar relógio nenhum. */
+    if(novosDoDrive.length&&mesesLidos.length){
+      const porMes=new Map();
+      mesesLidos.forEach(m=>porMes.set(m.ano+'-'+m.mes,{ano:m.ano,mes:m.mes,itens:{}}));
+      /* de que mês é cada arquivo: a lista já disse, e é a pasta de
+         arquivamento que manda, não a data de entrega */
+      const mesDoArquivo=new Map();
+      arquivos.forEach(a=>{ if(a._mes)mesDoArquivo.set(a.id,a._mes); });
+      const juntos=doCache.concat(novosDoDrive);
+      juntos.forEach(it=>{
+        const k=mesDoArquivo.get(it.id);
+        const alvo=k&&porMes.get(k);
+        if(alvo)alvo.itens[it.id]=it;
+      });
+      for(const g of porMes.values()){
+        if(!Object.keys(g.itens).length)continue;
+        try{
+          await atvPega('/api/ft/atividade-cache',{method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify(g)});
+        }catch(e){ /* o cache é atalho: falhar ao gravar não estraga nada */ }
+      }
+    }
     const novos=ATV.linhas.filter(l=>l.novo).length;
     if(novos)ATV.sujo=true;
     /* ftStatus chama SUCESSO, e não ok. Escrito errado, o aviso nunca
