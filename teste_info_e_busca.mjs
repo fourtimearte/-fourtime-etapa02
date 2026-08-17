@@ -109,7 +109,10 @@ console.log('     ' + JSON.stringify(r));
 checa('a referencia mostra INFORMACOES', [r.selo, r.seloTxt], ['block', 'INFORMAÇÕES']);
 checa('  somem tecido, cor e a tabela', [r.tecido, r.cor, r.tabela],
   ['none', 'none', 'none']);
-checa('  ficam design e observacao', [r.design, r.obs], ['block', 'block']);
+/* o bloco da observacao virou flex na v3.329 para poder esticar e ocupar
+   o que a tabela deixou; o que importa aqui e que os dois estao visiveis */
+checa('  ficam design e observacao',
+  [r.design !== 'none', r.obs !== 'none'], [true, true]);
 checa('  e tambem a imagem, a referencia e o botao de layout',
   [r.imagem, r.referencia !== 'none', r.botao !== 'none'], [true, true, true]);
 
@@ -153,12 +156,14 @@ const noAnexo = (sel, v) => p.evaluate(([sel, v]) => {
 const quantosInfo = () => p.evaluate(() =>
   document.querySelectorAll('.lay-modulo.info').length);
 
+/* A REFERENCIA SAIU DESTA LISTA na v3.329: ela NAO some no modo
+   informacoes, entao escrever nela nao esconde nada e nao precisa tirar
+   ninguem do modo. E ali que se escreve o que a informacao e. */
 const porCampo = [];
 for (const [rot, sel, v] of [
   ['tecido', '.combo-tecido textarea', 'DRY FIT'],
   ['cor', '.combo-cor textarea', 'PRETO'],
   ['tabela', 'tabela', '12'],
-  ['referencia', '.combo-ref textarea', 'FT-777'],
 ]) {
   await zera(); await esperaCalmo();
   const virou = await quantosInfo();
@@ -166,32 +171,108 @@ for (const [rot, sel, v] of [
   porCampo.push({ campo: rot, viraAnexoSozinho: virou === 1, depois: await quantosInfo() });
 }
 console.log('     ' + JSON.stringify(porCampo));
-checa('so com a imagem, ele vira anexo nas quatro vezes',
-  porCampo.map(x => x.viraAnexoSozinho), [true, true, true, true]);
+checa('so com a imagem, ele vira anexo nas tres vezes',
+  porCampo.map(x => x.viraAnexoSozinho), [true, true, true]);
 checa('  e qualquer campo que SOME o tira do modo na hora',
-  porCampo.map(x => x.depois), [0, 0, 0, 0]);
+  porCampo.map(x => x.depois), [0, 0, 0]);
 
-console.log('\n=== 5. DIGITAR A REFERENCIA E A PORTA DE SAIDA ===');
-/* Sem esta porta, um layout de verdade em que a imagem foi posta antes do
-   resto viraria anexo e ficaria preso assim: os campos que o trariam de
-   volta estao justamente entre os que sumiram. A referencia fica. */
+console.log('\n=== 5. ESCREVER NA FRENTE DE INFORMACOES (v3.329) ===');
+/* O anexo precisa dizer O QUE ele e ("INFORMACOES  ETIQUETA DE GOLA"), e
+   esse texto so tem um lugar razoavel para morar: a referencia, que e o
+   unico campo de titulo que sobrou a vista.
+
+   Isso obrigou a separar ENTRAR de FICAR. Entrar continua exigindo a
+   referencia vazia, senao um layout de producao em que alguem ja digitou
+   a referencia viraria anexo ao colar a imagem. Ficar nao exige: a
+   referencia nao some, entao escrever nela nao esconde nada. */
 await zera(); await esperaCalmo();
 r = await p.evaluate(() => {
   const m = document.querySelector('.lay-modulo.info');
-  const t = m.querySelector('.combo-ref textarea');
-  const daPara = getComputedStyle(t).display !== 'none' && !t.disabled;
-  t.value = 'FT-999 — VOLTOU'; t.dispatchEvent(new Event('input', { bubbles: true }));
-  return { daPara, info: m.classList.contains('info'),
-    ficou: (m.querySelector('.combo-ref textarea') || {}).value };
+  const selo = m.querySelector('.lay-info-selo');
+  const cx = m.querySelector('.combo-ref .ft-combo-caixa');
+  const ta = m.querySelector('.combo-ref textarea');
+  const rs = selo.getBoundingClientRect(), rc = cx.getBoundingClientRect();
+  return {
+    seloVisivel: getComputedStyle(selo).display !== 'none',
+    /* A MARGEM QUE FALTAVA: o selo era absoluto em `left:0`, ou seja, na
+       borda da caixa, enquanto todo o resto do documento respeita o
+       respiro interno. Como item normal da linha, ele herda esse respiro. */
+    respiroDoSelo: rs.left - rc.left >= parseFloat(getComputedStyle(cx).paddingLeft) - 0.5,
+    campoDepoisDoSelo: ta.getBoundingClientRect().left >= rs.right - 0.5,
+    /* e o que se digita PRECISA aparecer: na v3.328 o texto era
+       transparente para nao se sobrepor ao selo */
+    textoTransparente: /transparent|rgba\(0, 0, 0, 0\)/.test(getComputedStyle(ta).color),
+    convite: ta.placeholder,
+  };
 });
-await esperaCalmo();
-console.log('     ' + JSON.stringify(r) + '  ' + JSON.stringify(await retrato()));
-checa('o campo de referencia continua utilizavel no anexo', r.daPara, true);
-checa('  digitar nele devolve o modulo ao normal', r.info, false);
-checa('  e o que foi digitado ficou', r.ficou, 'FT-999 — VOLTOU');
-checa('nao sobra nenhum anexo', await quantosInfo(), 0);
-checa('nenhum modulo se perdeu no caminho',
-  await p.evaluate(() => document.querySelectorAll('.lay-modulo').length), 3);
+console.log('     ' + JSON.stringify(r));
+checa('o selo INFORMACOES aparece na linha da referencia', r.seloVisivel, true);
+checa('  respeitando o respiro da caixa, como todo o resto', r.respiroDoSelo, true);
+checa('  e o campo comeca DEPOIS dele', r.campoDepoisDoSelo, true);
+checa('  o que se digita nao e invisivel', r.textoTransparente, false);
+checa('  e o campo convida a dizer o que e', r.convite, 'o que é esta informação…');
+
+await noAnexo('.combo-ref textarea', 'ETIQUETA DE GOLA'); await esperaCalmo();
+r = await p.evaluate(() => {
+  const m = document.querySelector('.lay-modulo.info');
+  return { info: !!m, texto: m ? m.querySelector('.combo-ref textarea').value : '' };
+});
+console.log('     ' + JSON.stringify(r));
+checa('escrever na referencia NAO tira o anexo do modo', r.info, true);
+checa('  e o texto fica', r.texto, 'ETIQUETA DE GOLA');
+/* mas preencher o que SOME continua tirando, que e a propriedade de
+   seguranca da secao 4 */
+await noAnexo('.combo-tecido textarea', 'PV'); await esperaCalmo();
+checa('  preencher tecido continua tirando', await quantosInfo(), 0);
+
+console.log('\n=== 5b. O MODO SOBREVIVE A SALVAR E REABRIR ===');
+/* O modo deixou de ser deduzivel a partir dos campos no instante em que a
+   referencia passou a poder ser escrita: um anexo com "ETIQUETA DE GOLA"
+   na referencia e igualzinho, de fora, a um layout que so tem referencia
+   e imagem. Por isso ele passou a ser GRAVADO. */
+await zera(); await esperaCalmo();
+await noAnexo('.combo-ref textarea', 'TABELA DE MEDIDAS'); await esperaCalmo();
+r = await p.evaluate(async () => {
+  const doc = coletaEstado();
+  const gravou = doc.layouts.map(l => !!l.info);
+  aplicaEstado(JSON.parse(JSON.stringify(doc)), 'x.ft', '');
+  await new Promise(s => setTimeout(s, 700));
+  const m = document.querySelector('.lay-modulo.info');
+  return { gravou, reabriu: !!m,
+    ref: m ? m.querySelector('.combo-ref textarea').value : '',
+    quantos: document.querySelectorAll('.lay-modulo').length };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o arquivo guarda quem e anexo', r.gravou.filter(Boolean).length, 1);
+checa('  reabrir devolve o modo', r.reabriu, true);
+checa('  com o texto que estava la', r.ref, 'TABELA DE MEDIDAS');
+checa('  e sem perder modulo nenhum', r.quantos, 3);
+
+console.log('\n=== 5c. A OBSERVACAO NAO ENCOLHE NO MODO SEM VALOR ===');
+/* A grade do modo sem dinheiro tem `align-items:start`. No modulo de
+   informacoes, onde a tabela sumiu e sobrou meia ficha vazia, isso
+   deixava a observacao do tamanho do texto, com um vao embaixo. */
+r = await p.evaluate(async () => {
+  const mede = () => {
+    const m = document.querySelector('.lay-modulo.info');
+    return {
+      obs: +m.querySelector('.lay-area').getBoundingClientRect().height.toFixed(1),
+      ficha: +m.querySelector('.lay-ficha').getBoundingClientRect().height.toFixed(1) };
+  };
+  const com = mede();
+  document.body.classList.add('sem-dinheiro');
+  await new Promise(s => setTimeout(s, 350));
+  const sem = mede();
+  document.body.classList.remove('sem-dinheiro');
+  await new Promise(s => setTimeout(s, 250));
+  return { com, sem };
+});
+console.log('     ' + JSON.stringify(r));
+checa('sem valor, a observacao nao fica menor que com valor',
+  r.sem.obs >= r.com.obs, true);
+/* e ela ocupa o que a tabela deixou, em vez de abrir um vao */
+checa('  e preenche a ficha, sem vao embaixo',
+  r.sem.obs > r.sem.ficha * 0.55, true);
 
 console.log('\n=== 6. DOIS ANEXOS FICAM NA ORDEM ENTRE SI ===');
 r = await p.evaluate(async px => {
@@ -221,6 +302,62 @@ checa('os dois layouts de producao vem primeiro',
 checa('  e os dois anexos depois', r.slice(2).map(x => x.info), [true, true]);
 checa('  numerados na ordem em que serao impressos',
   r.map(x => x.num), ['1', '2', '3', '4']);
+
+console.log('\n=== 6b. O SELO SAI CERTO NO PAPEL E NO ARQUIVO DO TRELLO ===');
+/* Ele reclamou dos TRES lugares: editor, HTML do Trello e A4 impresso. A
+   margem era a mesma causa nos tres (o `left:0` do absoluto), mas cobrar
+   so o editor deixaria os outros dois na fe. */
+r = await p.evaluate(async () => {
+  const m = document.querySelector('.lay-modulo.info');
+  const mede = () => {
+    const selo = m.querySelector('.lay-info-selo');
+    const cx = m.querySelector('.combo-ref .ft-combo-caixa');
+    const ta = m.querySelector('.combo-ref textarea');
+    const rs = selo.getBoundingClientRect(), rc = cx.getBoundingClientRect();
+    return { colado: rs.left - rc.left < 2,
+      depois: ta.getBoundingClientRect().left >= rs.right - 0.5,
+      visivel: getComputedStyle(selo).display !== 'none' };
+  };
+  const tela = mede();
+  /* IMPRESSAO: o editor imprime a propria folha, entao o que vale e como
+     ela fica com as regras de @media print aplicadas. */
+  document.body.classList.add('imprimindo');
+  await new Promise(s => setTimeout(s, 250));
+  const papel = mede();
+  document.body.classList.remove('imprimindo');
+  return { tela, papel };
+});
+console.log('     ' + JSON.stringify(r));
+checa('na tela o selo nao encosta na borda', r.tela.colado, false);
+checa('  e no papel tambem nao', r.papel.colado, false);
+checa('  nos dois o campo vem depois dele',
+  [r.tela.depois, r.papel.depois], [true, true]);
+
+/* O ARQUIVO DO TRELLO e o documento exportado: o selo tem de ir junto, e
+   o CSS que o desenha tambem. Sem o segundo, ele apareceria como texto
+   solto no meio da referencia. */
+r = await p.evaluate(() => {
+  /* `gerarHTML` e o mesmo gerador que o botao do Trello usa: o exportador
+     so comprime as imagens antes de chama-lo. */
+  if (typeof gerarHTML !== 'function') return { pulou: true };
+  let html = '';
+  try { html = String(gerarHTML() || ''); } catch (e) { return { erro: String(e.message).slice(0, 120) }; }
+  return { pulou: false,
+    temSelo: html.indexOf('lay-info-selo') >= 0,
+    temPalavra: html.indexOf('INFORMAÇÕES') >= 0,
+    temCss: html.indexOf('.lay-modulo.info') >= 0,
+    temClasse: /class="[^"]*\blay-modulo\b[^"]*\binfo\b/.test(html)
+             || /class="[^"]*\binfo\b[^"]*\blay-modulo\b/.test(html) };
+});
+console.log('     ' + JSON.stringify(r));
+if (r.pulou) {
+  console.log('     (a exportacao do Trello nao esta exposta nesta pagina; conferida na suite propria)');
+} else {
+  checa('o arquivo do Trello leva o selo', r.temSelo, true);
+  checa('  com a palavra escrita', r.temPalavra, true);
+  checa('  o CSS que o desenha', r.temCss, true);
+  checa('  e a marca de anexo no modulo', r.temClasse, true);
+}
 
 console.log('\n=== 7. A BUSCA DE CLIENTE ACHA POR TRES CAMINHOS ===');
 r = await p.evaluate(() => {

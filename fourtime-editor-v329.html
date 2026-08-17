@@ -1535,20 +1535,32 @@
      O que some é EXATAMENTE o que o reconhecimento olha (ver layEhInfo):
      é isso que garante que virar informação nunca esconde dado nenhum.
      ================================================================ */
+  /* O SELO É UM PREFIXO NA LINHA (v3.329).
+
+     Na v3.328 ele era absoluto, colado em `left:0` e por cima do campo.
+     Dois defeitos vieram juntos disso. O primeiro: `left:0` é a borda da
+     caixa, e não onde o texto começa — a palavra encostava na borda
+     esquerda enquanto todo o resto do documento respeita o respiro
+     interno. O segundo, pior: para os dois textos não se sobreporem, o
+     que se digitava ficava transparente. Dava para escrever e não dava
+     para ler.
+
+     Como item normal do flex, ele herda o respiro da caixa (some o
+     problema da margem), ocupa o lugar dele e o campo começa DEPOIS —
+     que é o "escrever na frente de INFORMAÇÕES". */
   .lay-info-selo{display:none;}
   .lay-modulo.info .combo-ref .lay-info-selo{
-    display:block;position:absolute;left:0;top:50%;transform:translateY(-50%);
-    font-weight:800;letter-spacing:.10em;color:var(--ft-vermelho);
-    /* o clique atravessa e cai no campo: a referência continua digitável,
-       e digitar é como se sai do modo informação */
-    pointer-events:none;white-space:nowrap;
+    display:block;flex:0 0 auto;align-self:center;
+    margin-right:.6em;padding-right:.6em;
+    border-right:1px solid currentColor;
+    font-weight:800;letter-spacing:.08em;color:var(--ft-vermelho);
+    white-space:nowrap;line-height:1.25;
+    /* clicar no selo cai no campo, como clicar num rótulo */
+    pointer-events:none;
   }
-  .lay-modulo.info .combo-ref .ft-combo-caixa{position:relative;}
-  /* o campo por baixo fica transparente enquanto o selo está por cima:
-     dois textos no mesmo lugar seriam ilegíveis */
-  .lay-modulo.info .combo-ref textarea{color:transparent;caret-color:var(--ft-preto);}
-  .lay-modulo.info .combo-ref textarea::placeholder{color:transparent;}
-  .lay-modulo.info .combo-ref .ft-combo-caixa:focus-within .lay-info-selo{opacity:.28;}
+  /* o placeholder "Referência" não faz sentido depois de um selo que já
+     diz o que a linha é; no lugar dele, o convite para completar */
+  .lay-modulo.info .combo-ref textarea::placeholder{opacity:.55;}
 
   /* os três blocos que somem. `:nth-child` continua contando o que está
      escondido, então a grade do modo sem-dinheiro não se desmonta. */
@@ -1562,7 +1574,26 @@
   body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(3),
   body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(5){grid-column:1;}
   body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(3){grid-row:1;}
-  body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(5){grid-row:2 / span 3;}
+  /* A OBSERVAÇÃO PRECISA ESTICAR (corrigido na v3.329).
+     A grade do modo sem dinheiro tem `align-items:start`, e com ele o
+     bloco da observação ficava do tamanho do texto: no módulo de
+     informações, onde a tabela sumiu e sobrou meia ficha vazia, isso
+     aparecia como um campo minúsculo com um vão embaixo. O `height:100%`
+     que a observação já pedia não resolvia sozinho, porque o pai dela
+     também não esticava. Os dois esticam agora. */
+  body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(5){
+    grid-row:2 / span 3;align-self:stretch;height:100%;min-height:0;
+  }
+  body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(5) > .lay-area{
+    height:100%;
+  }
+  /* A OBSERVAÇÃO OCUPA O QUE A TABELA DEIXOU (v3.329).
+     Na ficha normal quem segura a altura é a tabela. Sem ela, os dois
+     blocos que sobram ficavam no topo e abriam um vão do tamanho de meia
+     ficha embaixo. Quem deve crescer é a observação: é o único campo do
+     anexo que pode ter texto longo. */
+  .lay-modulo.info .lay-ficha > :nth-child(5){flex:1;min-height:0;display:flex;}
+  .lay-modulo.info .lay-ficha > :nth-child(5) > .lay-area{flex:1;height:auto;}
   /* a imagem manda no módulo: sem ficha para equilibrar, ela ocupa mais */
   .lay-modulo.info{grid-template-columns:2.1fr 1fr;}
   /* Referência: linha única — nunca quebra nem cresce em altura */
@@ -6734,7 +6765,14 @@
               <span class="lay-selo"><span class="lay-btn-txt">L-01</span></span>
               <div class="ft-combo combo-ref">
                 <div class="ft-combo-caixa">
-                  <textarea rows="1" placeholder="Referência" spellcheck="false"></textarea><!-- O SELO DO MODULO DE INFORMACOES (v3.328). Fica SOBRE o campo, e nao DENTRO dele: escrito no textarea, "INFORMACOES" seria uma referencia preenchida, e o modulo deixaria de ser reconhecido como informacao no instante em que virasse uma. Como selo, ele diz o que e sem mentir sobre o conteudo, e deixa o clique passar para o campo poder ser digitado por baixo. --><span class="lay-info-selo">INFORMAÇÕES</span>
+                  <!-- O SELO DO MODULO DE INFORMACOES (v3.328, refeito na v3.329).
+                       Ele e um PREFIXO, e nao uma tampa. Na v3.328 ficava
+                       por cima do campo, com o texto digitado invisivel por
+                       baixo: dava para escrever e nao dava para ler. Agora
+                       ele ocupa o proprio lugar na linha, antes do campo, e
+                       o que se digita aparece na frente dele.
+                       Fora do modo informacoes ele simplesmente nao existe,
+                       e a referencia e a de sempre. --><span class="lay-info-selo">INFORMAÇÕES</span><textarea rows="1" placeholder="Referência" spellcheck="false"></textarea>
                   <button class="ft-combo-abrir" tabindex="-1" title="Abrir lista"><svg viewBox="0 0 24 24"><path d="M6 9L12 15L18 9"/></svg></button>
                 </div>
                 
@@ -7361,7 +7399,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.328';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.329';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -9646,7 +9684,14 @@ function moduloHTML(n){
               <span class="lay-selo"><span class="lay-btn-txt">L-${String(n).padStart(2,'0')}</span></span>
               <div class="ft-combo combo-ref">
                 <div class="ft-combo-caixa">
-                  <textarea rows="1" placeholder="Referência" spellcheck="false"></textarea><!-- O SELO DO MODULO DE INFORMACOES (v3.328). Fica SOBRE o campo, e nao DENTRO dele: escrito no textarea, "INFORMACOES" seria uma referencia preenchida, e o modulo deixaria de ser reconhecido como informacao no instante em que virasse uma. Como selo, ele diz o que e sem mentir sobre o conteudo, e deixa o clique passar para o campo poder ser digitado por baixo. --><span class="lay-info-selo">INFORMAÇÕES</span>
+                  <!-- O SELO DO MODULO DE INFORMACOES (v3.328, refeito na v3.329).
+                       Ele e um PREFIXO, e nao uma tampa. Na v3.328 ficava
+                       por cima do campo, com o texto digitado invisivel por
+                       baixo: dava para escrever e nao dava para ler. Agora
+                       ele ocupa o proprio lugar na linha, antes do campo, e
+                       o que se digita aparece na frente dele.
+                       Fora do modo informacoes ele simplesmente nao existe,
+                       e a referencia e a de sempre. --><span class="lay-info-selo">INFORMAÇÕES</span><textarea rows="1" placeholder="Referência" spellcheck="false"></textarea>
                   <button class="ft-combo-abrir" tabindex="-1" title="Abrir lista"><svg viewBox="0 0 24 24"><path d="M6 9L12 15L18 9"/></svg></button>
                 </div>
                 
@@ -9759,10 +9804,32 @@ function layCamposQueSomem(mod){
     tabela,
   };
 }
+
+/* ENTRAR E FICAR SÃO DUAS PERGUNTAS DIFERENTES (v3.329).
+
+   Elas eram a mesma, e por isso a referência tinha de ficar vazia para
+   sempre. Só que a referência é justamente onde se escreve O QUE a
+   informação é ("INFORMAÇÕES  ETIQUETA DE GOLA"), e escrever ali expulsava
+   o módulo do modo na mesma tecla.
+
+   ENTRAR é conservador de propósito: imagem, e mais NADA preenchido, nem
+   a referência. Assim um layout de produção em que alguém já digitou a
+   referência e depois colou a imagem não vira anexo pelas costas — que
+   seria a versão irritante desta feature.
+
+   FICAR é mais folgado: continua enquanto houver imagem e nada do que
+   SOME estiver preenchido. A referência não some, então pode ser escrita.
+
+   SAIR, portanto, é preencher tecido, cor ou a tabela — ou tirar a
+   imagem. Continua valendo a propriedade que importa: enquanto o módulo
+   está no modo, nada preenchido está escondido. */
 function layEhInfo(mod){
   if(!mod||!layTemImagem(mod))return false;
   const c=layCamposQueSomem(mod);
-  return !c.ref.length&&!c.tecido.length&&!c.cor.length&&!c.tabela.length;
+  const nadaEscondido=!c.tecido.length&&!c.cor.length&&!c.tabela.length;
+  if(!nadaEscondido)return false;
+  if(mod.classList.contains('info'))return true;   /* fica */
+  return !c.ref.length;                            /* entra */
 }
 window.layEhInfo=layEhInfo;
 
@@ -9773,8 +9840,9 @@ function layAtualizaInfo(mod){
   if(!mod)return false;
   const era=mod.classList.contains('info');
   const e=layEhInfo(mod);
-  if(era===e)return false;
+  if(era===e){ layPlaceholderRef(mod); return false; }
   mod.classList.toggle('info',e);
+  layPlaceholderRef(mod);
   return true;
 }
 window.layAtualizaInfo=layAtualizaInfo;
@@ -9802,6 +9870,17 @@ function layOrdenaInfo(mods){
   return normais.concat(infos);
 }
 window.layOrdenaInfo=layOrdenaInfo;
+
+/* O CONVITE DO CAMPO MUDA COM O MODO.
+   "Referência" num anexo pede a coisa errada: ali o que se escreve e o
+   nome daquela informacao. Trocar o placeholder e uma linha, e evita a
+   pergunta "o que eu ponho aqui?". */
+function layPlaceholderRef(mod){
+  const t=mod&&mod.querySelector('.combo-ref textarea');
+  if(!t)return;
+  t.placeholder=mod.classList.contains('info')?'o que é esta informação…':'Referência';
+}
+window.layPlaceholderRef=layPlaceholderRef;
 
 /* PÔR OU TIRAR IMAGEM TAMBÉM RECONFERE.
    Imagem não é campo digitado: não há evento de teclado para escutar. */
@@ -13089,6 +13168,11 @@ function coletaLayout(m){
     tamanhos:tab._lerVals?tab._lerVals():{},
     obs:m.querySelector('.lay-area').innerHTML,
     img:(m.querySelector('.lay-img img')||{}).src||null,
+    /* O MODO PRECISA SER GRAVADO (v3.329). Ele deixou de ser dedutível a
+       partir dos campos no instante em que a referência passou a poder ser
+       escrita: um anexo com "ETIQUETA DE GOLA" na referência é igualzinho,
+       de fora, a um layout que só tem referência e imagem. */
+    info:m.classList.contains('info'),
     /* já passou pela conversão? evita recomprimir a cada abertura (e a perda
        de qualidade que isso traria em cascata) */
     imgComp:((m.querySelector('.lay-img img')||{}).dataset||{}).ftComp==='ok'
@@ -13098,6 +13182,13 @@ function coletaLayout(m){
 /* Escreve um layout dentro de um módulo JÁ montado (initLayout feito). */
 function aplicaLayout(mod,L){
   L=L||{};
+  /* O MODO ENTRA ANTES DOS CAMPOS. `layEhInfo` pergunta se o módulo já
+     está no modo para decidir se ele FICA, e a resposta precisa estar de
+     pé antes de qualquer campo ser preenchido. Arquivo salvo por versão
+     anterior não traz a marca: cai na regra automática, e um anexo antigo
+     (que tinha a referência vazia, porque era a única forma possível
+     naquela versão) é reconhecido do mesmo jeito. */
+  mod.classList.toggle('info',!!L.info);
   const ref=mod.querySelector('.combo-ref');
   ref.querySelector('textarea').value=L.ref||'';
   if(L.genero)ref.dataset.genero=L.genero; else delete ref.dataset.genero;
