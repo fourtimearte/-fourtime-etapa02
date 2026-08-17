@@ -6430,15 +6430,16 @@
         </div>
         <button class="atv-hoje" id="atvHoje">semana de hoje</button>
 
+        <!-- SALVAR PLANEJAMENTO SAIU DAQUI (v3.326).
+             Cada alteração vira um recado de um campo só e é gravada
+             sozinha. Um botão que pede permissão para gravar 300 bytes é
+             uma pergunta sem resposta interessante. E "Gerar / Atualizar"
+             virou "Conferir agora": a varredura já roda no relógio do
+             servidor, e este botão só antecipa a próxima. -->
         <div class="ft-menu-item" id="miAtvGerar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
                stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
-          <span>Gerar / Atualizar</span>
-        </div>
-        <div class="ft-menu-item" id="miAtvSalvar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-               stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-          <span>Salvar planejamento</span>
+          <span>Conferir agora</span>
         </div>
         <div class="ft-menu-item" id="miAtvPrint">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
@@ -7300,7 +7301,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.325';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.326';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -21308,6 +21309,69 @@ function formataPedido(bruto){
   .atv-menu .lim{color:var(--ft-cinza-40);}
   .atv-menu .lim i{background:none;border:1px dashed var(--ft-borda);}
 
+  /* ---- O CALENDÁRIO DO PLANEJAMENTO (v3.326) ----
+     A célula de Planejamento deixou de ser texto e virou botão: é ela que
+     decide em que semana o pedido fica. Escolher uma data para trás
+     registra o pedido na semana em que ele realmente foi concluído, que
+     era o caso que não tinha solução nenhuma antes. */
+  .atv-cal-bt{
+    border:0;background:none;padding:0 4px;margin:0 -4px;border-radius:6px;
+    font:inherit;color:inherit;cursor:pointer;text-align:inherit;
+    transition:background .12s ease;
+  }
+  .atv-cal-bt:hover{background:var(--ft-hover);}
+  body.atv-so-olha .atv-cal-bt{cursor:default;pointer-events:none;}
+  .atv-cal{
+    position:fixed;z-index:9850;display:none;background:var(--ft-menu-bg,#fff);
+    border:1px solid var(--ft-borda);border-radius:12px;
+    box-shadow:0 16px 40px rgba(16,20,26,.2);padding:10px;width:250px;
+  }
+  .atv-cal.on{display:block;}
+  .atv-cal-cab{display:flex;align-items:center;gap:6px;margin-bottom:8px;}
+  .atv-cal-cab b{flex:1;text-align:center;font:700 12px var(--ft-fonte-ui,inherit);
+    color:var(--ft-preto);text-transform:capitalize;}
+  .atv-cal-nav{
+    width:24px;height:24px;border:1px solid var(--ft-borda);border-radius:7px;
+    background:none;display:grid;place-items:center;cursor:pointer;flex:0 0 auto;
+  }
+  .atv-cal-nav:hover{background:var(--ft-hover);}
+  .atv-cal-nav svg{width:13px;height:13px;fill:none;stroke:var(--ft-preto);
+    stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+  .atv-cal-sem{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;}
+  .atv-cal-sem span{text-align:center;font:700 9px var(--ft-fonte-ui,inherit);
+    color:var(--ft-cinza-40);text-transform:uppercase;letter-spacing:.04em;}
+  .atv-cal-grade{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+  .atv-cal-grade button{
+    aspect-ratio:1;border:0;background:none;border-radius:7px;cursor:pointer;
+    font:600 11px var(--ft-fonte-ui,inherit);color:var(--ft-preto);
+  }
+  .atv-cal-grade button:hover{background:var(--ft-hover);}
+  .atv-cal-grade button.fora{color:var(--ft-cinza-40);opacity:.5;}
+  .atv-cal-grade button.hoje{box-shadow:inset 0 0 0 1px var(--ft-borda);}
+  /* a SEMANA ABERTA fica sombreada: a pergunta que se faz ao abrir este
+     calendário é "para dentro ou para fora desta semana?", e a resposta
+     tem de estar desenhada, não calculada de cabeça */
+  .atv-cal-grade button.nasemana{background:var(--atv-verde-bg,#EAF7EE);}
+  .atv-cal-grade button.sel{background:var(--ft-vermelho,#C6161B);color:#fff;}
+  .atv-cal-pe{
+    margin-top:8px;padding-top:8px;border-top:1px solid var(--ft-borda);
+    font:500 10px var(--ft-fonte-ui,inherit);color:var(--ft-cinza-40);line-height:1.45;
+  }
+  .atv-cal-pe b{color:var(--ft-preto);}
+  .atv-cal-solta{
+    margin-top:7px;width:100%;padding:6px;border:1px solid var(--ft-borda);
+    border-radius:7px;background:none;cursor:pointer;
+    font:600 10px var(--ft-fonte-ui,inherit);color:var(--ft-cinza-40);
+  }
+  .atv-cal-solta:hover{background:var(--ft-hover);color:var(--ft-preto);}
+
+  /* a entrega que mudou debaixo de uma escolha sua */
+  .atv-remarc{
+    display:inline-grid;place-items:center;width:13px;height:13px;margin-left:5px;
+    border-radius:99px;background:var(--atv-ambar,#B45309);color:#fff;
+    font:800 9px var(--ft-fonte-ui,inherit);vertical-align:middle;cursor:help;
+  }
+
   /* ---- o arraste: as três peças ----
      .voando   a cópia que acompanha o dedo. É cópia, e não a linha
                original, porque a original precisa continuar no fluxo
@@ -21550,6 +21614,7 @@ function formataPedido(bruto){
 </style>
 
 <div class="atv-menu" id="atvMenuEtapa"></div>
+<div class="atv-cal" id="atvCal"></div>
 
 <div class="atv-carga-fundo" id="atvCarga" hidden>
   <div class="atv-carga">
@@ -21568,7 +21633,7 @@ function formataPedido(bruto){
   <div class="atv-notif-txt" id="atvNotifTxt"></div>
   <button class="atv-notif-bt" id="atvNotifBt" type="button">
     <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
-    Gerar / Atualizar
+    Conferir agora
   </button>
 </div>
 
@@ -21611,11 +21676,6 @@ function formataPedido(bruto){
    Corte vale mais que repetir que ela atrasou. A tarja vermelha ao lado
    do nome continua lá de qualquer jeito, então o atraso nunca some. */
 const ATV_ETAPAS=[
-  /* ORGANIZAR nao e um posto: e a resposta a "este eu levo para a semana
-     que vem". Marcar assim e o jeito de mandar um pedido nao terminado
-     para a frente sem que ele vire um atraso, porque ele nao atrasou —
-     ainda ha data. Quem escolhe e a pessoa, sempre. */
-  {k:'organizar',  n:'Organizar',            c:'#0F766E'},
   {k:'corte',      n:'Corte',                c:'#7C3AED'},
   {k:'subli',      n:'Impressão sublimação', c:'#0EA5E9'},
   {k:'dtf',        n:'Impressão DTF',        c:'#2563EB'},
@@ -21627,9 +21687,22 @@ const ATV_ETAPAS=[
   {k:'cdcostura',  n:'Cd costura',           c:'#BE185D'},
   {k:'costura',    n:'Costura',              c:'#DB2777'},
   {k:'embalagem',  n:'Embalagem',            c:'#65A30D'},
-  {k:'atrasado',   n:'Atrasado',             c:'#C6161B', auto:true},
   {k:'finalizado', n:'Finalizado',           c:'#16A34A'},
 ];
+/* ATRASADO SAIU DA LISTA DE ETAPAS (v3.326), e essa saída é a correção.
+
+   Ele estava na mesma lista que Corte e Costura, como se fosse um posto.
+   Não é: é uma SITUAÇÃO. E como só cabe uma etapa por linha, um pedido que
+   atrasava PERDIA a informação de onde ele estava na produção — a tela
+   dizia "Atrasado" e ninguém mais sabia se ele estava no corte ou na
+   embalagem.
+
+   São dois eixos diferentes e agora são dois campos diferentes:
+     · a ETAPA, escolhida, é onde a peça está no chão de fábrica;
+     · a SITUAÇÃO, calculada, é se a entrega já venceu.
+   A tarja vermelha passa a ser desenhada EM CIMA da etapa, e as duas
+   informações convivem. Nada disso é gravado: atraso é uma conta que se
+   refaz sozinha todo dia, e conta gravada envelhece em silêncio. */
 /* AS QUE SAÍRAM DA LISTA, MAS NÃO DOS ARQUIVOS.
    Semanas já salvas trazem `separacao` e `despacho`. Deixá-las cair fora
    do mapa faria a linha aparecer como "sem etapa" — o planejamento de uma
@@ -21639,30 +21712,61 @@ const ATV_ETAPAS=[
 const ATV_ETAPAS_VELHAS=[
   {k:'separacao',  n:'Separação',            c:'#9AA3AF', velha:true},
   {k:'despacho',   n:'Despacho',             c:'#9AA3AF', velha:true},
+  /* estas duas eram escolhíveis até a v3.325 e continuam em arquivos
+     salvos. Desenhadas em cinza, não oferecidas para escolher. */
+  {k:'organizar',  n:'Organizar',            c:'#9AA3AF', velha:true},
+  {k:'atrasado',   n:'Atrasado',             c:'#9AA3AF', velha:true},
 ];
 const ATV_ETAPA={};
 ATV_ETAPAS.concat(ATV_ETAPAS_VELHAS).forEach(e=>{ATV_ETAPA[e.k]=e;});
-/* a etapa que a linha MOSTRA: a escolhida, ou o atraso quando não há
-   escolha nenhuma */
+/* a etapa que a linha MOSTRA: só a escolhida. O atraso não entra aqui
+   porque não é etapa nenhuma; ele é a tarja, desenhada por fora. */
 function atvEtapaDe(l){
-  if(l.etapa)return ATV_ETAPA[l.etapa]||null;
-  if(l.atrasado)return ATV_ETAPA.atrasado;
-  return null;
+  return l.etapa?(ATV_ETAPA[l.etapa]||null):null;
+}
+/* ATRASADO É UMA CONTA, NÃO UM CAMPO.
+   A régua é a data de ENTREGA do cabeçalho, e não o planejamento: é ela
+   que o cliente combinou. Um pedido com entrega em 19 e plano em 20 fica
+   vermelho no dia 20, mesmo estando dentro do plano de quem produz —
+   porque para quem comprou ele está atrasado, e é esse atraso que custa. */
+function atvAtrasado(l){
+  if(!l||l.etapa==='finalizado')return false;
+  const ent=atvDeBR(l.entrega);
+  return !!ent&&ent<atvHoje();
 }
 const ATV_DIAS_NOME=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 const ATV_MESES=['janeiro','fevereiro','março','abril','maio','junho','julho',
                  'agosto','setembro','outubro','novembro','dezembro'];
 
+/* ====================================================================
+   O ESTADO, DEPOIS DA VIRADA (v3.326)
+
+   Até a v3.325 o estado era `linhas`: a lista da semana, lida de um
+   arquivo da semana e gravada de volta nele. Semana era um LUGAR.
+
+   Agora semana é uma PERGUNTA. O que se guarda é `meses`: o índice de
+   cada mês, com um registro por pedido, e o campo `plan` de cada registro
+   é o endereço dele. `linhas` continua existindo, mas é derivada — o
+   resultado de filtrar os meses carregados pelo intervalo da semana
+   aberta. Ninguém escreve em `linhas`.
+
+   Isso é o que torna a duplicata impossível: um pedido tem um `plan` só,
+   logo cai numa semana só. Não há mais o que reconciliar, e por isso
+   sumiram daqui o atvPertence, o `herdada`, o `fimAntes`, o aviso de
+   intrusas e o passe de revisão final — todos eram remendos de copia.
+   ==================================================================== */
 const ATV={
   semana:'',          /* a segunda-feira, em AAAA-MM-DD */
-  linhas:[],          /* [{id,pedido,cliente,vendedor,entrega,plan,etapa,sub,per,total,chegouEm,novo}] */
-  vistos:{},          /* id do arquivo -> modifiedTime lido */
-  salvoEm:'',         /* quando este planejamento foi gravado pela última vez */
-  existe:false,
+  meses:{},           /* '2026-08' -> {carimbo, pedidos:{id->registro}} */
+  linhas:[],          /* DERIVADA: o filtro dos meses pela semana aberta */
+  salvoEm:'',         /* quando o último recado foi gravado */
   carregando:false,
   prog:{feito:0,total:0,onde:''},
-  sujo:false,         /* há mudança na tela que ainda não foi gravada */
+  fila:[],            /* recados esperando ir para o servidor */
+  enviando:false,
+  erroFila:'',        /* o que impediu a fila de sair, se impediu */
   aviso:'',
+  varrendo:false,
   hojeFixo:'',        /* só o teste preenche; ver atvHoje() */
 };
 
@@ -21728,53 +21832,19 @@ function atvSeg(){ return atvDeISO(ATV.semana)||atvSegundaDe(atvHoje()); }
    hoje e falharia na semana que vem, sem nada ter mudado. `ATV.hojeFixo`
    existe para o teste dizer que dia é, e é o único jeito de a conferência
    valer para sempre. Em uso normal ele é vazio e vale o relógio. */
-/* ESTA LINHA E DESTA SEMANA?
+/* ESTA LINHA É DESTA SEMANA?
 
-   Uma pergunta so, num lugar so. Ela e feita em tres lugares (ao abrir o
-   arquivo, ao gerar, e ao contar o aviso), e tres copias divergem: foi
-   assim que a limpeza da v3.318 acabou tirando uma coisa e o aviso
-   contando outra.
+   Era uma função de quarenta linhas com quatro regras, uma herança, um
+   conjunto de finalizados da semana anterior e um passe de revisão. Todas
+   essas regras existiam para decidir em QUAL DOS ARQUIVOS um pedido
+   deveria estar, porque ele podia estar em vários.
 
-   A regra, como foi pedida:
-
-     1. a entrega cai nesta semana            -> e daqui, sem discussao
-     2. alguem marcou Organizar               -> a passagem foi escolhida
-     3. desceu por atraso                     -> so vale se a entrega JA
-        venceu E se esta semana e a IMEDIATAMENTE seguinte a da entrega.
-        Um pedido do dia 18 pode aparecer atrasado na semana de 24; na de
-        31 ele nao tem o que fazer. Sem esse limite a linha marcha semana
-        apos semana e a semana de 31 amanhece com 40 pedidos, 32 deles de
-        tres semanas atras.
-     4. ninguem marcou nada                   -> so fica se alguem a
-        arrastou para ca de proposito (o plano cai nesta semana).       */
-function atvPertence(l,segIso,fimIso,anteriorIso,hoje,fimAntes){
-  const ent=atvDeBR(l.entrega);
-  const entIso=ent?atvISO(ent):'';
-  /* JÁ FOI FINALIZADO NA SEMANA ANTERIOR (v3.324).
-
-     O caso que ensinou isto: quatro pedidos da VIAPOL, entrega em 13/08,
-     terminaram na sexta bem tarde e ninguém marcou. Na segunda eles
-     desceram para a semana de 17, como atrasados, ainda em Costura. No
-     dia 17 o administrativo marcou os quatro como finalizados NA SEMANA
-     DE 10 A 15, que é onde eles pertenciam. E eles continuaram na semana
-     de 17 em Costura, gerando de novo quantas vezes fosse: uma linha que
-     já estava na base guarda a etapa dela, e nada nunca reperguntava.
-
-     Finalizado é terminal, e é a única etapa que pode andar para a
-     frente sozinha sem risco: um pedido pronto não tem mais trabalho a
-     ser decidido a mão. Se a semana anterior diz que acabou, aqui ele
-     não é assunto. */
-  if(fimAntes&&fimAntes.has(l.id)&&!(entIso&&entIso>=segIso&&entIso<=fimIso))
-    return false;
-  if(entIso&&entIso>=segIso&&entIso<=fimIso)return true;
-  if(l.etapa==='organizar')return true;
-  const planAqui=l.plan>=segIso&&l.plan<=fimIso;
-  if(!ent)return planAqui;
-  /* o `atrasado` sem `herdada` e linha gravada por versao anterior: ela
-     desceu sozinha do mesmo jeito, e responde a mesma pergunta */
-  if(l.herdada||l.atrasado)
-    return ent<hoje&&atvISO(atvSegundaDe(ent))===anteriorIso;
-  return planAqui;
+   Agora ele está num lugar só, e a pergunta cabe numa linha: o
+   planejamento dele cai entre segunda e sábado? É isso. */
+function atvDaSemana(p,segIso,fimIso){
+  if(!p||p.sumiu)return false;
+  const plan=String(p.plan||'');
+  return plan>=segIso&&plan<=fimIso;
 }
 
 function atvHoje(){
@@ -21868,7 +21938,7 @@ function atvPorDia(){
   });
   /* atrasado primeiro dentro do dia: e o que tem de sair antes */
   grupos.forEach(g=>{
-    g.linhas=g.linhas.filter(l=>l.atrasado).concat(g.linhas.filter(l=>!l.atrasado));
+    g.linhas=g.linhas.filter(l=>atvAtrasado(l)).concat(g.linhas.filter(l=>!atvAtrasado(l)));
   });
   return grupos;
 }
@@ -21887,13 +21957,12 @@ function atvChip(l){
 }
 
 /* O PLANEJAMENTO QUE MUDOU DE DATA.
-   A régua é a data de ENVIO do orçamento: é dela que o plano nasce, e é
-   ela que o arrasto contraria. Mudou de dia = alguém decidiu, e decisão
-   tomada a mão é o que precisa saltar aos olhos numa folha de 24 linhas. */
+   A régua deixou de ser um cálculo e virou um fato gravado: `planManual`
+   diz que ALGUÉM escolheu aquela data. Antes isto era inferido comparando
+   plano e entrega, o que confundia dois casos diferentes — a pessoa que
+   moveu o pedido e o cliente que remarcou a entrega depois. */
 function atvPlanMudou(l){
-  if(!l.plan||!l.entrega)return false;
-  const orig=atvDeBR(l.entrega);
-  return !!orig&&atvISO(orig)!==l.plan;
+  return !!(l&&l.planManual);
 }
 
 function atvCelulas(l){
@@ -21902,16 +21971,26 @@ function atvCelulas(l){
     +'<circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>'
     +'<circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>';
   const vaz=v=>v?atvEsc(v):'<span class="vazio">—</span>';
-  const tarja=l.atrasado?'<span class="atv-atraso">atrasado</span>':'';
+  const tarja=atvAtrasado(l)?'<span class="atv-atraso">atrasado</span>':'';
   const mud=atvPlanMudou(l);
+  /* A ENTREGA MUDOU DEBAIXO DE UMA ESCOLHA SUA.
+     O pedido está marcado a mão, então a varredura não arrastou nada — e
+     é exatamente por isso que ela precisa avisar. Um triângulo pequeno na
+     célula da entrega, e a explicação inteira no title. */
+  const remarcou=!!(l.planManual&&l.entregaMudou);
+  const av=remarcou?'<span class="atv-remarc" title="A entrega era '
+      +atvEsc(l.entregaMudou)+' e virou '+atvEsc(l.entrega)
+      +'. O planejamento não foi movido porque você escolheu a data a mão.">!</span>':'';
   return pux
     +'<span class="ped">'+vaz(l.pedido)+'</span>'
     +'<span class="nome" title="'+atvEsc(l.cliente)+'">'+vaz(l.cliente)+tarja+'</span>'
     +'<span class="dep" title="'+atvEsc(l.departamento||'')+'">'+vaz(l.departamento)+'</span>'
-    +'<span class="data">'+vaz(l.entrega)+'</span>'
-    +'<span class="data plan'+(mud?' mudou':'')+'"'
-      +(mud?' title="Mudou do envio ('+atvEsc(l.entrega)+')"':'')+'>'
-      +vaz(atvBR(l.plan))+'</span>'
+    +'<span class="data'+(remarcou?' remarc':'')+'">'+vaz(l.entrega)+av+'</span>'
+    +'<button type="button" class="data plan atv-cal-bt'+(mud?' mudou':'')+'"'
+      +' data-id="'+atvEsc(l.id)+'"'
+      +' title="'+(mud?'Data escolhida a mão. Clique para mudar.'
+                     :'Clique para escolher onde este pedido fica.')+'">'
+      +vaz(atvBR(l.plan))+'</button>'
     +'<span class="n tot tr-t">'+(+l.total||0)+'</span>'
     +'<span class="n tr-s">'+(l.sub?l.sub:'<span class="vazio">—</span>')+'</span>'
     +'<span class="n tr-p">'+(l.per?l.per:'<span class="vazio">—</span>')+'</span>'
@@ -21930,8 +22009,13 @@ function atvDesenha(){
     +'<div class="sub">Semana de '+atvSemanaTitulo()+'</div></div>'
     +'<div class="atv-cresce"></div>';
   if(novos)html+='<span class="atv-selo novo">'+novos+(novos===1?' pedido novo':' pedidos novos')
-    +' desde o último salvamento</span>';
-  if(ATV.sujo)html+='<span class="atv-selo sujo">alterações não salvas</span>';
+    +' desde que você abriu</span>';
+  /* O SELO DE SALVAMENTO, AGORA QUE NÃO HÁ MAIS BOTÃO.
+     Ele deixou de perguntar e passou a informar. Três estados só, e o do
+     meio dura menos de um segundo na vida real. */
+  if(ATV.erroFila)html+='<span class="atv-selo sujo" title="'+atvEsc(ATV.erroFila)+'">'
+    +ATV.fila.length+(ATV.fila.length===1?' alteração na fila':' alterações na fila')+'</span>';
+  else if(ATV.enviando||ATV.fila.length)html+='<span class="atv-selo sujo">salvando…</span>';
   else if(ATV.salvoEm)html+='<span class="atv-selo salvo">salvo '
     +atvQuando(ATV.salvoEm)+'</span>';
   html+='</div>';
@@ -21966,7 +22050,9 @@ function atvDesenha(){
 
   if(!ATV.linhas.length && !ATV.carregando){
     html+='<div class="atv-dia"><div class="atv-vazio">'
-      +'Nenhum pedido nesta semana. Clique em <b>Gerar / Atualizar</b> para ler o Drive.'
+      +'Nenhum pedido planejado nesta semana. Os pedidos entram sozinhos pela '
+      +'data de entrega assim que o orçamento aparece na pasta; '
+      +'<b>Conferir agora</b> não espera o relógio.'
       +'</div></div>';
   }
 
@@ -21976,12 +22062,13 @@ function atvDesenha(){
     const pc=teto?Math.round(p/teto*100):0;
     const f=atvFaixa(pc);
     const folga=teto-p;
-    const atrasados=g.linhas.filter(l=>l.atrasado).length;
+    const atrasados=g.linhas.filter(l=>atvAtrasado(l)).length;
     html+='<div class="atv-dia" data-dia="'+g.chave+'"'
       +' style="--sat:'+f.c+';--sat-bg:'+f.b+'">'
       +'<div class="atv-dia-cab"><b>'+atvEsc(g.nome)+'</b>'
       +'<span class="dt">'+atvCurta(g.chave)+'</span>'
-      +(atrasados?'<span class="atv-atraso">'+atrasados+' da semana passada</span>':'')
+      +(atrasados?'<span class="atv-atraso">'+atrasados
+         +(atrasados===1?' com entrega vencida':' com entrega vencida')+'</span>':'')
       +'<span class="esp"></span>'
       +'<span class="barra"><i style="width:'+Math.min(100,pc)+'%"></i></span>'
       +'<span class="num">'+p+' / '+teto+'</span>'
@@ -22056,13 +22143,24 @@ function atvQuando(iso){
 function atvLateral(){
   const el=document.getElementById('atvLat');
   if(!el)return;
-  /* a conta segue a MESMA regra da etiqueta da linha: sem escolha e
-     atrasado conta como Atrasado. Se contasse de outro jeito, a soma da
-     coluna não fecharia com o que se vê na tela. */
+  /* a conta segue a MESMA regra da etiqueta da linha. Se contasse de outro
+     jeito, a soma da coluna não fecharia com o que se vê na tela. */
   const conta={};
   ATV.linhas.forEach(l=>{ const e=atvEtapaDe(l);
     const k=e?e.k:''; conta[k]=(conta[k]||0)+1; });
-  let h='<div class="g"><div class="t">Etapas</div>';
+  const atrasados=ATV.linhas.filter(l=>atvAtrasado(l)).length;
+  let h='';
+  /* SITUAÇÃO ANTES DE ETAPA, e separada dela: são os dois eixos, e vê-los
+     lado a lado é o ponto. Um pedido conta uma vez em cada. */
+  h+='<div class="g"><div class="t">Situação</div>'
+    +'<div class="l" style="--tg:#C6161B"><i></i><span class="n">Entrega vencida</span>'
+    +'<span class="q">'+atrasados+'</span></div>'
+    +'<div class="l" style="--tg:#16A34A"><i></i><span class="n">Finalizados</span>'
+    +'<span class="q">'+(conta['finalizado']||0)+'</span></div>'
+    +'<div class="l" style="--tg:#9AA3AF"><i></i><span class="n">Em andamento</span>'
+    +'<span class="q">'+(ATV.linhas.length-(conta['finalizado']||0))+'</span></div>'
+    +'</div>';
+  h+='<div class="g"><div class="t">Etapas</div>';
   ATV_ETAPAS.forEach(e=>{
     h+='<div class="l" style="--tg:'+e.c+'"><i></i><span class="n">'+atvEsc(e.n)+'</span>'
       +'<span class="q">'+(conta[e.k]||0)+'</span></div>';
@@ -22078,13 +22176,22 @@ function atvLateral(){
       +'<span class="q">'+conta['']+'</span></div>';
   }
   h+='</div>';
-  h+='<div class="g"><div class="t">Situação</div><div class="obs">';
-  h+=ATV.salvoEm
-    ? 'Salvo em '+new Date(ATV.salvoEm).toLocaleString('pt-BR')+'.'
-    : 'Ainda não foi salvo nenhuma vez.';
-  if(ATV.sujo)h+='<br><b>Há alterações na tela que ainda não foram gravadas.</b>';
+  h+='<div class="g"><div class="t">Gravação</div><div class="obs">';
+  /* NÃO HÁ MAIS BOTÃO DE SALVAR (v3.326). Cada mudança vira um recado de
+     um campo só, mandado sozinho. Este bloco existe para a pessoa poder
+     conferir que foi, e para dizer o que houve quando não vai. */
+  if(ATV.erroFila){
+    h+='<b>'+ATV.fila.length+(ATV.fila.length===1?' alteração esperando':' alterações esperando')
+      +'.</b><br>'+atvEsc(ATV.erroFila)+'<br>Elas vão sozinhas assim que der.';
+  }else if(ATV.enviando||ATV.fila.length){
+    h+='Gravando as últimas alterações…';
+  }else if(ATV.salvoEm){
+    h+='Tudo gravado. A última foi '+atvQuando(ATV.salvoEm)+'.';
+  }else{
+    h+='Cada alteração é gravada sozinha, na hora. Não há botão de salvar.';
+  }
   const novos=ATV.linhas.filter(l=>l.novo).length;
-  if(novos)h+='<br>'+novos+' em <b style="color:var(--atv-novo)">verde escuro</b> chegaram depois do último salvamento.';
+  if(novos)h+='<br>'+novos+' em <b style="color:var(--atv-novo)">verde escuro</b> chegaram depois que você abriu esta semana.';
   h+='</div></div>';
   h+='<div class="g"><div class="t">Capacidade</div><div class="obs">'
     +ATV_CAP.semana.toLocaleString('pt-BR')+' peças na semana, '+ATV_CAP.dia.toLocaleString('pt-BR')
@@ -22134,121 +22241,312 @@ function atvAlternar(abrir){
        planejamento, e não uma tela vazia com um botão. Ler o Drive inteiro
        é que fica para o botão. */
     atvSemanaGuarda();
-    /* SEMPRE RELÊ O QUE O SERVIDOR TEM (v3.325).
-
-       Antes: `if(!ATV.linhas.length) atvBuscaSalvo()`. Uma vez que a
-       semana estivesse na memória desta aba, sair da seção e voltar não
-       relia nada. Quem salvasse em outra máquina não aparecia aqui
-       NUNCA, e as duas telas mostravam planejamentos diferentes do mesmo
-       dia sem nada avisar.
-
-       O atvBuscaSalvo agora sabe se proteger: com alteração não salva na
-       tela ele NÃO passa por cima, avisa. */
-    if(!ATV.carregando)atvBuscaSalvo();
+    /* RELER AO ABRIR CONTINUA VALENDO (v3.325), e agora é barato e seguro.
+       Barato porque o mês já carregado não é baixado de novo, só o carimbo
+       é conferido pelo relógio. Seguro porque não há mais "alteração na
+       tela que ainda não foi gravada" para atropelar: ela já foi. */
+    if(!ATV.carregando)atvCarrega();
+    atvPollLiga();
   }else{
     pg.hidden=true;
     if(area)area.style.display='';
     atvNotifFecha();
+    atvPollDesliga();
+    atvEnviaFila();        /* sair da seção não deixa recado na fila */
     atvCargaPinta();       /* sair da seção não pode deixar o véu na tela */
   }
   if(typeof ftAtualizaBarraAbas==='function')ftAtualizaBarraAbas();
 }
 window.atvAlternar=atvAlternar;
 
-/* VOLTAR PARA A ABA TAMBÉM RELÊ.
+/* VOLTAR PARA A ABA PERGUNTA O CARIMBO NA HORA.
    O caso de sempre: a tela fica aberta a manhã inteira numa máquina
-   enquanto outra pessoa salva na dela. Sem isto, só um F5 traria o novo.
-   A mesma proteção do atvBuscaSalvo vale aqui: com alteração não salva na
-   tela, ele avisa em vez de passar por cima. */
+   enquanto outra pessoa trabalha na dela. Com o relógio de 15 segundos
+   isto já estaria coberto em quinze segundos, mas quem volta para a aba
+   olha na mesma hora, e quinze segundos de tela velha é o suficiente para
+   alguém tomar uma decisão errada. Também é a hora de soltar a fila: se a
+   rede caiu enquanto a aba estava escondida, voltar é quando costuma ter
+   voltado. */
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible')return;
   if(!atvAberto||ATV.carregando)return;
-  atvBuscaSalvo();
+  atvEnviaFila();
+  atvOlhaCarimbos();
 });
 
 /* ==================================================================
-   A CHECAGEM BÁSICA: falta alguém nesta semana?
+   A CONFERÊNCIA, DEPOIS QUE ELA DEIXOU DE SER OBRIGAÇÃO
 
-   Em dois passos, e o segundo só acontece quando é barato.
+   Até a v3.325 esta parte era uma investigação: listar o Drive, cruzar
+   com o que a semana já tinha lido, abrir um lote para descobrir quais
+   dos não lidos caíam nesta semana, e avisar a pessoa para ela clicar em
+   Gerar. Tudo isso porque o Gerar era a única porta pela qual um pedido
+   novo entrava, e essa porta dependia de alguém lembrar de abrir.
 
-   1. A LISTA, sem abrir arquivo nenhum. O `atividade-lista` devolve id,
-      nome e modifiedTime dos orçamentos dos meses que interessam. Cruzando
-      com o `vistos` que veio do arquivo da semana, sai a conta de quantos
-      NUNCA foram lidos ou mudaram desde a última leitura. Isso é uma
-      chamada por mês e não abre nada.
+   Agora a varredura roda no relógio do SERVIDOR, uma vez para todo mundo,
+   e ela é incapaz de estragar planejamento (ver a lei das três linhas no
+   server.py). Então não há mais o que investigar nem para que avisar: o
+   pedido novo simplesmente aparece. O que sobra aqui é a pergunta mais
+   barata que existe, "o índice do mês mudou de carimbo?", feita de quinze
+   em quinze segundos e ao voltar para a aba.
 
-   2. QUAIS DELES SÃO DESTA SEMANA. O nome do arquivo traz a data em que o
-      orçamento foi FECHADO, e não a de entrega, então o passo 1 não
-      consegue dizer de que semana cada um é. Quando os não lidos cabem num
-      lote só (40), vale abrir esse lote e responder com precisão: "3
-      pedidos novos desta semana". Quando são muitos (a primeira leitura de
-      um mês), o aviso diz o que sabe, sem inventar: "N orçamentos ainda
-      não lidos".
-
-   O aviso não aparece quando não há nada a ler. Silêncio é a resposta
-   certa para "está tudo em dia".
+   O carimbo é o modifiedTime do arquivo no Drive. Perguntá-lo é UMA
+   listagem, sem baixar nada. Só quando ele muda é que vale abrir.
    ================================================================== */
-async function atvConfere(){
-  if(typeof FT_SYNC!=='object'||!FT_SYNC.url)return;
-  if(ATV.carregando)return;
-  const _sem=ATV.semana;
-  const minha=()=>ATV.semana===_sem&&atvAberto;
-  try{
-    /* 1. a lista, sem abrir nada */
-    const vistos=ATV.vistos||{};
-    const jaNaFila=new Set(), naoLidos=[];
-    for(const m of atvMesesAVarrer()){
-      const d=await atvPega('/api/ft/atividade-lista?ano='+m.ano+'&mes='+m.mes);
-      if(!minha())return;
-      (d.arquivos||[]).forEach(a=>{
-        if(jaNaFila.has(a.id))return;
-        jaNaFila.add(a.id);
-        if(vistos[a.id]!==(a.mod||''))naoLidos.push(a);
-      });
-    }
-    if(!naoLidos.length){ atvNotifFecha(); return; }
+const ATV_POLL_MS=15000;
+let atvPollTimer=0;
 
-    /* 2. só quando cabe num lote: aí a resposta é exata */
-    const LOTE=40;
-    if(naoLidos.length<=LOTE){
-      const seg=atvSeg(), fim=atvFim();
-      const naTela=new Set(ATV.linhas.map(l=>l.id));
-      let d={};
-      try{
-        d=await atvPega('/api/ft/atividade-lote',{method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({arquivos:naoLidos})});
-      }catch(e){ d={}; }
-      if(!minha())return;
-      if(d.itens){
-        const desta=(d.itens||[]).filter(it=>{
-          const ent=atvDeBR(it.envio);
-          return !!ent&&ent>=seg&&ent<=fim&&!naTela.has(it.id);
-        });
-        if(!desta.length){
-          /* mudou coisa, mas nada que entre nesta semana. Vale avisar
-             assim mesmo: um orçamento remarcado PARA FORA da semana
-             também muda o planejamento, e quem decide é a pessoa. */
-          atvNotifAbre(naoLidos.length+(naoLidos.length===1
-            ? ' orçamento mudou no Drive':' orçamentos mudaram no Drive'),
-            'Nenhum deles cai nesta semana, mas a leitura está atrasada.');
-          return;
-        }
-        const n=desta.length;
-        const pecas=desta.reduce((a,it)=>a+(+it.total||0),0);
-        atvNotifAbre(n===1?'1 pedido novo nesta semana':n+' pedidos novos nesta semana',
-          (pecas?(pecas.toLocaleString('pt-BR')+(pecas===1?' peça':' peças')+' que ainda não estão no planejamento. ')
-                :'Eles ainda não estão no planejamento. ')
-          +'Gere para trazê-los.');
-        return;
-      }
-    }
-    /* muitos, ou o lote falhou: diz o que sabe, e não mais */
-    atvNotifAbre(naoLidos.length+(naoLidos.length===1
-      ? ' orçamento ainda não foi lido':' orçamentos ainda não foram lidos'),
-      'Pode haver pedidos desta semana entre eles.');
-  }catch(e){ /* a checagem é um extra: falhar nela não pode atrapalhar */ }
+function atvMesesDaSemana(){
+  const chaves=new Set();
+  atvDiasDaSemana().forEach(iso=>chaves.add(iso.slice(0,7)));
+  return [...chaves].sort();
 }
+
+async function atvOlhaCarimbos(){
+  if(typeof FT_SYNC!=='object'||!FT_SYNC.url)return;
+  if(!atvAberto||ATV.carregando||ATV.varrendo)return;
+  const chaves=atvMesesDaSemana();
+  try{
+    const d=await atvPega('/api/ft/atv/carimbo?meses='+encodeURIComponent(chaves.join(',')));
+    if(!atvAberto)return;
+    const mudaram=chaves.filter(k=>{
+      const meu=(ATV.meses[k]||{}).carimbo;
+      return meu!==undefined&&d.carimbos&&d.carimbos[k]!==undefined
+             &&d.carimbos[k]!==meu;
+    });
+    if(mudaram.length)await atvCarregaMeses(mudaram,true);
+  }catch(e){ /* a pergunta é um extra: falhar nela não pode atrapalhar */ }
+}
+
+function atvPollLiga(){
+  atvPollDesliga();
+  atvPollTimer=setInterval(atvOlhaCarimbos,ATV_POLL_MS);
+}
+function atvPollDesliga(){
+  if(atvPollTimer){ clearInterval(atvPollTimer); atvPollTimer=0; }
+}
+window.atvOlhaCarimbos=atvOlhaCarimbos;
+
+/* ==================================================================
+   LER OS MESES, E DERIVAR A SEMANA
+
+   Uma leitura por mês, e as quatro ou cinco semanas dele saem por filtro
+   sem voltar ao servidor. Semana que cruza dois meses (31/08 a 05/09) lê
+   os dois: são duas leituras, e depois disso trocar entre essas semanas
+   não custa nada.
+   ================================================================== */
+async function atvCarregaMeses(chaves,forcar){
+  if(typeof FT_SYNC!=='object'||!FT_SYNC.url)return;
+  const faltam=chaves.filter(k=>forcar||!ATV.meses[k]);
+  if(!faltam.length){ atvMonta(); return; }
+  const _sem=ATV.semana;
+  ATV.carregando=true; ATV.prog={feito:0,total:faltam.length,onde:''};
+  atvDesenha();
+  try{
+    for(const k of faltam){
+      ATV.prog.onde=k;
+      const d=await atvPega('/api/ft/atv/mes?mes='+encodeURIComponent(k));
+      /* O CARIMBO DA SEMANA, mantido da v3.325: trocar de semana duas
+         vezes depressa fazia a resposta da primeira chegar depois da
+         segunda e cair por cima dela. */
+      if(ATV.semana!==_sem||!atvAberto)return;
+      ATV.meses[k]={carimbo:d.carimbo||'',versao:+d.versao||0,
+                    pedidos:d.pedidos||{}};
+      ATV.prog.feito++;
+      atvMonta();
+    }
+    ATV.salvoEm=atvUltimoSalvo()||ATV.salvoEm;
+  }catch(e){
+    ATV.aviso='Não consegui ler o planejamento: '+String(e.message||e).slice(0,160);
+  }finally{
+    ATV.carregando=false; ATV.prog={feito:0,total:0,onde:''};
+    atvMonta();
+  }
+}
+window.atvCarregaMeses=atvCarregaMeses;
+
+function atvUltimoSalvo(){
+  let melhor='';
+  Object.values(ATV.meses).forEach(m=>{
+    Object.values(m.pedidos||{}).forEach(p=>{
+      const q=p.mexidoEm||'';
+      if(q>melhor)melhor=q;
+    });
+  });
+  return melhor;
+}
+
+/* O REGISTRO DE UM PEDIDO, ONDE QUER QUE ELE ESTEJA.
+   Procura em todos os meses carregados porque mover um pedido de 30/08
+   para 02/09 realmente o muda de arquivo, e entre a mudança local e a
+   resposta do servidor ele pode estar em qualquer um dos dois. */
+function atvRegistro(id){
+  for(const k of Object.keys(ATV.meses)){
+    const p=(ATV.meses[k].pedidos||{})[id];
+    if(p)return {mes:k,reg:p};
+  }
+  return null;
+}
+window.atvRegistro=atvRegistro;
+
+/* A SEMANA, DERIVADA. Ninguém escreve em ATV.linhas: ela é sempre o
+   resultado de filtrar os meses carregados. É esta função que substitui
+   o arquivo .fta inteiro. */
+let atvVistosAoAbrir=null;
+function atvMonta(){
+  const segIso=atvISO(atvSeg()), fimIso=atvISO(atvFim());
+  const fora=[];
+  atvMesesDaSemana().forEach(k=>{
+    const m=ATV.meses[k];
+    if(!m)return;
+    Object.values(m.pedidos||{}).forEach(p=>{
+      if(atvDaSemana(p,segIso,fimIso))fora.push(p);
+    });
+  });
+  fora.sort((a,b)=>String(a.plan||'').localeCompare(String(b.plan||''))
+                  ||String(a.pedido||'').localeCompare(String(b.pedido||'')));
+  /* O VERDE DO QUE CHEGOU DEPOIS. A régua deixou de ser "o último
+     salvamento" (que não existe mais) e passou a ser "o que já estava
+     aqui quando você abriu esta semana". É a pergunta que a marca sempre
+     quis responder de verdade. */
+  if(atvVistosAoAbrir===null)atvVistosAoAbrir=new Set(fora.map(p=>p.id));
+  fora.forEach(p=>{ p.novo=!atvVistosAoAbrir.has(p.id); });
+  ATV.linhas=fora;
+  atvDesenha();
+}
+window.atvMonta=atvMonta;
+
+/* ==================================================================
+   O RECADO: UM CAMPO, UM PEDIDO
+
+   O editor nunca manda "a semana deve ficar assim". Manda "PD004136,
+   etapa = costura". Três consequências, e as três são o motivo da
+   arquitetura inteira:
+
+     1. Salvar custa 300 bytes, então pode ser automático. Não há botão.
+     2. Duas máquinas mexendo em pedidos diferentes no mesmo minuto não se
+        apagam, porque nenhuma mandou o arquivo. Sumiu o aviso de "outra
+        máquina salvou" da v3.325: não há mais o que atropelar.
+     3. A tela pinta primeiro e manda depois. Quem clicou vê a resposta no
+        mesmo quadro, e a rede fica sendo assunto da rede.
+   ================================================================== */
+let atvFilaTimer=0;
+function atvRecado(id,campo,valor){
+  const achado=atvRegistro(id);
+  if(!achado)return;
+  const p=achado.reg;
+  let mes=achado.mes;
+  /* 1. pinta na hora, na cópia local */
+  if(campo==='etapa'){
+    p.etapa=String(valor||'');
+    if(p.etapa==='finalizado'){ if(!p.concluidoEm)p.concluidoEm=p.plan||''; }
+    else p.concluidoEm='';
+  }else if(campo==='plan'){
+    p.plan=String(valor||'');
+    p.planManual=true;
+    if(p.etapa==='finalizado')p.concluidoEm=p.plan;
+    /* mudou de mês: o registro muda de arquivo, e a cópia local tem de
+       acompanhar senão a linha some da tela até o próximo carregamento */
+    const destino=p.plan.slice(0,7);
+    if(destino!==mes){
+      delete ATV.meses[mes].pedidos[id];
+      if(!ATV.meses[destino])ATV.meses[destino]={carimbo:'',versao:0,pedidos:{}};
+      ATV.meses[destino].pedidos[id]=p;
+    }
+  }else{
+    p[campo]=valor;
+  }
+  /* 2. entra na fila. Recado do MESMO campo do MESMO pedido substitui o
+        anterior: clicar cinco datas seguidas manda uma, não cinco.
+        O `mes` do recado é o de ORIGEM: é lá que o servidor vai achar o
+        registro para depois movê-lo. */
+  ATV.fila=ATV.fila.filter(r=>!(r.id===id&&r.campo===campo));
+  ATV.fila.push({mes,id,campo,valor:p[campo]});
+  atvMonta();
+  /* 3. solta depois de um respiro. Arrastar uma linha dispara uma mudança
+        só, mas trocar quatro etapas seguidas dispara quatro, e mandá-las
+        juntas é uma ida ao Drive em vez de quatro. */
+  if(atvFilaTimer)clearTimeout(atvFilaTimer);
+  atvFilaTimer=setTimeout(atvEnviaFila,500);
+}
+window.atvRecado=atvRecado;
+
+async function atvEnviaFila(){
+  if(atvFilaTimer){ clearTimeout(atvFilaTimer); atvFilaTimer=0; }
+  if(ATV.enviando||!ATV.fila.length)return;
+  if(typeof FT_SYNC!=='object'||!FT_SYNC.url){
+    ATV.erroFila='Sem servidor.'; atvDesenha(); return;
+  }
+  const indo=ATV.fila.slice();
+  ATV.enviando=true; atvDesenha();
+  try{
+    const d=await atvPega('/api/ft/atv/recado',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({recados:indo})});
+    /* só sai da fila o que foi. O que entrou enquanto isto viajava fica. */
+    const foram=new Set(indo.map(r=>r.id+'|'+r.campo));
+    ATV.fila=ATV.fila.filter(r=>!foram.has(r.id+'|'+r.campo));
+    ATV.erroFila='';
+    ATV.salvoEm=d.salvoEm||new Date().toISOString();
+    /* o carimbo novo é meu: sem guardá-lo, o poll veria "mudou" na
+       gravação que eu mesmo acabei de fazer e recarregaria o mês à toa */
+    Object.entries(d.carimbos||{}).forEach(([k,c])=>{
+      if(ATV.meses[k])ATV.meses[k].carimbo=c;
+    });
+  }catch(e){
+    /* A FILA NÃO SE PERDE. Sem rede, ela espera; e como cada recado é um
+       campo, esperar não trava mais nada nem envelhece o resto. */
+    ATV.erroFila=String(e.message||e).slice(0,140);
+  }finally{
+    ATV.enviando=false;
+    atvDesenha();
+    if(ATV.fila.length&&!ATV.erroFila)atvEnviaFila();
+    else if(ATV.fila.length)setTimeout(atvEnviaFila,8000);
+  }
+}
+window.atvEnviaFila=atvEnviaFila;
+
+/* CONFERIR AGORA. É a mesma varredura que o servidor faz sozinho, só que
+   na hora, para quem acabou de jogar um orçamento na pasta e não quer
+   esperar os cinco minutos. Ela não é obrigação de ninguém: apertar ou
+   não apertar não muda nada que seja seu. */
+async function atvVarrer(){
+  if(typeof FT_SYNC!=='object'||!FT_SYNC.url){
+    if(typeof ftStatus==='object')ftStatus.erro('Sem servidor','Conecte o servidor para conferir o Drive.');
+    return;
+  }
+  if(ATV.varrendo)return;
+  ATV.varrendo=true; ATV.carregando=true; ATV.aviso='';
+  ATV.prog={feito:0,total:0,onde:'Lendo a pasta do Drive'};
+  atvDesenha();
+  const chaves=atvMesesDaSemana();
+  let novos=0;
+  try{
+    for(const k of chaves){
+      const r=await atvPega('/api/ft/atv/varrer',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({mes:k})});
+      novos+=(+(r||{}).criados||0);
+    }
+    ATV.varrendo=false; ATV.carregando=false;
+    await atvCarregaMeses(chaves,true);
+    atvNotifFecha();
+    if(typeof ftStatus==='object'&&ftStatus.sucesso){
+      ftStatus.sucesso('Drive conferido',
+        ATV.linhas.length+' pedidos nesta semana'+(novos?', '+novos+' novos':''));
+    }
+  }catch(e){
+    ATV.aviso='Não consegui conferir o Drive: '+String(e.message||e).slice(0,180);
+  }finally{
+    ATV.varrendo=false; ATV.carregando=false;
+    ATV.prog={feito:0,total:0,onde:''};
+    atvDesenha();
+  }
+}
+window.atvVarrer=atvVarrer;
+/* o nome antigo continua respondendo: há botão e atalho chamando por ele */
+window.atvGera=atvVarrer;
+async function atvConfere(){ return atvOlhaCarimbos(); }
 window.atvConfere=atvConfere;
 
 function atvNotifAbre(tit,txt){
@@ -22294,15 +22592,21 @@ function atvSemanaNoPainel(){
   }
 }
 
+/* TROCAR DE SEMANA DEIXOU DE PERGUNTAR NADA.
+   Não há mais "alterações não salvas": cada mudança já foi gravada no
+   instante em que foi feita, e o que ainda estiver na fila continua indo
+   sozinho depois da troca, porque o recado carrega o mês dele dentro.
+   E o mês que já está na memória não é relido: trocar entre as semanas
+   de agosto passou a ser instantâneo. */
 function atvTrocaSemana(passos){
-  if(ATV.sujo&&!confirm('Há alterações não salvas nesta semana. Trocar de semana perde o que não foi gravado. Continuar?'))return;
   ATV.semana=atvISO(atvMais(atvSeg(),passos*7));
   atvSemanaGuarda();
-  ATV.linhas=[]; ATV.vistos={}; ATV.salvoEm=''; ATV.sujo=false; ATV.aviso='';
-  atvNotifFecha();          /* o aviso era da semana que acabou de sair */
+  ATV.aviso='';
+  atvVistosAoAbrir=null;    /* o verde é por semana aberta */
+  atvNotifFecha();
   atvSemanaNoPainel();
-  atvDesenha();
-  atvBuscaSalvo();
+  atvMonta();
+  atvCarrega();
 }
 
 /* ---------------- servidor ---------------- */
@@ -22314,444 +22618,22 @@ async function atvPega(url,opcoes){
   return j;
 }
 
-async function atvBuscaSalvo(){
-  if(typeof FT_SYNC!=='object'||!FT_SYNC.url)return;
-  /* mesmo carimbo do atvGera: trocar de semana duas vezes depressa fazia a
-     resposta da primeira chegar depois da segunda */
-  const _sem=ATV.semana;
-  try{
-    const d=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(_sem));
-    if(ATV.semana!==_sem)return;
-    if(d&&d.existe){
-      /* O QUE ESTÁ NA TELA E NÃO FOI GRAVADO NÃO SE PERDE.
-         Reler é o certo (outra máquina pode ter salvado), mas reler não
-         pode apagar trabalho de quem está no meio de uma mudança aqui.
-         Quando as duas coisas acontecem, quem decide é a pessoa: a tela
-         fica como está e o aviso diz que o servidor mudou. */
-      if(ATV.sujo&&ATV.linhas.length&&(d.salvoEm||'')!==(ATV.salvoEm||'')){
-        /* o atvQuando já vem com o "às" ou o "em dd/mm às": juntar mais um
-           "às" aqui daria "às às 16:45" */
-        ATV.aviso='Outra máquina salvou este planejamento'
-          +(d.salvoEm?' '+atvQuando(d.salvoEm):'')
-          +'. O que está na tela aqui ainda não foi gravado: salvar vai por '
-          +'cima do que veio. Para ver o de lá, troque de semana e volte.';
-        atvDesenha();
-        return;
-      }
-      ATV.linhas=(d.linhas||[]).map(l=>Object.assign({},l,{novo:false}));
-      ATV.vistos=d.vistos||{};
-      ATV.salvoEm=d.salvoEm||'';
-      ATV.existe=true;
-      ATV.sujo=false;
-      /* NUNCA MAIS EM SILÊNCIO. Se o arquivo trouxer linha que não é desta
-         semana por nenhum critério, a tela diz. Foi assim que 32 pedidos da
-         semana de 17 a 22 ficaram meses dentro do arquivo da de 24 a 29 sem
-         ninguém ver: eles apareciam na lista como se fossem de lá. */
-      const iSeg=atvISO(atvSeg()), iFim=atvISO(atvFim());
-      const iAnt=atvISO(atvMais(atvSeg(),-7));
-      const hoje=atvHoje();
-      /* a MESMA pergunta do gerar, com a MESMA informação: sem ler os
-         finalizados da semana anterior, o aviso contaria um número e o
-         Gerar faria outro, que é como a limpeza e o aviso divergiram uma
-         vez antes */
-      const fimAntes=new Set();
-      try{
-        const da=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(iAnt));
-        if(ATV.semana!==_sem)return;
-        if(da&&da.existe)(da.linhas||[]).forEach(l=>{
-          if(l.etapa==='finalizado')fimAntes.add(l.id); });
-      }catch(e){}
-      const intrusas=ATV.linhas.filter(l=>!atvPertence(l,iSeg,iFim,iAnt,hoje,fimAntes)).length;
-      if(intrusas)ATV.aviso=intrusas+(intrusas===1
-        ? ' pedido salvo aqui não é desta semana. Clique em Gerar / Atualizar para tirá-lo.'
-        : ' pedidos salvos aqui não são desta semana. Clique em Gerar / Atualizar para tirá-los.');
-      atvDesenha();
-      /* só agora dá para conferir: a checagem cruza com o `vistos` que
-         veio dentro deste arquivo, e antes dele não havia com o que cruzar */
-      atvConfere();
-    }else{
-      /* semana sem arquivo salvo: tudo o que estiver no Drive é novidade */
-      atvConfere();
-    }
-  }catch(e){ /* sem salvo é o estado normal de uma semana nova */ }
+/* O QUE ABRIR UMA SEMANA FAZ AGORA.
+
+   Era `atvBuscaSalvo`: pedir o arquivo daquela semana, e depois abrir o da
+   semana ANTERIOR só para descobrir quem já tinha sido finalizado lá, e
+   depois passar a lista inteira por atvPertence para achar as intrusas.
+   Três leituras e uma reconciliação, todas as vezes.
+
+   Agora é: carregue os meses que a semana toca, e filtre. Não há semana
+   anterior a consultar porque não há cópia lá para discordar daqui. */
+async function atvCarrega(forcar){
+  await atvCarregaMeses(atvMesesDaSemana(),!!forcar);
 }
-
-/* OS MESES QUE PRECISAM SER VARRIDOS.
-
-   Os orçamentos são arquivados no Drive pela data em que foram fechados, e
-   não pela data de entrega. Um pedido entregue na semana do dia 17 pode ter
-   sido fechado em julho. Varrer só o mês da semana perderia esses; varrer o
-   ano inteiro seria caro e inútil. O mês anterior cobre a distância real
-   entre fechar e entregar. */
-function atvMesesAVarrer(){
-  const seg=atvSeg(), fim=atvFim();
-  const chaves=new Set(), lista=[];
-  [atvMais(seg,-31),seg,fim].forEach(d=>{
-    const k=d.getFullYear()+'-'+(d.getMonth()+1);
-    if(!chaves.has(k)){ chaves.add(k); lista.push({ano:d.getFullYear(),mes:d.getMonth()+1}); }
-  });
-  return lista;
-}
-
-async function atvGera(){
-  if(typeof FT_SYNC!=='object'||!FT_SYNC.url){
-    if(typeof ftStatus==='object')ftStatus.erro('Sem servidor','Conecte o servidor para gerar o relatório.');
-    return;
-  }
-  if(ATV.carregando)return;
-  /* O CARIMBO DA SEMANA.
-
-     Ler o Drive leva segundos, e a cada lote o resultado parcial era
-     escrito em ATV.linhas e desenhado. Se a semana mudasse no meio (e
-     mudar de semana e um clique), o que voltava do Drive era da semana
-     ANTIGA e caia por cima da nova, sem erro nenhum na tela. Quem
-     clicasse em Salvar depois disso gravava a semana passada dentro do
-     arquivo da semana seguinte.
-
-     Foi exatamente isso que aconteceu em 14/08: a semana de 17 a 22 de
-     agosto inteira, 32 pedidos com planejamento de 17 a 21, ficou gravada
-     no arquivo da semana de 24 a 29. Os 45 pedidos daquela semana eram 32
-     de outra, mais 4 atrasados, mais os 9 dela.
-
-     Agora toda escrita passa por aqui: se a semana ja nao e a mesma de
-     quando esta leitura comecou, o resultado e jogado fora. */
-  const _sem=ATV.semana;
-  const minha=()=>ATV.semana===_sem;
-  ATV.carregando=true; ATV.aviso='';
-  ATV.prog={feito:0,total:0,onde:''};
-  atvDesenha();
-  try{
-    /* 1. o que já está salvo. É a base, e não o resultado: o que vier do
-          Drive vai ser encaixado NELE, e não por cima dele. */
-    let salvo={linhas:[],vistos:{},salvoEm:'',existe:false};
-    try{
-      const d=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(ATV.semana));
-      if(d&&d.existe)salvo={linhas:d.linhas||[],vistos:d.vistos||{},
-                            salvoEm:d.salvoEm||'',existe:true};
-    }catch(e){}
-    /* se a tela já tem alterações não gravadas, elas valem mais que o
-       arquivo: gerar não é recarregar. */
-    const base=(ATV.sujo&&ATV.linhas.length)?ATV.linhas:salvo.linhas;
-    /* A RÉGUA DO "NOVO" É O ARQUIVO SALVO, E NÃO UM HORÁRIO.
-       A primeira versão comparava o chegouEm da linha (relógio do navegador)
-       com o salvoEm do arquivo (relógio do servidor). Dois relógios, e a
-       pergunta é sobre o mesmo instante: bastavam segundos de diferença
-       entre as duas máquinas para um pedido novo nascer velho, ou o
-       contrário. Quem estava no arquivo salvo não é novo. Quem não estava,
-       é. Sem relógio nenhum no meio. */
-    const eramSalvos=new Set(salvo.linhas.map(l=>l.id));
-    const marco=salvo.existe?eramSalvos:null;
-    ATV.vistos=Object.assign({},salvo.vistos,ATV.vistos);
-    ATV.salvoEm=salvo.salvoEm||ATV.salvoEm;
-    /* UM CAMPO NOVO NAO CHEGA SOZINHO NUMA SEMANA JA GRAVADA.
-       A leitura e incremental: so abre o arquivo do Drive cujo modifiedTime
-       mudou. Um campo acrescentado ao servidor DEPOIS (o departamento, na
-       v3.316) nunca seria lido, porque nenhum orcamento mudou por causa
-       disso — a coluna nascia vazia e continuava vazia por mais que se
-       clicasse em Gerar. Quando falta o campo em quem ja estava salvo, a
-       memoria do que foi lido e jogada fora UMA vez, e a semana e relida
-       inteira. */
-    if(base.length&&base.some(l=>l.departamento===undefined||l.departamento===null))
-      ATV.vistos={};
-
-    const porId=new Map();
-    base.forEach(l=>porId.set(l.id,Object.assign({},l)));
-    const agora=new Date().toISOString();
-
-    /* 2. o que sobrou da semana passada e não foi finalizado desce para a
-          SEGUNDA desta semana, com a tarja de atrasado. É o que a fábrica
-          faz de qualquer jeito; o relatório só para de fingir que não.
-
-          MAS SÓ QUEM ESTÁ MESMO ATRASADO (v3.317).
-          A primeira versão trazia TUDO o que não estava finalizado, sem
-          olhar a data de entrega. Um pedido que ficou na semana passada e
-          teve o envio remarcado para daqui a duas semanas voltava para a
-          segunda-feira desta, com tarja vermelha de atrasado. Pior: ele
-          ficava gravado assim, e na semana seguinte era arrastado de novo,
-          somando semana após semana — foi por isso que a segunda-feira
-          apareceu com 1.559 peças e pedidos com entrega em 21/08.
-          Atrasado é quem tinha de sair ANTES desta segunda e não saiu. */
-    const segAtual=atvSeg();
-    /* A RÉGUA É HOJE, E NÃO A SEMANA QUE SE ESTÁ OLHANDO (v3.318).
-       Planejar a semana que vem é trabalho normal, e planejar a de depois
-       também. Se a régua for a segunda-feira da semana ABERTA, um pedido
-       com entrega em 20/08 vira "atrasado" no instante em que se abre a
-       semana de 24/08 — no dia 16, quando ele nem venceu. Era isso que
-       enchia as semanas da frente de tarja vermelha.
-       Atrasado é quem já devia ter saído: entrega ANTES de hoje. */
-    const hoje=atvHoje();
-    /* quem a semana anterior diz que ACABOU. Ver o achado no atvPertence. */
-    const fimAntes=new Set();
-    try{
-      const ant=atvISO(atvMais(segAtual,-7));
-      const d=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(ant));
-      if(d&&d.existe){
-        (d.linhas||[]).forEach(l=>{ if(l.etapa==='finalizado')fimAntes.add(l.id); });
-        (d.linhas||[]).forEach(l=>{
-          if(l.etapa==='finalizado')return;
-          if(porId.has(l.id))return;
-          /* JÁ DESCEU UMA VEZ SOZINHA: não desce de novo.
-             Sem esta linha o pedido atrasado passa da semana da entrega
-             para a seguinte, é gravado lá, e na geração seguinte é puxado
-             outra vez, e outra. Mexer na etapa a mão devolve a linha para
-             as mãos da pessoa e libera outra passagem. */
-          if(l.herdada)return;
-          /* ORGANIZAR é a passagem escolhida a mão: desce mesmo sem ter
-             vencido, e desce SEM tarja, porque não é atraso nenhum. */
-          if(l.etapa==='organizar'){
-            porId.set(l.id,Object.assign({},l,
-              {chegouEm:agora,atrasado:false,plan:ATV.semana,herdada:true}));
-            return;
-          }
-          const ent=atvDeBR(l.entrega);
-          if(!ent)return;
-          if(ent>=hoje)return;               /* ainda não venceu */
-          /* SÓ DA SEMANA DA ENTREGA PARA A SEGUINTE */
-          if(atvISO(atvSegundaDe(ent))!==ant)return;
-          porId.set(l.id,Object.assign({},l,
-            {chegouEm:agora,atrasado:true,plan:ATV.semana,herdada:true}));
-        });
-      }
-    }catch(e){}
-
-    /* 3. quais arquivos existem, sem abrir nenhum */
-    const arquivos=[];
-    for(const m of atvMesesAVarrer()){
-      if(!minha())return;
-      ATV.prog.onde=m.mes+'/'+m.ano; atvDesenha();
-      const d=await atvPega('/api/ft/atividade-lista?ano='+m.ano+'&mes='+m.mes);
-      /* de que MÊS de arquivamento veio cada um: é por isso que o cache
-         sabe em qual arquivo gravar cada item */
-      (d.arquivos||[]).forEach(a=>arquivos.push(Object.assign({_mes:m.ano+'-'+m.mes},a)));
-    }
-    /* 3b. O CACHE DO MÊS (v3.322, a pedido).
-
-       A leitura já era incremental, mas o que ela aprendia ficava trancado
-       DENTRO do arquivo da semana: abrir a semana seguinte começava do zero
-       e reabria os mesmos orçamentos um por um. O cache tira esse
-       aprendizado de dentro da semana e o põe num arquivo por mês, ao lado
-       dos relatórios. Gerar qualquer semana passa a aproveitar o que
-       qualquer outra já leu.
-
-       A chave de validade é o modifiedTime do arquivo no Drive, e não o
-       tempo: um orçamento reaberto e salvo envelhece a entrada na hora.
-       Cache que expira por relógio erra dos dois lados. */
-    const cache={};                    /* id -> item, do que já se sabe */
-    const mesesLidos=[];
-    for(const m of atvMesesAVarrer()){
-      try{
-        const c=await atvPega('/api/ft/atividade-cache?ano='+m.ano+'&mes='+m.mes);
-        if(!minha())return;
-        mesesLidos.push(m);
-        Object.entries(c.itens||{}).forEach(([id,it])=>{ cache[id]=it; });
-      }catch(e){ /* cache é atalho: sem ele o caminho longo continua lá */ }
-    }
-
-    /* 4. só o que nunca foi visto, ou o que mudou desde a última leitura.
-          O de sempre, dedup incluído: os meses varridos se sobrepõem nas
-          bordas, e abrir o mesmo arquivo duas vezes é lento à toa.
-
-          Agora com uma peneira a mais: o que o CACHE já conhece com o mesmo
-          modifiedTime não precisa ser aberto. */
-    const vistos=ATV.vistos;
-    const jaNaFila=new Set();
-    const doCache=[];
-    const abrir=arquivos.filter(a=>{
-      if(jaNaFila.has(a.id))return false;
-      jaNaFila.add(a.id);
-      if(vistos[a.id]===(a.mod||''))return false;      /* esta semana já leu */
-      const c=cache[a.id];
-      if(c&&c.mod===(a.mod||'')){ doCache.push(c); return false; }
-      return true;
-    });
-    ATV.prog={feito:0,total:abrir.length,onde:''};
-    atvDesenha();
-
-    const seg=atvSeg(), fim=atvFim();
-    /* A FUSÃO É UMA SÓ, e serve tanto ao que veio do cache quanto ao que
-       veio do Drive. Duas cópias desta regra é o jeito mais rápido de o
-       cache começar a divergir da leitura de verdade. */
-    const funde=it=>{
-      vistos[it.id]=it.mod||'';
-      const ent=atvDeBR(it.envio);
-      const dentro=!!(ent&&ent>=seg&&ent<=fim);
-      const velho=porId.get(it.id);
-      if(velho){
-        /* O QUE VEM DO ORÇAMENTO É REESCRITO. O que foi decidido a mão
-           (plan e etapa) não é tocado: é essa linha que faz "gerar de
-           novo" ser seguro. */
-        velho.pedido=it.pedido; velho.cliente=it.cliente;
-        velho.vendedor=it.vendedor; velho.entrega=it.envio;
-        velho.departamento=it.departamento||'';
-        velho.sub=it.subPecas; velho.per=it.perPecas; velho.total=it.total;
-      }else if(dentro){
-        porId.set(it.id,{id:it.id,pedido:it.pedido,cliente:it.cliente,
-          vendedor:it.vendedor,entrega:it.envio,plan:atvISO(ent),etapa:'',
-          departamento:it.departamento||'',
-          sub:it.subPecas,per:it.perPecas,total:it.total,chegouEm:agora});
-      }
-    };
-    doCache.forEach(funde);
-    const novosDoDrive=[];
-    const LOTE=8;
-    for(let i=0;i<abrir.length;i+=LOTE){
-      const lote=abrir.slice(i,i+LOTE);
-      let d={};
-      try{
-        d=await atvPega('/api/ft/atividade-lote',{method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({arquivos:lote})});
-      }catch(e){ ATV.aviso='Um lote falhou: '+String(e.message||e).slice(0,120); }
-      (d.itens||[]).forEach(it=>{ funde(it); novosDoDrive.push(it); });
-      if(!minha())return;                 /* a semana virou: isto aqui e lixo */
-      ATV.prog.feito=Math.min(abrir.length,i+lote.length);
-      ATV.linhas=[...porId.values()];
-      atvMarcaNovos(marco);
-      atvDesenha();
-    }
-    if(!minha())return;
-
-    /* A ÚLTIMA PALAVRA É DO ORÇAMENTO, e não do arquivo da semana passada.
-       O passo 2 decidiu com a cópia CONGELADA da semana anterior; o passo 4
-       acabou de reler o orçamento de verdade. Se o envio mudou no meio do
-       caminho, a herança é revista aqui:
-         · virou uma data DESTA semana  -> volta a ser um pedido normal,
-           no dia dele, sem tarja;
-         · virou uma data DEPOIS desta  -> sai, porque não é assunto desta
-           semana;
-         · continua no passado          -> segue atrasado, na segunda.
-       Sem esta revisão, um pedido remarcado ficava preso na segunda-feira
-       para sempre, e cada geração o empurrava mais uma semana à frente. */
-    /* A REVISÃO FINAL, com o orçamento já relido.
-       O passo 2 decidiu com a cópia congelada da semana passada; agora as
-       entregas estão frescas. Toda linha responde à mesma pergunta do
-       atvPertence, e quem não pertence sai. É isto que desfaz sozinha a
-       bagunça já gravada: a semana de 31/08 tinha 40 linhas, 32 delas de
-       três semanas atrás, todas marcadas como atrasado. */
-    const _seg=atvSeg(), _fim=atvFim();
-    const _isoSeg=atvISO(_seg), _isoFim=atvISO(_fim);
-    const _isoAnt=atvISO(atvMais(_seg,-7));
-    [...porId.values()].forEach(l=>{
-      if(!atvPertence(l,_isoSeg,_isoFim,_isoAnt,hoje,fimAntes)){ porId.delete(l.id); return; }
-      /* ficou porque a entrega É desta semana, mas a semana anterior já o
-         dava por pronto: a etapa de lá é a mais recente das duas */
-      if(fimAntes.has(l.id)&&l.etapa!=='finalizado'){
-        l.etapa='finalizado'; l.atrasado=false; delete l.herdada;
-      }
-      const ent=atvDeBR(l.entrega);
-      if(!ent)return;
-      /* a entrega caiu DENTRO desta semana: a linha volta a ser um pedido
-         normal, no dia dela, sem tarja nenhuma */
-      if(ent>=_seg&&ent<=_fim&&(l.herdada||l.atrasado)){
-        l.atrasado=false; l.plan=atvISO(ent); delete l.herdada;
-      }
-    });
-
-    ATV.linhas=[...porId.values()];
-    atvMarcaNovos(marco);
-    ATV.existe=true;
-    atvNotifFecha();          /* acabou de ler: não há mais o que avisar */
-
-    /* O CACHE VOLTA PARA O DRIVE, um arquivo por mês.
-       Grava-se só quando houve leitura nova: sem isso, toda geração
-       reescreveria os mesmos bytes por nada. E cada item vai com o
-       modifiedTime que o validou, que é o que permite descartá-lo depois
-       sem consultar relógio nenhum. */
-    if(novosDoDrive.length&&mesesLidos.length){
-      const porMes=new Map();
-      mesesLidos.forEach(m=>porMes.set(m.ano+'-'+m.mes,{ano:m.ano,mes:m.mes,itens:{}}));
-      /* de que mês é cada arquivo: a lista já disse, e é a pasta de
-         arquivamento que manda, não a data de entrega */
-      const mesDoArquivo=new Map();
-      arquivos.forEach(a=>{ if(a._mes)mesDoArquivo.set(a.id,a._mes); });
-      const juntos=doCache.concat(novosDoDrive);
-      juntos.forEach(it=>{
-        const k=mesDoArquivo.get(it.id);
-        const alvo=k&&porMes.get(k);
-        if(alvo)alvo.itens[it.id]=it;
-      });
-      for(const g of porMes.values()){
-        if(!Object.keys(g.itens).length)continue;
-        try{
-          await atvPega('/api/ft/atividade-cache',{method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify(g)});
-        }catch(e){ /* o cache é atalho: falhar ao gravar não estraga nada */ }
-      }
-    }
-    const novos=ATV.linhas.filter(l=>l.novo).length;
-    if(novos)ATV.sujo=true;
-    /* ftStatus chama SUCESSO, e não ok. Escrito errado, o aviso nunca
-       aparecia: a geração acontecia e a tela não dizia nada. O `ftStatus.ok?`
-       na frente escondia o erro, que é o que um teste de "não deu erro de
-       página" jamais pegaria. */
-    if(typeof ftStatus==='object'&&ftStatus.sucesso){
-      ftStatus.sucesso('Relatório atualizado',
-        ATV.linhas.length+' pedidos na semana'+(novos?', '+novos+' novos':''));
-    }
-  }catch(e){
-    if(minha())ATV.aviso='Não consegui gerar: '+String(e.message||e).slice(0,180);
-  }finally{
-    ATV.carregando=false;
-    ATV.prog={feito:0,total:0,onde:''};
-    atvDesenha();
-  }
-}
-window.atvGera=atvGera;
-
-/* A MARCA DO QUE CHEGOU DEPOIS DO ÚLTIMO SALVAMENTO.
-
-   Não é "o que é recente": é "o que apareceu desde que eu olhei pela última
-   vez". A régua é o conjunto de ids que estava no arquivo salvo. Sem
-   salvamento anterior não há marca nenhuma: a primeira geração de uma
-   semana é toda nova, e pintar as trinta linhas de verde não diria nada. */
-function atvMarcaNovos(eramSalvos){
-  ATV.linhas.forEach(l=>{
-    l.novo=!!(eramSalvos&&!eramSalvos.has(l.id));
-  });
-}
-
-async function atvSalva(){
-  if(!atvPodePlanejar()){
-    if(typeof ftStatus==='object')ftStatus.erro('Sem permissão','Só um administrador salva o planejamento.');
-    return;
-  }
-  if(typeof FT_SYNC!=='object'||!FT_SYNC.url){
-    if(typeof ftStatus==='object')ftStatus.erro('Sem servidor','Conecte o servidor para salvar.');
-    return;
-  }
-  try{
-    const limpas=ATV.linhas.map(l=>({
-      id:l.id,pedido:l.pedido,cliente:l.cliente,vendedor:l.vendedor,
-      entrega:l.entrega,plan:l.plan,etapa:l.etapa||'',
-      departamento:l.departamento||'',
-      /* a marca viaja: sem ela, uma linha herdada relida na semana
-         seguinte deixaria de ser revista pela regra acima */
-      herdada:!!l.herdada,
-      sub:+l.sub||0,per:+l.per||0,total:+l.total||0,
-      atrasado:!!l.atrasado, chegouEm:l.chegouEm||''}));
-    const d=await atvPega('/api/ft/atividade-guardar',{method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({semana:ATV.semana,linhas:limpas,vistos:ATV.vistos,
-        capacidade:ATV_CAP})});
-    if(d.ok===false){ ATV.aviso=d.aviso||'Não consegui salvar.'; atvDesenha(); return; }
-    ATV.salvoEm=d.salvoEm||new Date().toISOString();
-    ATV.sujo=false;
-    /* salvou: a marca do que era novo se apaga, porque a pergunta que ela
-       responde ("o que chegou desde a última vez?") acabou de ser zerada */
-    ATV.linhas.forEach(l=>{l.novo=false;});
-    ATV.aviso='';
-    atvDesenha();
-    if(typeof ftStatus==='object'&&ftStatus.sucesso){
-      ftStatus.sucesso('Planejamento salvo',
-        ATV.linhas.length+' pedidos gravados em '+(d.nome||('semana '+ATV.semana)));
-    }
-  }catch(e){
-    ATV.aviso='Não consegui salvar: '+String(e.message||e).slice(0,180);
-    atvDesenha();
-  }
-}
-window.atvSalva=atvSalva;
+window.atvCarrega=atvCarrega;
+/* o nome antigo continua respondendo: a barra lateral e o teste chamam
+   por ele em alguns lugares */
+window.atvBuscaSalvo=atvCarrega;
 
 /* ---------------- a etapa ---------------- */
 (function ligaMenuEtapa(){
@@ -22769,14 +22651,11 @@ window.atvSalva=atvSalva;
     const b=e.target.closest('button');
     if(!b||!alvo)return;
     const l=ATV.linhas.find(x=>x.id===alvo);
-    if(l&&l.etapa!==b.dataset.k){
-      l.etapa=b.dataset.k;
-      /* escolher a etapa a mão devolve a linha para as mãos da pessoa: a
-         marca de "já desceu sozinha" sai, e um Organizar volta a poder
-         levá-la mais uma semana à frente */
-      delete l.herdada;
-      ATV.sujo=true; atvDesenha();
-    }
+    /* UM RECADO, e nada mais. Ele pinta a tela, entra na fila e vai
+       sozinho. Marcar Finalizado grava a conclusão de brinde: quem clica
+       nisso está dizendo quando acabou, e data que se pede à parte é data
+       que se esquece de preencher. */
+    if(l&&l.etapa!==b.dataset.k)atvRecado(l.id,'etapa',b.dataset.k);
     fecha();
   });
   document.addEventListener('click',e=>{
@@ -22826,6 +22705,150 @@ window.atvSalva=atvSalva;
   document.addEventListener('scroll',e=>{
     if(e.target&&e.target.nodeType===1&&menu.contains(e.target))return;
     if(e.target===menu)return;
+    fecha();
+  },true);
+})();
+
+
+/* ==================================================================
+   O CALENDÁRIO DO PLANEJAMENTO
+
+   Este é o coração da arquitetura nova, e não um enfeite de tela. O campo
+   `plan` é o ENDEREÇO do pedido: é ele, e só ele, que decide em qual
+   semana a linha aparece. Então mudar a data aqui não é "editar um
+   campo", é mover o pedido de semana. Para frente ou para trás, dá no
+   mesmo, e nada nunca vai desfazer isso pelas suas costas.
+
+   O caso que pediu isto: pedidos que apareciam na semana de 17 mas tinham
+   sido concluídos no dia 13. Antes não havia onde dizer isso. Agora
+   escolher 13 num pedido finalizado grava a conclusão em 13 E o registra
+   na semana do dia 13, que é onde o trabalho aconteceu.
+
+   Escolher uma data assina embaixo: o registro passa a ser `planManual` e
+   a varredura não encosta mais nele. Se a entrega do orçamento mudar
+   depois, a linha ganha um aviso e a sua escolha continua de pé. O botão
+   do rodapé desfaz essa assinatura e devolve o pedido ao piloto
+   automático, que é a única saída honesta para quem clicou sem querer.
+   ================================================================== */
+(function ligaCalendario(){
+  const cal=document.getElementById('atvCal');
+  if(!cal)return;
+  let alvo=null, verMes=null;
+  const M=['janeiro','fevereiro','março','abril','maio','junho','julho',
+           'agosto','setembro','outubro','novembro','dezembro'];
+
+  const fecha=()=>{ cal.classList.remove('on'); alvo=null; verMes=null; };
+  window.atvCalFecha=fecha;
+
+  function pinta(){
+    const l=alvo?ATV.linhas.find(x=>x.id===alvo)||((atvRegistro(alvo)||{}).reg):null;
+    if(!l){ fecha(); return; }
+    const sel=atvDeISO(l.plan);
+    const base=verMes||new Date((sel||atvSeg()).getFullYear(),(sel||atvSeg()).getMonth(),1);
+    const ano=base.getFullYear(), mes=base.getMonth();
+    const primeiro=new Date(ano,mes,1);
+    const recuo=(primeiro.getDay()+6)%7;          /* segunda como primeiro dia */
+    const inicio=atvMais(primeiro,-recuo);
+    const hojeIso=atvISO(atvHoje());
+    const segIso=atvISO(atvSeg()), fimIso=atvISO(atvFim());
+    let h='<div class="atv-cal-cab">'
+      +'<button class="atv-cal-nav" data-passo="-1" type="button" title="Mês anterior">'
+      +'<svg viewBox="0 0 24 24"><path d="M15 18 9 12l6-6"/></svg></button>'
+      +'<b>'+M[mes]+' de '+ano+'</b>'
+      +'<button class="atv-cal-nav" data-passo="1" type="button" title="Próximo mês">'
+      +'<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button></div>'
+      +'<div class="atv-cal-sem"><span>S</span><span>T</span><span>Q</span><span>Q</span>'
+      +'<span>S</span><span>S</span><span>D</span></div><div class="atv-cal-grade">';
+    for(let i=0;i<42;i++){
+      const d=atvMais(inicio,i);
+      const iso=atvISO(d);
+      const cls=[];
+      if(d.getMonth()!==mes)cls.push('fora');
+      if(iso===hojeIso)cls.push('hoje');
+      if(iso>=segIso&&iso<=fimIso)cls.push('nasemana');
+      if(iso===l.plan)cls.push('sel');
+      h+='<button type="button" data-iso="'+iso+'" class="'+cls.join(' ')+'">'
+        +d.getDate()+'</button>';
+    }
+    h+='</div>';
+    /* O RODAPÉ EXPLICA O QUE VAI ACONTECER, e muda conforme o pedido: num
+       finalizado, escolher a data é dizer quando ele acabou. */
+    h+='<div class="atv-cal-pe">';
+    if(l.etapa==='finalizado'){
+      h+='Este pedido está <b>finalizado</b>. A data escolhida aqui é a da '
+        +'<b>conclusão</b>, e é nela que ele fica registrado.';
+    }else{
+      h+='A data escolhida decide <b>em que semana</b> este pedido aparece. '
+        +'Entrega combinada: <b>'+atvEsc(l.entrega||'sem data')+'</b>.';
+    }
+    if(l.planManual)h+='<br>Escolhida a mão: a varredura não move este pedido.';
+    else h+='<br>No automático: hoje ele acompanha a data de entrega.';
+    h+='</div>';
+    if(l.planManual&&l.entrega){
+      h+='<button class="atv-cal-solta" id="atvCalSolta" type="button">'
+        +'voltar ao automático (entrega '+atvEsc(l.entrega)+')</button>';
+    }
+    cal.innerHTML=h;
+  }
+
+  function abre(bt){
+    alvo=bt.dataset.id; verMes=null;
+    pinta();
+    cal.classList.add('on');
+    const r=bt.getBoundingClientRect();
+    const alt=cal.offsetHeight, larg=cal.offsetWidth;
+    const abaixo=(innerHeight-r.bottom-12)>=alt||(r.top-12)<alt;
+    cal.style.top=(abaixo?Math.min(innerHeight-alt-8,r.bottom+6)
+                         :Math.max(8,r.top-alt-6))+'px';
+    cal.style.left=Math.max(8,Math.min(innerWidth-larg-8,r.left-40))+'px';
+  }
+
+  cal.addEventListener('click',e=>{
+    const nav=e.target.closest('.atv-cal-nav');
+    if(nav){
+      const l=alvo?(ATV.linhas.find(x=>x.id===alvo)||((atvRegistro(alvo)||{}).reg)):null;
+      const sel=l?atvDeISO(l.plan):null;
+      const base=verMes||new Date((sel||atvSeg()).getFullYear(),(sel||atvSeg()).getMonth(),1);
+      verMes=new Date(base.getFullYear(),base.getMonth()+(+nav.dataset.passo),1);
+      pinta();
+      return;
+    }
+    if(e.target.closest('#atvCalSolta')){
+      /* DESFAZER A ASSINATURA. Volta ao automático e já recoloca o pedido
+         na data de entrega, senão ele ficaria "no automático" parado numa
+         data que o automático nunca escolheria. */
+      const l=alvo?(ATV.linhas.find(x=>x.id===alvo)||((atvRegistro(alvo)||{}).reg)):null;
+      const ent=l?atvDeBR(l.entrega):null;
+      const id=alvo;
+      fecha();
+      if(l&&ent){
+        atvRecado(id,'plan',atvISO(ent));
+        atvRecado(id,'planManual',false);
+      }
+      return;
+    }
+    const dia=e.target.closest('.atv-cal-grade button');
+    if(!dia)return;
+    const id=alvo, iso=dia.dataset.iso;
+    fecha();
+    if(id)atvRecado(id,'plan',iso);
+  });
+
+  document.addEventListener('click',e=>{
+    const bt=e.target.closest&&e.target.closest('.atv-cal-bt');
+    if(bt){
+      const pg=document.getElementById('atvPage');
+      if(!pg||pg.hidden||!atvPodePlanejar())return;
+      e.preventDefault();
+      if(alvo===bt.dataset.id){ fecha(); return; }
+      abre(bt);
+      return;
+    }
+    if(!e.target.closest||!e.target.closest('.atv-cal'))fecha();
+  });
+  window.addEventListener('resize',fecha);
+  document.addEventListener('scroll',e=>{
+    if(e.target&&e.target.nodeType===1&&cal.contains(e.target))return;
     fecha();
   },true);
 })();
@@ -22911,8 +22934,11 @@ window.atvSalva=atvSalva;
     const l=ATV.linhas.find(x=>x.id===id);
     setTimeout(()=>{
       voa.remove();
-      if(l&&l.plan!==destino){ l.plan=destino; ATV.sujo=true; }
-      atvDesenha();
+      /* ARRASTAR TAMBÉM É ESCOLHER A DATA A MÃO. Solta o mesmo recado que
+         o calendário solta, e ganha a mesma marca de decidido a mão: a
+         varredura nunca mais arrasta este pedido. */
+      if(l&&l.plan!==destino)atvRecado(l.id,'plan',destino);
+      else atvDesenha();
       const nova=document.querySelector('.atv-linha[data-id="'+CSS.escape(id)+'"]');
       if(nova)nova.classList.add('pousou');
     },330);
@@ -23064,7 +23090,7 @@ function atvMontaImpressao(){
     const mud=atvPlanMudou(l);
     return '<td class="ped">'+vaz(l.pedido)+'</td>'
       +'<td class="nome">'+vaz(l.cliente)
-      +(l.atrasado?'<span class="atv-f-atraso">atrasado</span>':'')+'</td>'
+      +(atvAtrasado(l)?'<span class="atv-f-atraso">atrasado</span>':'')+'</td>'
       +'<td class="dep">'+vaz(l.departamento)+'</td>'
       +'<td class="data">'+vaz(l.entrega)+'</td>'
       +'<td class="data plan'+(mud?' mudou':'')+'">'+vaz(atvBR(l.plan))+'</td>'
@@ -23146,8 +23172,7 @@ window.atvImprime=atvImprime;
 (function ligaAtividade(){
   atvCapCarrega();
   const c=(id,fn)=>{const e=document.getElementById(id);if(e)e.addEventListener('click',fn);};
-  c('miAtvGerar',()=>atvGera());
-  c('miAtvSalvar',()=>atvSalva());
+  c('miAtvGerar',()=>atvVarrer());
   c('miAtvPrint',()=>atvImprime());
   c('atvAnterior',()=>atvTrocaSemana(-1));
   c('atvSeguinte',()=>atvTrocaSemana(1));
@@ -23155,8 +23180,17 @@ window.atvImprime=atvImprime;
     const hoje=atvISO(atvSegundaDe(new Date()));
     if(hoje===ATV.semana)return;
     ATV.semana=hoje;
-    ATV.linhas=[];ATV.vistos={};ATV.salvoEm='';ATV.sujo=false;ATV.aviso='';
-    atvSemanaNoPainel(); atvDesenha(); atvBuscaSalvo();
+    atvSemanaGuarda();
+    ATV.aviso=''; atvVistosAoAbrir=null;
+    atvSemanaNoPainel(); atvMonta(); atvCarrega();
+  });
+  /* Ctrl+S continua funcionando, e não faz nada além de soltar a fila na
+     hora. Dedo acostumado aperta sozinho, e não custa nada respeitar. */
+  document.addEventListener('keydown',e=>{
+    if(!atvAberto)return;
+    if(!(e.key==='s'||e.key==='S')||!(e.ctrlKey||e.metaKey))return;
+    e.preventDefault();
+    atvEnviaFila();
   });
   if(!ATV.semana)ATV.semana=atvISO(atvSegundaDe(new Date()));
   atvSemanaNoPainel();

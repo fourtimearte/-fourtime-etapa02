@@ -51,6 +51,10 @@ const SUITES = [
   'teste_extremo', 'teste_mediano',
   /* v3.314 — o pacote de DTF e os dois botões de cópia */
   'teste_dtf',
+  /* v3.326 — o índice mensal: a semana virou pergunta, o pedido virou
+     registro. Este roda o server.py por dentro, sem HTTP nem navegador,
+     porque a regra do recado precisa ser cobrada onde ela mora. */
+  'teste_indice_mensal',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor

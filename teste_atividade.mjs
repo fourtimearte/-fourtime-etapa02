@@ -77,76 +77,166 @@ await p.route('**://fonts.gstatic.com/**', r => {
   r.fulfill({ status: 200, contentType: 'font/woff2', body: readFileSync(n) });
 });
 
-/* ---------- O DRIVE DE MENTIRA ----------
-   O servidor sem credenciais nao chega ao Drive. Em vez de inventar um
-   Google, as tres rotas do relatorio sao respondidas aqui, e o estado delas
-   vive neste arquivo: assim da para dizer "agora mudou o pedido tal" e ver o
-   que a fusao faz com isso. */
-const DRIVE = {
-  arquivos: [],          /* [{id,nome,dia,mod}] */
-  conteudo: {},          /* id -> item do lote */
-  semanas: {},           /* 'AAAA-MM-DD' -> doc guardado */
-  aberturas: [],         /* ids abertos, para provar que a leitura e incremental */
-};
-await p.route('**/api/ft/atividade-lista*', async r => {
+/* ---------- O DRIVE DE MENTIRA, DEPOIS DA VIRADA (v3.326) ----------
+
+   Ele mudou de forma junto com a arquitetura, e a forma dele E o teste.
+
+   Antes: `semanas`, um documento por semana, e uma rota que recebia a
+   semana INTEIRA de volta. Bastava olhar para o mock para ver de onde
+   vinham os bugs: o mesmo pedido cabia em dois documentos.
+
+   Agora: `MES`, um indice por mes com um registro por pedido, e uma rota
+   de RECADO que so aceita um campo de cada vez. Nao ha como um pedido
+   estar em dois lugares, e nao ha como uma tela mandar um arquivo por
+   cima do que outra escreveu -- nem de proposito.
+
+   O `carimbo` imita o modifiedTime do Drive: e ele que a tela pergunta
+   de quinze em quinze segundos, e e mudando ele na mao que se simula
+   "outra maquina acabou de gravar". */
+const MES = {};              /* '2026-08' -> {carimbo, pedidos:{id->reg}} */
+let RECADOS = [];            /* tudo o que a tela mandou, na ordem */
+let VARREDURAS = [];         /* meses varridos, para provar que o botao chama */
+let LEITURAS = [];           /* meses abertos de verdade */
+let RECADO_FALHA = '';       /* quando preenchido, a rota recusa */
+
+function mesVazio(k) {
+  if (!MES[k]) MES[k] = { carimbo: 'c0', versao: 0, pedidos: {} };
+  return MES[k];
+}
+function carimbaNovo(k) {
+  const m = mesVazio(k);
+  m.versao++; m.carimbo = 'c' + m.versao + '-' + Math.random().toString(36).slice(2, 7);
+  return m.carimbo;
+}
+/* O QUE O SERVIDOR FAZ COM UM RECADO. E copia da regra do server.py de
+   proposito: se as duas divergirem, o teste passa e o produto quebra, e
+   e melhor que a copia esteja aqui a vista do que escondida. */
+function aplicaRecado(rec) {
+  const m = MES[rec.mes]; if (!m) return null;
+  const p = m.pedidos[rec.id]; if (!p) return null;
+  if (rec.campo === 'etapa') {
+    p.etapa = String(rec.valor || '');
+    if (p.etapa === 'finalizado') { if (!p.concluidoEm) p.concluidoEm = p.plan || ''; }
+    else p.concluidoEm = '';
+  } else if (rec.campo === 'plan') {
+    p.plan = String(rec.valor || '');
+    p.planManual = true;
+    if (p.etapa === 'finalizado') p.concluidoEm = p.plan;
+    const destino = p.plan.slice(0, 7);
+    if (destino !== rec.mes) {
+      delete m.pedidos[rec.id];
+      mesVazio(destino).pedidos[rec.id] = p;
+      carimbaNovo(destino);
+    }
+  } else if (rec.campo === 'planManual') {
+    p.planManual = !!rec.valor;
+  } else {
+    p[rec.campo] = rec.valor;
+  }
+  p.mexidoEm = new Date().toISOString();
+  return p;
+}
+
+await p.route('**/api/ft/atv/mes*', async r => {
+  const k = new URL(r.request().url()).searchParams.get('mes') || '';
+  LEITURAS.push(k);
+  const m = MES[k];
   await r.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify({ ok: true, arquivos: DRIVE.arquivos, total: DRIVE.arquivos.length }) });
+    body: JSON.stringify({ ok: true, mes: k, existe: !!m,
+      carimbo: m ? m.carimbo : '', versao: m ? m.versao : 0,
+      pedidos: m ? m.pedidos : {} }) });
 });
-await p.route('**/api/ft/atividade-lote', async r => {
-  const corpo = JSON.parse(r.request().postData() || '{}');
-  const itens = (corpo.arquivos || []).map(a => {
-    DRIVE.aberturas.push(a.id);
-    return Object.assign({}, DRIVE.conteudo[a.id], { id: a.id, mod: a.mod });
-  }).filter(x => x.pedido !== undefined);
+await p.route('**/api/ft/atv/carimbo*', async r => {
+  const lista = (new URL(r.request().url()).searchParams.get('meses') || '').split(',');
+  const carimbos = {};
+  lista.filter(Boolean).forEach(k => { carimbos[k] = MES[k] ? MES[k].carimbo : ''; });
   await r.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify({ ok: true, itens, falhas: [] }) });
+    body: JSON.stringify({ ok: true, carimbos }) });
 });
-/* O CACHE DO MES (.ftk). Sem esta rota o editor bate no uvicorn de
-   verdade tres vezes por geracao e a suite fica lenta a toa. Com ela, o
-   cache e exercitado como no Drive: le, grava e e reaproveitado. */
-const FTK = {};          /* 'ano-mes' -> { id: item } */
-let CACHE_GRAVACOES = 0;
-await p.route('**/api/ft/atividade-cache*', async r => {
-  const u = new URL(r.request().url());
-  if (r.request().method() === 'POST') {
-    const c = JSON.parse(r.request().postData() || '{}');
-    FTK[c.ano + '-' + c.mes] = Object.assign({}, FTK[c.ano + '-' + c.mes], c.itens);
-    CACHE_GRAVACOES++;
-    await r.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ ok: true, quantos: Object.keys(c.itens || {}).length }) });
+await p.route('**/api/ft/atv/recado', async r => {
+  if (RECADO_FALHA) {
+    await r.fulfill({ status: 503, contentType: 'application/json',
+      body: JSON.stringify({ detail: RECADO_FALHA }) });
     return;
   }
-  const k = u.searchParams.get('ano') + '-' + u.searchParams.get('mes');
-  await r.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify({ ok: true, existe: !!FTK[k], itens: FTK[k] || {} }) });
-});
-await p.route('**/api/ft/atividade-guardado*', async r => {
-  const sem = new URL(r.request().url()).searchParams.get('semana') || '';
-  const d = DRIVE.semanas[sem];
-  await r.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify(d ? Object.assign({ ok: true, existe: true }, d)
-                           : { ok: true, existe: false, semana: sem }) });
-});
-await p.route('**/api/ft/atividade-guardar', async r => {
   const c = JSON.parse(r.request().postData() || '{}');
-  const salvoEm = new Date().toISOString();
-  DRIVE.semanas[c.semana] = { semana: c.semana, linhas: c.linhas,
-    vistos: c.vistos, salvoEm };
+  const carimbos = {}; const tocados = new Set();
+  (c.recados || []).forEach(rec => {
+    RECADOS.push(rec);
+    if (aplicaRecado(rec)) tocados.add(rec.mes);
+  });
+  tocados.forEach(k => { carimbos[k] = carimbaNovo(k); });
   await r.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify({ ok: true, salvoEm, nome: c.semana + '.fta' }) });
+    body: JSON.stringify({ ok: true, meses: [...tocados], carimbos,
+      salvoEm: new Date().toISOString() }) });
+});
+/* A VARREDURA. No produto ela roda no servidor; aqui a rota executa a
+   LEI DAS TRES LINHAS sobre o mesmo `Drive` de mentira, porque e essa
+   lei que o teste precisa cobrar: ela pode criar e atualizar campo de
+   leitura, e nao pode encostar em etapa nem em plano marcado a mao. */
+const DRIVE = { arquivos: [] };   /* [{id,pedido,cliente,envio,departamento,sub,per,total}] */
+await p.route('**/api/ft/atv/varrer', async r => {
+  const c = JSON.parse(r.request().postData() || '{}');
+  VARREDURAS.push(c.mes);
+  let criados = 0, atualizados = 0, sumidos = 0;
+  const vistos = new Set();
+  DRIVE.arquivos.forEach(it => {
+    vistos.add(it.id);
+    const [d, mo, a] = String(it.envio || '').split('/');
+    if (!a) return;
+    const entIso = a + '-' + mo.padStart(2, '0') + '-' + d.padStart(2, '0');
+    let onde = null;
+    Object.keys(MES).forEach(k => { if (MES[k].pedidos[it.id]) onde = onde || k; });
+    if (onde) {
+      const p = MES[onde].pedidos[it.id];
+      const entregaVelha = p.entrega;
+      p.pedido = it.pedido; p.cliente = it.cliente;
+      p.departamento = it.departamento || ''; p.entrega = it.envio;
+      p.sub = it.sub; p.per = it.per; p.total = it.total;
+      p.sumiu = false;
+      if (entregaVelha && entregaVelha !== it.envio && p.planManual)
+        p.entregaMudou = entregaVelha;
+      if (!p.planManual) {
+        p.plan = entIso;
+        const destino = entIso.slice(0, 7);
+        if (destino !== onde) {
+          delete MES[onde].pedidos[it.id];
+          mesVazio(destino).pedidos[it.id] = p;
+          carimbaNovo(destino);
+        }
+      }
+      atualizados++;
+    } else {
+      mesVazio(entIso.slice(0, 7)).pedidos[it.id] = {
+        id: it.id, pedido: it.pedido, cliente: it.cliente, vendedor: it.vendedor || 'Dani',
+        departamento: it.departamento || '', entrega: it.envio,
+        sub: it.sub, per: it.per, total: it.total,
+        etapa: '', plan: entIso, planManual: false, concluidoEm: '',
+        sumiu: false, entregaMudou: '', mesArq: entIso.slice(0, 7) };
+      carimbaNovo(entIso.slice(0, 7));
+      criados++;
+    }
+  });
+  Object.keys(MES).forEach(k => {
+    Object.values(MES[k].pedidos).forEach(p => {
+      if (p.mesArq && !vistos.has(p.id) && !p.sumiu) { p.sumiu = true; sumidos++; carimbaNovo(k); }
+    });
+  });
+  await r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: true, criados, atualizados, sumidos }) });
 });
 
 const SEMANA = '2026-08-17';   /* uma segunda-feira */
 function pedido(n, dia, total, sub) {
   return { id: 'ID' + String(n).padStart(8, '0') + 'xx', pedido: 'PD00' + (4100 + n),
     arquivo: 'CLIENTE ' + n + '-PD00' + (4100 + n) + '.ft', cliente: 'CLIENTE ' + n,
-    vendedor: 'Dani', envio: dia + '/08/2026', dia: 1,
-    subPecas: sub, perPecas: total - sub, total };
+    vendedor: 'Dani', envio: dia + '/08/2026', departamento: 'Sublimação',
+    sub, per: total - sub, total };
 }
-function poeNoDrive(lista) {
-  DRIVE.arquivos = lista.map((x, i) => ({ id: x.id, nome: x.arquivo, dia: 1, mod: 'm' + i }));
-  DRIVE.conteudo = {}; lista.forEach(x => { DRIVE.conteudo[x.id] = x; });
-}
+/* POR AS COISAS NO DRIVE e deixar a varredura descobri-las, que e como
+   funciona de verdade. Nenhum teste daqui em diante escreve direto no
+   indice: o caminho e sempre Drive -> varredura -> indice -> tela. */
+function poeNoDrive(lista) { DRIVE.arquivos = lista.slice(); }
 
 const entra = async (u, senha) => {
   await p.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
@@ -155,6 +245,13 @@ const entra = async (u, senha) => {
 };
 const troca = async nova => { await p.fill('#n1', nova); await p.fill('#n2', nova);
   await p.click('#bt2'); await p.waitForTimeout(1400); };
+
+/* ESPERAR O SINAL, NUNCA O RELOGIO. A fila do salvamento automatico anda
+   sozinha; perguntar "ja acabou?" e o unico jeito honesto de saber. */
+const filaVazia = () => p.waitForFunction(
+  () => !ATV.enviando && !ATV.fila.length, null, { timeout: 15000 }).catch(() => {});
+const carregou = () => p.waitForFunction(
+  () => !ATV.carregando && !ATV.varrendo, null, { timeout: 30000 }).catch(() => {});
 
 await entra('henrique', S_ADMIN);
 await troca('henrique-forte-2026');
@@ -173,185 +270,388 @@ console.log('     ' + JSON.stringify(r));
 checa('o admin ve a Atividade no trilho', [r.pode, r.trilho], [true, true]);
 checa('  e pode planejar', r.planeja, true);
 
-await p.evaluate(s => { ATV.semana = s; }, SEMANA);
+await p.evaluate(s => { ATV.semana = s; ATV.hojeFixo = '2026-08-19'; }, SEMANA);
 await p.click('#ftRailAtv');
-await p.waitForTimeout(600);
+await carregou();
 checa('a pagina abre', await p.evaluate(() => !document.getElementById('atvPage').hidden), true);
 checa('  e o orcamento sai da frente',
   await p.evaluate(() => document.querySelector('.area-paginas').style.display), 'none');
 
-console.log('\n=== 2. A PRIMEIRA GERACAO ===');
-/* seis pedidos, um por dia da semana */
-await p.evaluate(() => { DRIVE_PRONTO = true; });
+console.log('\n=== 2. O PEDIDO ENTRA SOZINHO, PELA DATA DE ENTREGA ===');
+/* Nao ha mais "primeira geracao". A varredura ve o orcamento na pasta e
+   cria o registro no endereco da entrega dele. A semana e o que sobra
+   depois do filtro. */
 poeNoDrive([pedido(1, 17, 100, 100), pedido(2, 18, 200, 0), pedido(3, 19, 150, 150),
             pedido(4, 20, 300, 0), pedido(5, 21, 80, 80), pedido(6, 22, 120, 60)]);
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1200);
+await p.evaluate(() => atvVarrer());
+await carregou();
 r = await p.evaluate(() => ({
   linhas: ATV.linhas.length,
-  dias: [...document.querySelectorAll('.atv-dia')].length,
-  novos: ATV.linhas.filter(l => l.novo).length,
-  pecas: ATV.linhas.reduce((a, l) => a + l.total, 0),
   planos: ATV.linhas.map(l => l.plan).sort(),
+  pecas: ATV.linhas.reduce((a, l) => a + l.total, 0),
+  manual: ATV.linhas.filter(l => l.planManual).length,
+  dep: ATV.linhas[0].departamento,
 }));
 console.log('     ' + JSON.stringify(r));
-checa('os seis pedidos entraram', r.linhas, 6);
-checa('  um por dia da semana', r.planos,
+checa('os seis pedidos entraram sem ninguem salvar', r.linhas, 6);
+checa('  cada um no dia da entrega dele', r.planos,
   ['2026-08-17', '2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '2026-08-22']);
 checa('  950 pecas somadas', r.pecas, 950);
-/* A PRIMEIRA GERACAO NAO PINTA NADA DE VERDE. Sem salvamento anterior nao
-   ha "desde a ultima vez": pintar as seis linhas nao diria nada a ninguem. */
-checa('nada e marcado como novo na primeira vez', r.novos, 0);
-checa('  e nao ha nenhuma linha verde na tela',
-  await p.evaluate(() => document.querySelectorAll('.atv-linha.novo').length), 0);
+checa('  e nenhum nasce marcado a mao', r.manual, 0);
+checa('  o departamento veio do cabecalho', r.dep, 'Sublimação');
+/* O INDICE E UM SO. Esta e a afirmacao que a arquitetura inteira existe
+   para poder fazer: nao ha arquivo de semana, ha arquivo de mes. */
+r = await p.evaluate(() => Object.keys(ATV.meses));
+checa('a semana veio de UM indice mensal, nao de um arquivo de semana',
+  r, ['2026-08']);
 
-console.log('\n=== 3. O PLANEJAMENTO A MAO ===');
+console.log('\n=== 3. MUDAR A ETAPA MANDA UM RECADO, NAO MANDA O ARQUIVO ===');
+/* O ponto da virada. Se o editor mandasse a semana inteira, duas maquinas
+   se apagariam; mandando um campo de um pedido, nao ha o que atropelar. */
+RECADOS.length = 0;
+await p.evaluate(() => atvRecado('ID00000002xx', 'etapa', 'prensa'));
+await filaVazia();
+r = await p.evaluate(() => ({
+  naTela: (ATV.linhas.find(l => l.id === 'ID00000002xx') || {}).etapa,
+  selo: (document.querySelector('.atv-selo.salvo') || {}).textContent || '',
+  temBotaoSalvar: !!document.getElementById('miAtvSalvar'),
+}));
+r.mandados = RECADOS.slice();
+r.noIndice = MES['2026-08'].pedidos['ID00000002xx'].etapa;
+console.log('     ' + JSON.stringify(r));
+checa('foi UM recado so', r.mandados.length, 1);
+checa('  com um campo de um pedido, e nada mais',
+  [r.mandados[0].id, r.mandados[0].campo, r.mandados[0].valor],
+  ['ID00000002xx', 'etapa', 'prensa']);
+checa('  a tela pintou na hora', r.naTela, 'prensa');
+checa('  e o indice gravou sozinho', r.noIndice, 'prensa');
+checa('nao existe mais botao de salvar', r.temBotaoSalvar, false);
+checa('  o selo diz que esta salvo', /^salvo/.test(r.selo), true);
+
+console.log('\n=== 4. O CALENDARIO E O ENDERECO DO PEDIDO ===');
+/* O pedido do dia 18 vai para o dia 21. Nao e "editar um campo": e mudar
+   de lugar na semana, e a linha muda de cartao de dia na tela. */
+RECADOS.length = 0;
+const abriuCal = async id => {
+  await p.evaluate(i => {
+    const b = document.querySelector('.atv-cal-bt[data-id="' + i + '"]');
+    b.scrollIntoView({ block: 'center' }); b.click();
+  }, id);
+  await p.waitForFunction(() => document.getElementById('atvCal').classList.contains('on'),
+    null, { timeout: 8000 });
+};
+await abriuCal('ID00000002xx');
+r = await p.evaluate(() => ({
+  aberto: document.getElementById('atvCal').classList.contains('on'),
+  dias: document.querySelectorAll('#atvCal .atv-cal-grade button').length,
+  sel: (document.querySelector('#atvCal .sel') || {}).dataset,
+  naSemana: document.querySelectorAll('#atvCal .nasemana').length,
+  pe: (document.querySelector('#atvCal .atv-cal-pe') || {}).textContent || '',
+}));
+console.log('     ' + JSON.stringify({ ...r, sel: r.sel && r.sel.iso }));
+checa('o calendario abre com seis semanas na grade', [r.aberto, r.dias], [true, 42]);
+checa('  o dia de hoje do pedido vem marcado', r.sel.iso, '2026-08-18');
+checa('  a semana aberta fica sombreada, os seis dias', r.naSemana, 6);
+checa('  e o rodape diz o que a escolha faz', /em que semana/.test(r.pe), true);
+await p.evaluate(() => document.querySelector('#atvCal button[data-iso="2026-08-21"]').click());
+await filaVazia();
+r = await p.evaluate(() => ({
+  noDia: !!document.querySelector('.atv-dia[data-dia="2026-08-21"] .atv-linha[data-id="ID00000002xx"]'),
+  fechou: !document.getElementById('atvCal').classList.contains('on'),
+}));
+r.mandados = RECADOS.map(x => x.campo + '=' + x.valor);
+r.plan = MES['2026-08'].pedidos['ID00000002xx'].plan;
+r.manual = MES['2026-08'].pedidos['ID00000002xx'].planManual;
+console.log('     ' + JSON.stringify(r));
+checa('escolher a data manda um recado de plan', r.mandados, ['plan=2026-08-21']);
+checa('  o indice guardou a data nova', r.plan, '2026-08-21');
+checa('  e assinou embaixo: decidido a mao', r.manual, true);
+checa('  a linha esta no cartao da sexta', r.noDia, true);
+checa('  e o calendario fechou sozinho', r.fechou, true);
+
+console.log('\n=== 5. ESCOLHER PARA TRAS MOVE PARA A SEMANA PASSADA ===');
+/* O caso que ele descreveu: "alguns pedidos dessa semana foram
+   finalizados anteriormente". Antes nao havia onde dizer isso. */
+await abriuCal('ID00000002xx');
 await p.evaluate(() => {
-  ATV.linhas[0].plan = '2026-08-21';     /* movido da segunda para a sexta */
-  ATV.linhas[1].etapa = 'prensa';
-  ATV.linhas[2].etapa = 'finalizado';
-  ATV.sujo = true; atvDesenha();
+  const b = document.querySelector('#atvCal .atv-cal-nav[data-passo="-1"]');
+  if (document.querySelector('#atvCal button[data-iso="2026-08-13"]')) return;
+  b.click();
 });
-checa('a tela avisa que ha coisa nao salva',
-  await p.evaluate(() => !!document.querySelector('.atv-selo.sujo')), true);
-/* O BOTAO, E NAO A FUNCAO. Chamar atvSalva() na mao provaria que a funcao
-   funciona, que nunca foi a duvida. O que quebrou de verdade foi o caminho
-   do clique ate o aviso na tela. */
-await p.click('#miAtvSalvar');
-await p.waitForTimeout(900);
-checa('salvou', await p.evaluate(() => !!ATV.salvoEm), true);
-checa('  e a tela AVISA que salvou',
-  await p.evaluate(() => {
-    const t = document.body.textContent;
-    return t.includes('Planejamento salvo') || !!document.querySelector('.atv-selo.salvo');
-  }), true);
-await p.evaluate(() => { if (window.ftStatus) ftStatus.fecha(); });
-await p.waitForTimeout(400);
-checa('  e o selo de salvo fica na tela depois do aviso fechar',
-  await p.evaluate(() => (document.querySelector('.atv-selo.salvo') || {}).textContent || ''),
-  'salvo ' + await p.evaluate(() => atvQuando(ATV.salvoEm)));
-checa('  e o aviso de nao salvo sumiu',
-  await p.evaluate(() => !!document.querySelector('.atv-selo.sujo')), false);
-checa('  o arquivo da semana guardou o plano e a etapa',
-  [DRIVE.semanas[SEMANA].linhas[0].plan, DRIVE.semanas[SEMANA].linhas[1].etapa],
-  ['2026-08-21', 'prensa']);
+await p.evaluate(() => document.querySelector('#atvCal button[data-iso="2026-08-13"]').click());
+await filaVazia();
+r = await p.evaluate(() => ({
+  naSemana: ATV.linhas.some(l => l.id === 'ID00000002xx'),
+  linhas: ATV.linhas.length,
+}));
+r.plan = MES['2026-08'].pedidos['ID00000002xx'].plan;
+console.log('     ' + JSON.stringify(r));
+checa('a data virou 13/08', r.plan, '2026-08-13');
+checa('  e o pedido saiu desta semana', r.naSemana, false);
+checa('  sobraram cinco na semana de 17', r.linhas, 5);
+/* E ELE ESTA NA SEMANA DE 10 A 15, NAO EM DUAS. */
+await p.evaluate(() => atvTrocaSemana(-1));
+await carregou();
+r = await p.evaluate(() => ({ semana: ATV.semana,
+  achou: ATV.linhas.filter(l => l.id === 'ID00000002xx').length }));
+checa('na semana de 10/08 ele aparece', [r.semana, r.achou], ['2026-08-10', 1]);
+await p.evaluate(() => atvTrocaSemana(1));
+await carregou();
+/* devolve para onde estava, para as secoes seguintes acharem seis linhas */
+await p.evaluate(() => atvRecado('ID00000002xx', 'plan', '2026-08-18'));
+await filaVazia();
 
-console.log('\n=== 4. GERAR DE NOVO NAO DERRUBA O PLANEJAMENTO ===');
-/* o pedido 1 e alterado no Drive: o cliente muda, as pecas mudam, e a data
-   de envio volta para segunda. O plano dele continua sexta, porque alguem
-   decidiu isso. */
-const antes = { ...DRIVE.conteudo['ID00000001xx'] };
-DRIVE.conteudo['ID00000001xx'] = { ...antes, cliente: 'CLIENTE 1 RENOMEADO', total: 999, subPecas: 999, perPecas: 0 };
-DRIVE.arquivos.find(a => a.id === 'ID00000001xx').mod = 'MUDOU';
-/* e chegam dois pedidos novos */
-DRIVE.arquivos.push({ id: 'IDNOVO0001xx', nome: 'n1.ft', dia: 1, mod: 'n1' },
-                    { id: 'IDNOVO0002xx', nome: 'n2.ft', dia: 1, mod: 'n2' });
-DRIVE.conteudo['IDNOVO0001xx'] = { ...pedido(7, 19, 70, 70), id: 'IDNOVO0001xx' };
-DRIVE.conteudo['IDNOVO0002xx'] = { ...pedido(8, 20, 90, 0), id: 'IDNOVO0002xx' };
-DRIVE.aberturas = [];
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1400);
+console.log('\n=== 6. FINALIZADO GRAVA QUANDO ACABOU ===');
+await p.evaluate(() => atvRecado('ID00000003xx', 'etapa', 'finalizado'));
+await filaVazia();
+r = (x => ({ etapa: x.etapa, concluido: x.concluidoEm, plan: x.plan }))
+    (MES['2026-08'].pedidos['ID00000003xx']);
+console.log('     ' + JSON.stringify(r));
+checa('marcar finalizado grava a conclusao sozinho', r.concluido, '2026-08-19');
+checa('  no dia em que ele estava planejado', r.plan, '2026-08-19');
+/* AGORA A PARTE QUE ELE PEDIU: um finalizado que na verdade acabou antes.
+   Escolher a data passada e a MESMA porta, e ela move e grava de uma vez. */
+await abriuCal('ID00000003xx');
+r = await p.evaluate(() => (document.querySelector('#atvCal .atv-cal-pe') || {}).textContent || '');
+checa('num finalizado o calendario avisa que a data e a da conclusao',
+  /conclus/.test(r), true);
+await p.evaluate(() => document.querySelector('#atvCal button[data-iso="2026-08-17"]').click());
+await filaVazia();
+r = (x => ({ plan: x.plan, concluido: x.concluidoEm, manual: x.planManual }))
+    (MES['2026-08'].pedidos['ID00000003xx']);
+console.log('     ' + JSON.stringify(r));
+checa('escolher 17 num finalizado grava a conclusao em 17', r.concluido, '2026-08-17');
+checa('  e o registra na semana do 17', r.plan, '2026-08-17');
+await p.evaluate(() => atvRecado('ID00000003xx', 'etapa', ''));
+await filaVazia();
+checa('sair de finalizado apaga a data de conclusao',
+  MES['2026-08'].pedidos['ID00000003xx'].concluidoEm, '');
+
+console.log('\n=== 7. ATRASADO E UMA CONTA, NAO UMA ETAPA ===');
+/* O erro que isto conserta: Atrasado estava na lista de etapas, e como so
+   cabe uma etapa por linha, um pedido que atrasava PERDIA a informacao de
+   onde estava na producao. */
+r = await p.evaluate(() => ({
+  noMenu: ATV_ETAPAS.some(e => e.k === 'atrasado'),
+  organizarNoMenu: ATV_ETAPAS.some(e => e.k === 'organizar'),
+  botoes: [...document.querySelectorAll('#atvMenuEtapa button')].map(b => b.dataset.k),
+}));
+checa('Atrasado nao e mais uma etapa escolhivel', r.noMenu, false);
+checa('  nem Organizar, que so existia para empurrar pedido', r.organizarNoMenu, false);
+checa('  e nenhum dos dois esta no menu', 
+  [r.botoes.includes('atrasado'), r.botoes.includes('organizar')], [false, false]);
+/* hoje e 19; o pedido do dia 17 esta vencido e o do dia 21 nao */
 r = await p.evaluate(() => {
-  const l1 = ATV.linhas.find(l => l.id === 'ID00000001xx');
-  return { linhas: ATV.linhas.length,
-    plano1: l1.plan, cliente1: l1.cliente, total1: l1.total, entrega1: l1.entrega,
-    etapa2: (ATV.linhas.find(l => l.id === 'ID00000002xx') || {}).etapa,
-    novos: ATV.linhas.filter(l => l.novo).map(l => l.id).sort() };
+  const seg = ATV.linhas.find(l => l.id === 'ID00000001xx');
+  const sex = ATV.linhas.find(l => l.id === 'ID00000005xx');
+  return { hoje: ATV.hojeFixo, seg: atvAtrasado(seg), sex: atvAtrasado(sex),
+    etapaSeg: seg.etapa,
+    tarja: !!document.querySelector('.atv-linha[data-id="ID00000001xx"] .atv-atraso') };
 });
 console.log('     ' + JSON.stringify(r));
-console.log('     abriu do Drive: ' + JSON.stringify(DRIVE.aberturas.sort()));
-checa('os dois novos entraram', r.linhas, 8);
-checa('O PLANO FEITO A MAO CONTINUA DE PE', r.plano1, '2026-08-21');
-checa('  mesmo com a entrega tendo voltado para 17/08', r.entrega1, '17/08/2026');
-checa('a etapa escolhida a mao continua', r.etapa2, 'prensa');
-checa('mas o que vem do orcamento foi reescrito',
-  [r.cliente1, r.total1], ['CLIENTE 1 RENOMEADO', 999]);
+checa('com entrega em 17 e hoje 19, ele esta atrasado', r.seg, true);
+checa('  a entrega em 21 nao esta', r.sex, false);
+checa('  e a tarja vermelha aparece na linha', r.tarja, true);
+/* A INFORMACAO NAO SE PERDE MAIS: atrasado E numa etapa ao mesmo tempo. */
+await p.evaluate(() => atvRecado('ID00000001xx', 'etapa', 'costura'));
+await filaVazia();
+r = await p.evaluate(() => ({
+  atrasado: atvAtrasado(ATV.linhas.find(l => l.id === 'ID00000001xx')),
+  chip: (document.querySelector('.atv-linha[data-id="ID00000001xx"] .atv-chip span') || {}).textContent,
+  tarja: !!document.querySelector('.atv-linha[data-id="ID00000001xx"] .atv-atraso'),
+}));
+console.log('     ' + JSON.stringify(r));
+checa('um pedido atrasado pode estar em Costura', [r.atrasado, r.chip], [true, 'Costura']);
+checa('  e as duas coisas aparecem juntas na linha', r.tarja, true);
+/* MARCAR FINALIZADO TIRA O ATRASO, porque nao ha mais o que atrasar */
+await p.evaluate(() => atvRecado('ID00000001xx', 'etapa', 'finalizado'));
+await filaVazia();
+checa('finalizado deixa de estar atrasado',
+  await p.evaluate(() => atvAtrasado(ATV.linhas.find(l => l.id === 'ID00000001xx'))), false);
+await p.evaluate(() => atvRecado('ID00000001xx', 'etapa', 'costura'));
+await filaVazia();
 
-console.log('\n=== 5. O QUE CHEGOU DEPOIS DO SALVAMENTO FICA MARCADO ===');
-checa('so os dois novos ficam marcados', r.novos, ['IDNOVO0001xx', 'IDNOVO0002xx']);
-checa('  e sao duas linhas verdes na tela',
-  await p.evaluate(() => document.querySelectorAll('.atv-linha.novo').length), 2);
-checa('  o cabecalho conta os novos',
-  await p.evaluate(() => (document.querySelector('.atv-selo.novo') || {}).textContent || ''),
-  '2 pedidos novos desde o último salvamento');
-/* a cor precisa ser dark teal de verdade, e nao "alguma cor": o pedido foi
-   explicito, e um verde qualquer se confunde com "finalizado" */
-checa('  a marca e dark teal',
-  await p.evaluate(() => {
-    const l = document.querySelector('.atv-linha.novo');
-    return !!l && getComputedStyle(l).boxShadow.includes('rgb(17, 94, 89)');
-  }), true);
+console.log('\n=== 8. A LEI DAS TRES LINHAS: A VARREDURA NAO ENCOSTA ===');
+/* O bug que gerou a sessao inteira: a varredura decidia onde o pedido
+   mora. Aqui ela roda com o planejamento ja feito a mao, e nao pode
+   desfazer nada. */
+await p.evaluate(() => atvRecado('ID00000004xx', 'plan', '2026-08-17'));
+await p.evaluate(() => atvRecado('ID00000005xx', 'etapa', 'silk'));
+await filaVazia();
+const antesDaVarredura = { plan4: MES['2026-08'].pedidos['ID00000004xx'].plan,
+  etapa5: MES['2026-08'].pedidos['ID00000005xx'].etapa };
+/* o orcamento do 4 muda de valor E de entrega no Drive */
+poeNoDrive([pedido(1, 17, 100, 100), pedido(2, 18, 200, 0), pedido(3, 19, 150, 150),
+            { ...pedido(4, 26, 999, 0), cliente: 'CLIENTE 4 RENOMEADO' },
+            pedido(5, 21, 80, 80), pedido(6, 22, 120, 60)]);
+await p.evaluate(() => atvVarrer());
+await carregou();
+r = (q => ({ plan: q.plan, manual: q.planManual, cliente: q.cliente, total: q.total,
+    entrega: q.entrega, remarcou: q.entregaMudou,
+    etapa5: MES['2026-08'].pedidos['ID00000005xx'].etapa, etapa4: q.etapa }))
+    (MES['2026-08'].pedidos['ID00000004xx']);
+console.log('     antes=' + JSON.stringify(antesDaVarredura) + '  ' + JSON.stringify(r));
+checa('a varredura ATUALIZOU o que vem do orcamento', [r.cliente, r.total],
+  ['CLIENTE 4 RENOMEADO', 999]);
+checa('  e a data de entrega nova chegou', r.entrega, '26/08/2026');
+checa('NAO moveu o pedido marcado a mao', r.plan, '2026-08-17');
+checa('  nao encostou na etapa de ninguem', [r.etapa4, r.etapa5], ['', 'silk']);
+checa('  e avisou que a entrega mudou debaixo da escolha', r.remarcou, '20/08/2026');
+checa('  a tela mostra a marca de remarcado',
+  await p.evaluate(() => !!document.querySelector('.atv-linha[data-id="ID00000004xx"] .atv-remarc')),
+  true);
+/* SEM A MARCA, ELE ACOMPANHA SOZINHO. E o outro lado da mesma regra. */
+poeNoDrive([pedido(1, 17, 100, 100), pedido(2, 18, 200, 0), pedido(3, 19, 150, 150),
+            { ...pedido(4, 26, 999, 0), cliente: 'CLIENTE 4 RENOMEADO' },
+            pedido(5, 21, 80, 80), pedido(6, 25, 120, 60)]);
+await p.evaluate(() => atvVarrer());
+await carregou();
+r = await p.evaluate(() => ({ naSemana: ATV.linhas.some(l => l.id === 'ID00000006xx') }));
+r.plan6 = MES['2026-08'].pedidos['ID00000006xx'].plan;
+console.log('     ' + JSON.stringify(r));
+checa('sem marca, o planejamento acompanha a entrega nova', r.plan6, '2026-08-25');
+checa('  e a linha sai desta semana sozinha', r.naSemana, false);
+/* VOLTAR AO AUTOMATICO: o botao do rodape do calendario desfaz a assinatura */
+await abriuCal('ID00000004xx');
+r = await p.evaluate(() => !!document.getElementById('atvCalSolta'));
+checa('num pedido marcado a mao o calendario oferece voltar ao automatico', r, true);
+await p.evaluate(() => document.getElementById('atvCalSolta').click());
+await filaVazia();
+r = (q => ({ plan: q ? q.plan : '', manual: q ? q.planManual : null }))
+    (MES['2026-08'].pedidos['ID00000004xx']);
+console.log('     ' + JSON.stringify(r));
+checa('voltar ao automatico devolve o pedido para a data de entrega', r.plan, '2026-08-26');
+checa('  e apaga a assinatura', r.manual, false);
 
-console.log('\n=== 6. SALVAR APAGA A MARCA ===');
-await p.evaluate(() => atvSalva());
-await p.waitForTimeout(700);
-checa('depois de salvar, nada esta marcado',
-  await p.evaluate(() => document.querySelectorAll('.atv-linha.novo').length), 0);
-DRIVE.aberturas = [];
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1200);
-checa('  e gerar de novo tambem nao remarca',
-  await p.evaluate(() => ATV.linhas.filter(l => l.novo).length), 0);
+console.log('\n=== 8b. UM PEDIDO SO EXISTE UMA VEZ ===');
+/* A afirmacao central. Antes o mesmo pedido cabia em dois arquivos de
+   semana e os dois discordavam; foi assim que a VIAPOL ficou finalizada
+   numa semana e em Costura na outra ao mesmo tempo. */
+r = (() => {
+  const conta = {};
+  Object.values(MES).forEach(m => Object.keys(m.pedidos).forEach(id => {
+    conta[id] = (conta[id] || 0) + 1; }));
+  return { repetidos: Object.entries(conta).filter(([, n]) => n > 1).map(([k]) => k),
+    total: Object.keys(conta).length };
+})();
+console.log('     ' + JSON.stringify(r));
+checa('nenhum pedido aparece em dois indices', r.repetidos, []);
+checa('  e os seis continuam existindo', r.total, 6);
 
-console.log('\n=== 7. A LEITURA E INCREMENTAL ===');
-console.log('     abriu do Drive: ' + JSON.stringify(DRIVE.aberturas));
-checa('nada mudou, entao nada foi aberto de novo', DRIVE.aberturas.length, 0);
-DRIVE.arquivos.find(a => a.id === 'ID00000004xx').mod = 'OUTRO';
-DRIVE.aberturas = [];
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1000);
-checa('  so o arquivo que mudou e reaberto', DRIVE.aberturas, ['ID00000004xx']);
+console.log('\n=== 8c. DUAS MAQUINAS NAO SE APAGAM ===');
+/* O problema que a v3.325 remendou com um aviso. Aqui ele deixa de
+   existir: as duas telas mandam recados de pedidos diferentes, e o
+   servidor encosta em linhas diferentes do mesmo arquivo. */
+/* a outra maquina grava direto no indice, como se fosse outro navegador */
+MES['2026-08'].pedidos['ID00000005xx'].etapa = 'embalagem';
+MES['2026-08'].pedidos['ID00000005xx'].mexidoEm = new Date().toISOString();
+carimbaNovo('2026-08');
+await p.evaluate(() => atvRecado('ID00000001xx', 'etapa', 'conferencia'));
+await filaVazia();
+r = { meu: MES['2026-08'].pedidos['ID00000001xx'].etapa,
+      dele: MES['2026-08'].pedidos['ID00000005xx'].etapa };
+console.log('     ' + JSON.stringify(r));
+checa('o que eu mudei ficou', r.meu, 'conferencia');
+checa('  e o que a outra maquina mudou tambem', r.dele, 'embalagem');
+checa('  sem nenhum aviso de conflito na tela',
+  await p.evaluate(() => /Outra máquina/.test(ATV.aviso || '')), false);
 
-console.log('\n=== 8. O QUE SOBROU DA SEMANA PASSADA CAI NA SEGUNDA ===');
-DRIVE.semanas['2026-08-10'] = { semana: '2026-08-10',
-  salvoEm: '2026-08-15T12:00:00.000Z', vistos: {},
-  linhas: [{ id: 'IDVELHO001xx', pedido: 'PD004000', cliente: 'ATRASADO SA',
-             entrega: '14/08/2026', plan: '2026-08-14', etapa: 'costura',
-             sub: 50, per: 0, total: 50, chegouEm: '2026-08-10T10:00:00.000Z' },
-           { id: 'IDVELHO002xx', pedido: 'PD004001', cliente: 'ENTREGUE SA',
-             entrega: '13/08/2026', plan: '2026-08-13', etapa: 'finalizado',
-             sub: 30, per: 0, total: 30, chegouEm: '2026-08-10T10:00:00.000Z' }] };
-const segundaAntes = await p.evaluate(() =>
-  atvSoma(ATV.linhas.filter(l => l.plan === '2026-08-17')));
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1200);
-r = await p.evaluate(() => {
-  const seg = document.querySelector('.atv-dia[data-dia="2026-08-17"]');
-  const velho = ATV.linhas.find(l => l.id === 'IDVELHO001xx') || {};
-  return {
-    grupoAtraso: document.querySelectorAll('.atv-dia[data-dia="atraso"]').length,
-    plan: velho.plan, tarja: !!velho.atrasado,
-    /* PRIMEIRO DA FILA: o que atrasou sai antes do que nasceu no dia */
-    primeiro: seg.querySelector('.atv-linha').dataset.id,
-    temTarja: !!seg.querySelector('.atv-linha .atv-atraso'),
-    noCabecalho: (seg.querySelector('.atv-dia-cab .atv-atraso') || {}).textContent || '',
-    somaSegunda: atvSoma(ATV.linhas.filter(l => l.plan === '2026-08-17')),
-    total: ATV.linhas.length,
-  };
-});
-console.log('     antes a segunda somava ' + segundaAntes + '; ' + JSON.stringify(r));
-checa('nao existe mais um grupo de atrasados a parte', r.grupoAtraso, 0);
-checa('o atrasado foi para a segunda', r.plan, '2026-08-17');
-checa('  com a tarja de atrasado', [r.tarja, r.temTarja], [true, true]);
-checa('  e primeiro da fila do dia', r.primeiro, 'IDVELHO001xx');
-checa('  o cabecalho do dia avisa', r.noCabecalho, '1 da semana passada');
-/* O MOTIVO DE TUDO: um pedido atrasado e trabalho que a fabrica vai fazer.
-   Fora de um dia, ele nao entrava na conta de dia nenhum e a saturacao da
-   segunda mentia para menos. */
-checa('  e as 50 pecas dele entram na conta da segunda',
-  r.somaSegunda, segundaAntes + 50);
-checa('o finalizado NAO desce', r.total, 9);
+console.log('\n=== 8d. O CARIMBO TRAZ O QUE A OUTRA MAQUINA FEZ ===');
+/* A pergunta barata: mudou? So quando muda e que vale abrir. */
+LEITURAS.length = 0;
+await p.evaluate(() => atvOlhaCarimbos());
+await p.waitForTimeout(500);
+checa('sem mudanca, ninguem abre nada', LEITURAS.length, 0);
+MES['2026-08'].pedidos['ID00000006xx'].etapa = 'calandra';
+MES['2026-08'].pedidos['ID00000006xx'].plan = '2026-08-20';
+carimbaNovo('2026-08');
+await p.evaluate(() => atvOlhaCarimbos());
+await carregou();
+r = await p.evaluate(() => ({
+  naTela: (ATV.linhas.find(l => l.id === 'ID00000006xx') || {}).etapa }));
+r.leu = LEITURAS.length;
+console.log('     ' + JSON.stringify(r));
+checa('carimbo diferente: o mes e reaberto', r.leu, 1);
+checa('  e o que a outra maquina fez aparece aqui', r.naTela, 'calandra');
 
+console.log('\n=== 8e. A FILA ESPERA A REDE, E NAO PERDE NADA ===');
+RECADO_FALHA = 'servidor fora do ar';
+await p.evaluate(() => atvRecado('ID00000001xx', 'etapa', 'corte'));
+await p.waitForFunction(() => !!ATV.erroFila, null, { timeout: 12000 }).catch(() => {});
+r = await p.evaluate(() => ({
+  fila: ATV.fila.length, erro: ATV.erroFila,
+  naTela: (ATV.linhas.find(l => l.id === 'ID00000001xx') || {}).etapa,
+  selo: (document.querySelector('.atv-selo.sujo') || {}).textContent || '',
+}));
+r.noIndice = MES['2026-08'].pedidos['ID00000001xx'].etapa;
+console.log('     ' + JSON.stringify(r));
+checa('sem rede, a mudanca fica na fila', r.fila, 1);
+checa('  a tela mostra o que ela ja pintou', r.naTela, 'corte');
+checa('  o servidor ainda nao sabe', r.noIndice, 'conferencia');
+checa('  e o selo diz quantas esperam', /1 alteração na fila/.test(r.selo), true);
+RECADO_FALHA = '';
+await p.evaluate(() => atvEnviaFila());
+await filaVazia();
+r = await p.evaluate(() => ({ fila: ATV.fila.length, erro: ATV.erroFila }));
+r.noIndice = MES['2026-08'].pedidos['ID00000001xx'].etapa;
+console.log('     ' + JSON.stringify(r));
+checa('a rede volta e a fila vai sozinha', [r.fila, r.erro], [0, '']);
+checa('  e nada se perdeu', r.noIndice, 'corte');
+
+console.log('\n=== 8f. UM PEDIDO QUE SAIU DA PASTA E MARCADO, NAO APAGADO ===');
+poeNoDrive([pedido(1, 17, 100, 100), pedido(3, 19, 150, 150),
+            { ...pedido(4, 26, 999, 0), cliente: 'CLIENTE 4 RENOMEADO' },
+            pedido(5, 21, 80, 80), pedido(6, 25, 120, 60)]);
+await p.evaluate(() => atvVarrer());
+await carregou();
+r = await p.evaluate(() => ({ naTela: ATV.linhas.some(l => l.id === 'ID00000002xx') }));
+r.existe = !!MES['2026-08'].pedidos['ID00000002xx'];
+r.sumiu = (MES['2026-08'].pedidos['ID00000002xx'] || {}).sumiu;
+console.log('     ' + JSON.stringify(r));
+checa('o registro continua gravado', r.existe, true);
+checa('  com a marca de que saiu da pasta', r.sumiu, true);
+checa('  e some da tela do dia a dia', r.naTela, false);
+
+console.log('\n=== 8g. TROCAR DE SEMANA DENTRO DO MES NAO LE NADA ===');
+/* Um dos ganhos que a virada dava de brinde: as quatro semanas de agosto
+   sao o MESMO arquivo, entao andar entre elas ja esta na memoria. */
+LEITURAS.length = 0;
+await p.evaluate(() => atvTrocaSemana(-1));
+await carregou();
+await p.evaluate(() => atvTrocaSemana(1));
+await carregou();
+checa('ir e voltar dentro de agosto nao volta ao servidor', LEITURAS.length, 0);
 console.log('\n=== 9. ARRASTAR MUDA O DIA ===');
+/* Arrastar e a outra porta para a mesma coisa que o calendario faz: ele
+   solta o MESMO recado de `plan` e ganha a MESMA marca de decidido a mao.
+   Duas portas para o mesmo campo, e nao dois caminhos com regras
+   diferentes, que era como o `plan` e o `herdada` brigavam antes. */
+RECADOS.length = 0;
 await p.evaluate(() => { document.getElementById('atvPage').scrollTop = 0; });
 await p.waitForTimeout(200);
 const alvoDia = '2026-08-22';
+/* ROLAR E MEDIR SAO DOIS MOMENTOS. Medir no mesmo quadro em que se pede
+   o scrollIntoView devolve o retangulo de ANTES da rolagem, e o ponteiro
+   desce num lugar onde nao ha puxador nenhum: o arrasto nao comeca e o
+   teste acusa nove falhas que nao existem. */
+/* O AVISO DE SUCESSO COBRE O CANTO DA TELA, e ele e o que fica por cima
+   do puxador depois de uma varredura. Sem esperar que ele saia, o
+   pointerdown cai no veu do aviso e o arrasto nunca comeca: nove falhas
+   sem nenhum defeito no produto. Esperar o SINAL, e nao o relogio. */
+await p.waitForFunction(
+  () => !document.querySelector('.ft-status-fundo.on'),
+  null, { timeout: 15000 }).catch(() => {});
+await p.evaluate(() => {
+  const l = document.querySelector('.atv-linha[data-id="ID00000005xx"]');
+  if (l) l.scrollIntoView({ block: 'center' });
+});
+await p.waitForTimeout(250);
 const caixa = await p.evaluate(() => {
-  const l = document.querySelector('.atv-linha[data-id="ID00000002xx"]');
+  const l = document.querySelector('.atv-linha[data-id="ID00000005xx"]');
   const a = l.querySelector('.atv-puxador').getBoundingClientRect();
   return { ax: a.x + a.width / 2, ay: a.y + a.height / 2 };
 });
-const planoAntes = await p.evaluate(() => ATV.linhas.find(l => l.id === 'ID00000002xx').plan);
+const planoAntes = await p.evaluate(() => ATV.linhas.find(l => l.id === 'ID00000005xx').plan);
 await p.mouse.move(caixa.ax, caixa.ay);
 await p.mouse.down();
 await p.mouse.move(caixa.ax + 10, caixa.ay + 22, { steps: 4 });
@@ -377,19 +677,24 @@ const buraco = await p.evaluate(() => document.querySelectorAll('.atv-buraco').l
 await p.screenshot({ path: 'shot-atv-arrasto.png' });
 await p.mouse.up();
 await p.waitForTimeout(900);
+await filaVazia();
 r = await p.evaluate(() => ({
-  plano: ATV.linhas.find(l => l.id === 'ID00000002xx').plan,
-  sujo: ATV.sujo,
+  plano: (ATV.linhas.find(l => l.id === 'ID00000005xx') || {}).plan,
   sobrou: document.querySelectorAll('.atv-voando,.atv-linha.fantasma,.atv-buraco').length,
-  etapa: ATV.linhas.find(l => l.id === 'ID00000002xx').etapa,
 }));
+r.recados = RECADOS.map(x => x.campo);
+r.manual = MES['2026-08'].pedidos['ID00000005xx'].planManual;
+r.noIndice = MES['2026-08'].pedidos['ID00000005xx'].plan;
+r.etapa = MES['2026-08'].pedidos['ID00000005xx'].etapa;
 console.log('     antes=' + planoAntes + '  ' + JSON.stringify(r));
 checa('durante o arrasto existe o clone voando', meio.voando, 1);
 checa('  a original vira fantasma', meio.fantasma, 1);
 checa('  e o destino abre um buraco', buraco > 0, true);
 checa('o dia mudou de verdade', r.plano, alvoDia);
-checa('  a tela marca que ha coisa a salvar', r.sujo, true);
-checa('  a etapa nao foi junto', r.etapa, 'prensa');
+checa('  arrastar solta um recado de plan, e so', r.recados, ['plan']);
+checa('  gravado sem ninguem clicar em nada', r.noIndice, alvoDia);
+checa('  e com a marca de decidido a mao', r.manual, true);
+checa('  a etapa nao foi junto', r.etapa, 'embalagem');
 checa('nada sobrou voando depois de soltar', r.sobrou, 0);
 
 console.log('\n=== 10. QUEM SO OLHA NAO MEXE ===');
@@ -406,6 +711,16 @@ checa('sem ser admin, a tela entra em modo so-leitura', r.trava, true);
 checa('  e atvPodePlanejar diz nao', r.planeja, false);
 
 console.log('\n=== 11. A FOLHA A4 ===');
+/* NOVE LINHAS POSTAS DE PROPOSITO. Antes esta secao herdava o que as
+   secoes anteriores tinham deixado na tela, e mudar qualquer uma delas
+   quebrava a contagem da folha sem ter nada a ver com impressao. */
+await p.evaluate(() => {
+  ATV.linhas = Array.from({ length: 9 }, (_, i) => ({
+    id: 'F' + i, pedido: 'PD007' + i, cliente: 'CLIENTE ' + i, vendedor: 'Dani',
+    entrega: '1' + (7 + (i % 6)) + '/08/2026', plan: '2026-08-1' + (7 + (i % 6)),
+    etapa: 'corte', departamento: 'DTF', sub: 5, per: 5, total: 10, novo: false }));
+  atvDesenha();
+});
 r = await p.evaluate(() => {
   const n = atvMontaImpressao();
   /* a caixa de impressao vive em display:none ate a hora de imprimir, e um
@@ -546,15 +861,16 @@ checa('  a saturação é 120%', r.pct, '120%');
 checa('  em vermelho', r.corSat, 'rgb(198, 22, 27)');
 checa('  e a barra para em 100%, sem transbordar', r.barra, 100);
 
-console.log('\n=== 12. TROCAR DE SEMANA LIMPA A TELA ===');
-await p.evaluate(() => { ATV.sujo = false; });
+console.log('\n=== 12. TROCAR DE SEMANA ===');
+/* Trocar de semana deixou de perguntar qualquer coisa: nao existe mais
+   "alteracao nao salva" para se perder. */
 await p.click('#atvAnterior');
 await p.waitForTimeout(800);
 r = await p.evaluate(() => ({ semana: ATV.semana, linhas: ATV.linhas.length,
   tit: document.getElementById('atvSemTit').textContent }));
 console.log('     ' + JSON.stringify(r));
 checa('a semana anterior e a de 10/08', r.semana, '2026-08-10');
-checa('  e ela traz o que estava salvo nela', r.linhas, 2);
+checa('  e ela sai do MESMO indice, sem ler nada novo', r.linhas, 0);
 await p.click('#atvSeguinte');
 await p.waitForTimeout(800);
 checa('voltar traz a semana de 17/08',
@@ -579,511 +895,6 @@ checa('os campos mudam a capacidade', [r.semana, r.dia], [1500, 250]);
 checa('  e ficam guardados', r.guardado.semana, 1500);
 checa('250 x 6 = 1500: sem briga, sem aviso', r.aviso, true);
 checa('325 x 6 = 1950 contra 1500: o aviso aparece', r.avisoDepois, false);
-
-console.log('\n=== 8b. SO DESCE QUEM ESTA MESMO ATRASADO (v3.317) ===');
-/* O DEFEITO, COMO ELE APARECEU NA TELA.
-   A segunda-feira da semana de 10/08 amanheceu com 1.559 pecas para uma
-   capacidade de 325, e entre elas pedidos com ENTREGA em 21/08 marcados de
-   vermelho como atrasados. O passo que desce o resto da semana passada
-   trazia TUDO o que nao estava finalizado, sem olhar a data de entrega:
-   bastava o envio ter sido remarcado para a frente. E como a linha ficava
-   gravada assim, a geracao da semana seguinte a arrastava de novo, somando
-   semana apos semana.
-
-   Aqui a semana passada tem quatro casos ao mesmo tempo:
-     A  entrega no passado           -> desce, atrasado
-     B  entrega DENTRO desta semana  -> entra no dia dela, sem tarja
-     C  entrega DEPOIS desta semana  -> nao aparece
-     D  finalizado                   -> nao desce, como sempre       */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
-DRIVE.semanas['2026-08-10'] = { semana: '2026-08-10',
-  salvoEm: '2026-08-15T12:00:00.000Z', vistos: {},
-  linhas: [
-    { id: 'IDATRA0001xx', pedido: 'PD005001', cliente: 'ATRASADO DE VERDADE',
-      entrega: '12/08/2026', plan: '2026-08-12', etapa: 'costura',
-      sub: 10, per: 0, total: 10, chegouEm: '2026-08-10T10:00:00.000Z' },
-    { id: 'IDREMA0001xx', pedido: 'PD005002', cliente: 'REMARCADO PARA ESTA SEMANA',
-      entrega: '20/08/2026', plan: '2026-08-12', etapa: 'corte',
-      sub: 20, per: 0, total: 20, chegouEm: '2026-08-10T10:00:00.000Z' },
-    { id: 'IDFUTU0001xx', pedido: 'PD005003', cliente: 'REMARCADO PARA DEPOIS',
-      entrega: '28/08/2026', plan: '2026-08-12', etapa: 'corte',
-      sub: 30, per: 0, total: 30, chegouEm: '2026-08-10T10:00:00.000Z' },
-    { id: 'IDFIMM0001xx', pedido: 'PD005004', cliente: 'JA ENTREGUE',
-      entrega: '12/08/2026', plan: '2026-08-12', etapa: 'finalizado',
-      sub: 40, per: 0, total: 40, chegouEm: '2026-08-10T10:00:00.000Z' }] };
-/* os dois remarcados existem no Drive com a entrega nova */
-poeNoDrive([pedido(1, 17, 100, 100),
-  { id: 'IDREMA0001xx', pedido: 'PD005002', arquivo: 'REMARCADO-PD005002.ft',
-    cliente: 'REMARCADO PARA ESTA SEMANA', vendedor: 'Dani', envio: '20/08/2026',
-    dia: 1, subPecas: 20, perPecas: 0, total: 20 },
-  { id: 'IDFUTU0001xx', pedido: 'PD005003', arquivo: 'FUTURO-PD005003.ft',
-    cliente: 'REMARCADO PARA DEPOIS', vendedor: 'Dani', envio: '28/08/2026',
-    dia: 1, subPecas: 30, perPecas: 0, total: 30 }]);
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1400);
-r = await p.evaluate(() => {
-  const acha = id => ATV.linhas.find(l => l.id === id) || null;
-  const m = id => { const l = acha(id); return l && { plan: l.plan, atrasado: !!l.atrasado }; };
-  return { atrasado: m('IDATRA0001xx'), remarcado: m('IDREMA0001xx'),
-           futuro: m('IDFUTU0001xx'), finalizado: m('IDFIMM0001xx'),
-           /* nada com entrega depois desta semana pode estar na tela */
-           entregasFuturas: ATV.linhas.filter(l => {
-             const e = atvDeBR(l.entrega); return e && e > atvFim(); }).map(l => l.pedido),
-           /* e nada de fora da semana pode estar marcado de vermelho */
-           tarjasErradas: ATV.linhas.filter(l => {
-             const e = atvDeBR(l.entrega); return l.atrasado && e && e >= atvSeg(); })
-             .map(l => l.pedido) };
-});
-console.log('     ' + JSON.stringify(r));
-checa('quem tinha de sair antes da segunda desce atrasado',
-  r.atrasado, { plan: '2026-08-17', atrasado: true });
-/* NAO e so nao marcar de vermelho: ele tem de ir para o DIA da entrega */
-checa('quem foi remarcado para esta semana entra no dia dele',
-  r.remarcado, { plan: '2026-08-20', atrasado: false });
-checa('quem foi remarcado para depois some da semana', r.futuro, null);
-checa('o finalizado continua sem descer', r.finalizado, null);
-checa('nenhuma entrega futura sobrou na semana', r.entregasFuturas, []);
-checa('nenhuma tarja de atrasado em pedido que nao atrasou', r.tarjasErradas, []);
-
-console.log('\n=== 8c. UMA SEMANA JA GRAVADA TORTA SE DESFAZ SOZINHA ===');
-/* A bagunca ja esta gravada no Drive dele: linhas com plan na segunda,
-   tarja de atrasado e entrega no futuro, salvas por uma versao anterior.
-   Elas nao tem a marca `herdada`, entao a revisao precisa alcancar tambem
-   quem so tem o `atrasado` — senao o estrago nunca se desfaz. */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
-DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
-  salvoEm: '2026-08-16T12:00:00.000Z', vistos: {},
-  linhas: [{ id: 'IDVELHA001xx', pedido: 'PD005010', cliente: 'GRAVADO TORTO',
-             entrega: '20/08/2026', plan: '2026-08-17', etapa: 'corte',
-             atrasado: true, sub: 15, per: 0, total: 15,
-             chegouEm: '2026-08-16T10:00:00.000Z' }] };
-poeNoDrive([{ id: 'IDVELHA001xx', pedido: 'PD005010', arquivo: 'TORTO-PD005010.ft',
-  cliente: 'GRAVADO TORTO', vendedor: 'Dani', envio: '20/08/2026', dia: 1,
-  subPecas: 15, perPecas: 0, total: 15 }]);
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1400);
-r = await p.evaluate(() => {
-  const l = ATV.linhas.find(x => x.id === 'IDVELHA001xx') || {};
-  return { plan: l.plan, atrasado: !!l.atrasado, etapa: l.etapa };
-});
-console.log('     ' + JSON.stringify(r));
-checa('a linha volta para o dia da entrega', r.plan, '2026-08-20');
-checa('  e perde a tarja que nao devia ter', r.atrasado, false);
-/* o que o operador escolheu a mao continua de pe: a revisao mexe em DIA e
-   TARJA, nunca na etapa */
-checa('  mas a etapa escolhida a mao fica', r.etapa, 'corte');
-delete DRIVE.semanas['2026-08-17'];
-
-console.log('\n=== 8d. UM CAMPO NOVO CHEGA NUMA SEMANA JA GRAVADA ===');
-/* A leitura e incremental: so abre o arquivo cujo modifiedTime mudou. O
-   departamento entrou no servidor na v3.316, e nenhum orcamento mudou por
-   causa disso — a coluna nascia vazia e continuava vazia por mais que se
-   clicasse em Gerar. Era o que estava na tela dele: 41 pedidos, coluna
-   inteira com travessao. */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
-DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
-  salvoEm: '2026-08-16T12:00:00.000Z',
-  /* o arquivo ja foi lido: sem o conserto, ele nao seria aberto de novo */
-  vistos: { IDDEPT0001xx: 'm0' },
-  linhas: [{ id: 'IDDEPT0001xx', pedido: 'PD005020', cliente: 'SEM DEPARTAMENTO',
-             entrega: '18/08/2026', plan: '2026-08-18', etapa: 'corte',
-             sub: 5, per: 0, total: 5, chegouEm: '2026-08-16T10:00:00.000Z' }] };
-poeNoDrive([{ id: 'IDDEPT0001xx', pedido: 'PD005020', arquivo: 'DEPT-PD005020.ft',
-  cliente: 'SEM DEPARTAMENTO', vendedor: 'Dani', envio: '18/08/2026', dia: 1,
-  departamento: 'Silk + DTF', subPecas: 5, perPecas: 0, total: 5 }]);
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1400);
-r = await p.evaluate(() => {
-  const l = ATV.linhas.find(x => x.id === 'IDDEPT0001xx') || {};
-  return { dep: l.departamento,
-           naTela: (document.querySelector('.atv-linha[data-id="IDDEPT0001xx"] .dep')
-             || {}).textContent };
-});
-console.log('     ' + JSON.stringify(r));
-checa('o departamento chega numa semana ja lida', r.dep, 'Silk + DTF');
-checa('  e aparece na coluna', r.naTela, 'Silk + DTF');
-delete DRIVE.semanas['2026-08-17'];
-
-console.log('\n=== 8e. A SEMANA QUE VIRA NO MEIO DA LEITURA (v3.318) ===');
-/* O DEFEITO DE VERDADE POR TRAS DAS 45.
-   Lido do Drive dele: a semana de 24 a 29 de agosto tinha 45 pedidos, e 32
-   deles tinham entrega E planejamento entre 17 e 21 — a semana ANTERIOR
-   inteira, gravada dentro do arquivo errado. Os 9 salvos em 17-22 eram um
-   subconjunto exato desses 32, salvos cinco minutos antes.
-
-   A causa: atvGera le o Drive em lotes e escreve o parcial em ATV.linhas a
-   cada lote. Trocar de semana e um clique. O que voltava do Drive era da
-   semana ANTIGA e caia por cima da nova, sem erro nenhum na tela.
-
-   Aqui a leitura e feita lenta de proposito e a semana e trocada no meio. */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.semana = '2026-08-17'; });
-poeNoDrive([pedido(21, 17, 100, 100), pedido(22, 18, 200, 0), pedido(23, 19, 150, 150)]);
-let devagar = true;
-await p.route('**/api/ft/atividade-lote', async r => {
-  if (devagar) await new Promise(s => setTimeout(s, 1500));
-  const corpo = JSON.parse(r.request().postData() || '{}');
-  const itens = (corpo.arquivos || []).map(a => {
-    /* a contabilidade das aberturas continua valendo aqui: e ela que
-       prova, mais adiante, que o cache poupou leitura */
-    DRIVE.aberturas.push(a.id);
-    return Object.assign({}, DRIVE.conteudo[a.id], { id: a.id, mod: a.mod });
-  }).filter(x => x.pedido !== undefined);
-  await r.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify({ ok: true, itens, falhas: [] }) });
-});
-r = await p.evaluate(async () => {
-  const promessa = atvGera();                 /* comeca a ler a semana de 17 */
-  await new Promise(r => setTimeout(r, 300));
-  ATV.semana = '2026-08-24';                  /* e a semana vira no meio */
-  ATV.linhas = []; ATV.vistos = {};
-  await promessa;
-  await new Promise(r => setTimeout(r, 300));
-  return { semana: ATV.semana, linhas: ATV.linhas.length,
-           pedidos: ATV.linhas.map(l => l.pedido).sort(),
-           planos: [...new Set(ATV.linhas.map(l => l.plan))].sort() };
-});
-devagar = false;
-console.log('     ' + JSON.stringify(r));
-checa('a semana continua sendo a nova', r.semana, '2026-08-24');
-/* O QUE NAO PODE ACONTECER: a leitura da semana velha terminar e despejar
-   os pedidos dela na semana nova. */
-checa('a leitura antiga nao despeja nada na semana nova', r.linhas, 0);
-checa('  e nenhum planejamento de outra semana sobra', r.planos, []);
-
-console.log('\n=== 8f. UM ARQUIVO GRAVADO COM OUTRA SEMANA DENTRO ===');
-/* A bagunca ja esta gravada no Drive dele. Abrir a semana tem de AVISAR, e
-   gerar tem de LIMPAR: 45 linhas viram 13. */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
-DRIVE.semanas['2026-08-24'] = { semana: '2026-08-24',
-  salvoEm: '2026-08-14T18:32:00.000Z', vistos: {},
-  linhas: [
-    /* as intrusas: entrega E plano na semana anterior, sem tarja nenhuma */
-    { id: 'IDINTR0001xx', pedido: 'PD006001', cliente: 'DA SEMANA DE ANTES 1',
-      entrega: '18/08/2026', plan: '2026-08-18', etapa: 'finalizado',
-      sub: 10, per: 0, total: 10, chegouEm: '' },
-    { id: 'IDINTR0002xx', pedido: 'PD006002', cliente: 'DA SEMANA DE ANTES 2',
-      entrega: '21/08/2026', plan: '2026-08-21', etapa: 'corte',
-      sub: 20, per: 0, total: 20, chegouEm: '' },
-    /* esta e de verdade: entrega dentro de 24 a 29 */
-    { id: 'IDDESTA001xx', pedido: 'PD006003', cliente: 'DESTA SEMANA MESMO',
-      entrega: '25/08/2026', plan: '2026-08-25', etapa: 'corte',
-      sub: 30, per: 0, total: 30, chegouEm: '' }] };
-await p.evaluate(() => { ATV.semana = '2026-08-24'; ATV.linhas = []; ATV.vistos = {}; });
-await p.evaluate(() => atvBuscaSalvo());
-await p.waitForTimeout(700);
-r = await p.evaluate(() => ({ n: ATV.linhas.length, aviso: ATV.aviso,
-  naTela: (document.querySelector('.atv-prog .txt') || {}).textContent || '' }));
-console.log('     ' + JSON.stringify(r));
-checa('abrir a semana traz as tres linhas do arquivo', r.n, 3);
-checa('  e avisa que duas nao sao daqui', r.aviso,
-  '2 pedidos salvos aqui não são desta semana. Clique em Gerar / Atualizar para tirá-los.');
-checa('  com o aviso na tela, e nao so na memoria', r.naTela.indexOf('não são desta semana') >= 0, true);
-poeNoDrive([{ id: 'IDDESTA001xx', pedido: 'PD006003', arquivo: 'DESTA-PD006003.ft',
-  cliente: 'DESTA SEMANA MESMO', vendedor: 'Dani', envio: '25/08/2026', dia: 1,
-  departamento: 'DTF', subPecas: 30, perPecas: 0, total: 30 }]);
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1400);
-r = await p.evaluate(() => ({ n: ATV.linhas.length,
-  pedidos: ATV.linhas.map(l => l.pedido).sort(), aviso: ATV.aviso }));
-console.log('     ' + JSON.stringify(r));
-checa('gerar tira as que nao sao desta semana', r.pedidos, ['PD006003']);
-delete DRIVE.semanas['2026-08-24'];
-
-console.log('\n=== 8g. ORGANIZAR: A PASSAGEM ESCOLHIDA A MAO (v3.318) ===');
-/* Um pedido nao terminado com entrega que AINDA NAO VENCEU nao sobe
-   sozinho: planejar a semana que vem nao pode encher de tarja vermelha o
-   que nem venceu. Mas se a pessoa marcar "Organizar", ele sobe — e sobe
-   SEM tarja, porque nao e atraso nenhum. */
-/* o dia de hoje e FIXADO: sem isso esta secao passaria hoje e falharia na
-   semana que vem, quando 20/08/2026 tivesse virado passado */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.semana = '2026-08-24'; ATV.hojeFixo = '2026-08-16'; });
-DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
-  salvoEm: '2026-08-16T12:00:00.000Z', vistos: {},
-  linhas: [
-    /* entrega 20/08: ainda nao venceu (hoje e 16/08 no relogio do teste) */
-    { id: 'IDNVEN0001xx', pedido: 'PD006010', cliente: 'AINDA NAO VENCEU',
-      entrega: '20/08/2026', plan: '2026-08-20', etapa: 'corte',
-      sub: 10, per: 0, total: 10, chegouEm: '' },
-    /* o mesmo caso, mas marcado a mao para passar */
-    { id: 'IDORGA0001xx', pedido: 'PD006011', cliente: 'MARCADO PARA ORGANIZAR',
-      entrega: '20/08/2026', plan: '2026-08-20', etapa: 'organizar',
-      sub: 20, per: 0, total: 20, chegouEm: '' }] };
-poeNoDrive([]);
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1400);
-r = await p.evaluate(() => {
-  const m = id => { const l = ATV.linhas.find(x => x.id === id);
-    return l ? { plan: l.plan, atrasado: !!l.atrasado, etapa: l.etapa } : null; };
-  return { naoVenceu: m('IDNVEN0001xx'), organizar: m('IDORGA0001xx') };
-});
-console.log('     ' + JSON.stringify(r));
-checa('o que ainda nao venceu NAO sobe sozinho', r.naoVenceu, null);
-checa('o marcado como Organizar sobe para a segunda',
-  r.organizar, { plan: '2026-08-24', atrasado: false, etapa: 'organizar' });
-delete DRIVE.semanas['2026-08-17'];
-await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
-  ATV.sujo = false; ATV.hojeFixo = ''; });
-
-console.log('\n=== 8h. ATRASADO ANDA UMA SEMANA SO (v3.319) ===');
-/* O QUE ELE VIU: a semana de 31/08 a 05/09 tinha 40 pedidos salvos, e a
-   semana a que cada ENTREGA pertencia era 10/08 (4), 17/08 (20), 24/08 (8)
-   e 31/08 (8). Trinta e dois de tres semanas atras, todos marcados como
-   atrasado, marchando para a frente uma semana por geracao.
-
-   A regra, como foi pedida:
-     nao venceu  -> nao sobe para semana nenhuma
-     venceu      -> sobe UMA semana, a seguinte a da entrega, e para
-     alem disso  -> so com Organizar, que e decisao de gente
-
-   Aqui a semana aberta e a de 31/08, e a anterior (24/08) traz de tudo. */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.semana = '2026-08-31'; ATV.hojeFixo = '2026-08-30'; });
-DRIVE.semanas['2026-08-24'] = { semana: '2026-08-24',
-  salvoEm: '2026-08-29T12:00:00.000Z', vistos: {},
-  linhas: [
-    /* entrega na semana de 24/08, ja vencida: a de 31 E a seguinte dela */
-    { id: 'IDUMA00001xx', pedido: 'PD009101', cliente: 'ATRASOU NA SEMANA DE 24',
-      entrega: '26/08/2026', plan: '2026-08-26', etapa: 'costura',
-      sub: 10, per: 0, total: 10, chegouEm: '' },
-    /* entrega na semana de 17/08: a seguinte dela e a de 24, nao a de 31 */
-    { id: 'IDDUAS0001xx', pedido: 'PD009102', cliente: 'ATRASOU DUAS SEMANAS ATRAS',
-      entrega: '19/08/2026', plan: '2026-08-24', etapa: 'costura',
-      atrasado: true, herdada: true, sub: 20, per: 0, total: 20, chegouEm: '' },
-    /* entrega na semana de 24/08 mas AINDA NAO VENCEU (hoje e 30/08? nao:
-       29/08 e sabado, entao 28 ja passou. Este vence depois de hoje) */
-    { id: 'IDFUTU0002xx', pedido: 'PD009103', cliente: 'AINDA NAO VENCEU',
-      entrega: '02/09/2026', plan: '2026-08-28', etapa: 'corte',
-      sub: 30, per: 0, total: 30, chegouEm: '' },
-    /* ja desceu uma vez sozinha nesta mesma semana de 24: nao pode descer
-       de novo, senao marcha para sempre */
-    { id: 'IDHERD0001xx', pedido: 'PD009104', cliente: 'JA DESCEU UMA VEZ',
-      entrega: '20/08/2026', plan: '2026-08-24', etapa: 'corte',
-      atrasado: true, herdada: true, sub: 40, per: 0, total: 40, chegouEm: '' }] };
-poeNoDrive([{ id: 'IDFUTU0002xx', pedido: 'PD009103', arquivo: 'F-PD009103.ft',
-  cliente: 'AINDA NAO VENCEU', vendedor: 'Dani', envio: '02/09/2026', dia: 1,
-  departamento: 'DTF', subPecas: 30, perPecas: 0, total: 30 }]);
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1400);
-r = await p.evaluate(() => {
-  const m = id => { const l = ATV.linhas.find(x => x.id === id);
-    return l ? { plan: l.plan, atrasado: !!l.atrasado } : null; };
-  return { uma: m('IDUMA00001xx'), duas: m('IDDUAS0001xx'),
-           futuro: m('IDFUTU0002xx'), jaDesceu: m('IDHERD0001xx'),
-           total: ATV.linhas.length };
-});
-console.log('     ' + JSON.stringify(r));
-checa('o que venceu na semana anterior desce, atrasado',
-  r.uma, { plan: '2026-08-31', atrasado: true });
-/* ESTE E O DEFEITO: entrega de 19/08 aparecendo na semana de 31/08 */
-checa('o que venceu DUAS semanas atras nao vem', r.duas, null);
-checa('o que ja desceu uma vez nao desce de novo', r.jaDesceu, null);
-/* entrega 02/09 esta na semana de 31/08: e um pedido normal dela */
-checa('o que ainda nao venceu entra pelo dia dele',
-  r.futuro, { plan: '2026-09-02', atrasado: false });
-checa('sao dois pedidos na semana, e nao quarenta', r.total, 2);
-delete DRIVE.semanas['2026-08-24'];
-
-console.log('\n=== 8i. A SEMANA DE 31/08 DELE, COM OS NUMEROS DE VERDADE ===');
-/* As 40 linhas que estavam gravadas, na mesma proporcao: 4 da semana de
-   10/08, 20 da de 17/08, 8 da de 24/08 e 8 da propria semana. Todas as 32
-   de fora marcadas como atrasado, que e o que impedia a limpeza da v3.318
-   de alcanca-las. Tem de sobrar 8. */
-const monta = (id, pedido, entrega, plan, atr) => ({ id, pedido,
-  cliente: 'C ' + pedido, vendedor: 'Dani', entrega, plan, etapa: 'corte',
-  atrasado: atr, sub: 1, per: 0, total: 1, chegouEm: '' });
-const dela = [];
-for (let i = 0; i < 4; i++) dela.push(monta('IDA' + i + '0000000x', 'PD0091' + i, '13/08/2026', '2026-08-31', true));
-for (let i = 0; i < 20; i++) dela.push(monta('IDB' + i + '0000000x', 'PD0092' + i, '19/08/2026', '2026-08-31', true));
-for (let i = 0; i < 8; i++) dela.push(monta('IDC' + i + '0000000x', 'PD0093' + i, '26/08/2026', '2026-08-31', true));
-/* as oito de verdade: entrega de 31/08 a 05/09, que e a semana inteira */
-const DIAS_DELA = ['31/08/2026', '01/09/2026', '02/09/2026', '03/09/2026',
-                   '04/09/2026', '05/09/2026', '02/09/2026', '04/09/2026'];
-for (let i = 0; i < 8; i++) {
-  const e = DIAS_DELA[i];
-  const [dd, mm, aa] = e.split('/');
-  dela.push(monta('IDD' + i + '0000000x', 'PD0094' + i, e, aa + '-' + mm + '-' + dd, false));
-}
-/* o dia de hoje e o DELE: 16 de agosto. E com essa regua que as 32 nao
-   pertencem — 20 delas nem venceram ainda. */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.semana = '2026-08-31'; ATV.hojeFixo = '2026-08-16'; DRIVE_PRONTO = true; });
-DRIVE.semanas['2026-08-31'] = { semana: '2026-08-31', salvoEm: '2026-08-14T18:35:00.000Z',
-  vistos: {}, linhas: dela };
-poeNoDrive(dela.filter(l => l.id.startsWith('IDD')).map(l => ({ id: l.id, pedido: l.pedido,
-  arquivo: l.pedido + '.ft', cliente: l.cliente, vendedor: 'Dani', envio: l.entrega,
-  dia: 1, departamento: 'DTF', subPecas: 1, perPecas: 0, total: 1 })));
-await p.evaluate(() => atvBuscaSalvo());
-await p.waitForTimeout(700);
-r = await p.evaluate(() => ({ n: ATV.linhas.length, aviso: ATV.aviso }));
-console.log('     ao abrir: ' + JSON.stringify(r));
-checa('abrir traz as quarenta e avisa que trinta e duas nao sao daqui', r.n, 40);
-checa('  e o aviso conta as trinta e duas', r.aviso.indexOf('32 pedidos') === 0, true);
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1600);
-r = await p.evaluate(() => ({ n: ATV.linhas.length,
-  semanasDeEntrega: [...new Set(ATV.linhas.map(l => l.entrega.slice(3)))].sort(),
-  atrasados: ATV.linhas.filter(l => l.atrasado).length }));
-console.log('     depois de gerar: ' + JSON.stringify(r));
-/* AS QUATRO DE 13/08 TAMBEM SAEM: a semana seguinte a delas e a de 17/08,
-   e e la que elas tem de estar. Nao aqui, tres semanas depois. */
-checa('gerar deixa so as oito da semana', r.n, 8);
-checa('  nenhuma com tarja de atraso', r.atrasados, 0);
-delete DRIVE.semanas['2026-08-31'];
-await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
-  ATV.sujo = false; ATV.hojeFixo = ''; });
-
-console.log('\n=== 8j. O AVISO DE PEDIDO NOVO AO ABRIR A SEMANA (v3.320) ===');
-/* Abrir a semana e ver o planejamento salvo nao diz nada sobre o que
-   chegou ao Drive desde a ultima leitura. Quem abre acha que esta vendo a
-   semana inteira e pode estar vendo a de ontem.
-
-   A checagem e em dois passos: a LISTA (barata, nao abre arquivo) diz
-   quantos nunca foram lidos; se couberem num lote so, um lote diz QUAIS
-   deles caem nesta semana. */
-const NOTIF = () => p.evaluate(() => {
-  const cx = document.getElementById('atvNotif');
-  return { visivel: !!cx && !cx.hidden,
-           tit: document.getElementById('atvNotifTit').textContent,
-           txt: document.getElementById('atvNotifTxt').textContent,
-           canto: cx ? getComputedStyle(cx).position + '/' + getComputedStyle(cx).right
-                        + '/' + getComputedStyle(cx).bottom : '' };
-});
-
-/* a semana ja tem um planejamento salvo, com UM arquivo ja lido */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.semana = '2026-08-17'; ATV.hojeFixo = '2026-08-16'; });
-/* a semana anterior sai de cena: aqui o assunto e so o aviso */
-delete DRIVE.semanas['2026-08-10'];
-DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
-  salvoEm: '2026-08-16T10:00:00.000Z', vistos: { IDLIDO0001xx: 'm1' },
-  linhas: [{ id: 'IDLIDO0001xx', pedido: 'PD009201', cliente: 'JA ESTAVA',
-             entrega: '18/08/2026', plan: '2026-08-18', etapa: 'corte',
-             departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '' }] };
-/* no Drive: o que ja foi lido, mais dois novos DESTA semana e um de outra */
-poeNoDrive([
-  { id: 'IDLIDO0001xx', pedido: 'PD009201', arquivo: 'A.ft', cliente: 'JA ESTAVA',
-    vendedor: 'Dani', envio: '18/08/2026', dia: 1, subPecas: 5, perPecas: 0, total: 5 },
-  { id: 'IDNOVA0001xx', pedido: 'PD009202', arquivo: 'B.ft', cliente: 'NOVO 1',
-    vendedor: 'Dani', envio: '19/08/2026', dia: 1, subPecas: 30, perPecas: 0, total: 30 },
-  { id: 'IDNOVA0002xx', pedido: 'PD009203', arquivo: 'C.ft', cliente: 'NOVO 2',
-    vendedor: 'Dani', envio: '21/08/2026', dia: 1, subPecas: 12, perPecas: 0, total: 12 },
-  { id: 'IDOUTR0001xx', pedido: 'PD009204', arquivo: 'D.ft', cliente: 'DE OUTRA SEMANA',
-    vendedor: 'Dani', envio: '02/09/2026', dia: 1, subPecas: 99, perPecas: 0, total: 99 }]);
-DRIVE.arquivos = DRIVE.arquivos.map(a =>
-  a.id === 'IDLIDO0001xx' ? { ...a, mod: 'm1' } : a);   /* esse ja foi lido */
-await p.evaluate(() => atvBuscaSalvo());
-await p.waitForTimeout(1500);
-r = await NOTIF();
-console.log('     ' + JSON.stringify(r));
-checa('o aviso aparece ao abrir a semana', r.visivel, true);
-/* o de 02/09 nao conta: ele nao e desta semana */
-checa('  e conta so os desta semana', r.tit, '2 pedidos novos nesta semana');
-checa('  dizendo quantas pecas sao', r.txt.indexOf('42 peças') === 0, true);
-checa('  no canto de baixo a direita', r.canto, 'fixed/18px/18px');
-
-/* o botao do aviso E o Gerar: clicar nele tem de trazer os dois */
-await p.click('#atvNotifBt');
-await p.waitForTimeout(1600);
-r = await p.evaluate(() => ({ linhas: ATV.linhas.length,
-  pedidos: ATV.linhas.map(l => l.pedido).sort() }));
-console.log('     depois do botao: ' + JSON.stringify(r));
-checa('o botao do aviso gera de verdade', r.pedidos,
-  ['PD009201', 'PD009202', 'PD009203']);
-checa('  e o aviso some depois de ler', (await NOTIF()).visivel, false);
-
-/* nada novo no Drive: silencio e a resposta certa */
-await p.evaluate(() => { ATV.sujo = false; });
-await p.evaluate(() => atvConfere());
-await p.waitForTimeout(900);
-checa('com tudo lido, o aviso nao aparece', (await NOTIF()).visivel, false);
-
-/* o X fecha */
-await p.evaluate(() => atvNotifAbre('teste', 'teste'));
-await p.click('#atvNotifX');
-checa('o X fecha o aviso', (await NOTIF()).visivel, false);
-
-/* TROCAR DE SEMANA FECHA O AVISO NA HORA.
-   Conferido SEM espera de proposito: a semana nova faz a checagem dela
-   sozinha e pode abrir um aviso proprio um instante depois, que e o certo.
-   O que nao pode e o aviso da semana ANTERIOR continuar na tela enquanto
-   isso, dizendo de pedidos que nao sao mais os daquela semana. */
-const aindaLa = await p.evaluate(() => {
-  atvNotifAbre('sobra', 'da semana de antes');
-  atvTrocaSemana(1);
-  const cx = document.getElementById('atvNotif');
-  return !cx.hidden;
-});
-checa('trocar de semana fecha o aviso da anterior na hora', aindaLa, false);
-delete DRIVE.semanas['2026-08-17'];
-await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
-  ATV.sujo = false; ATV.hojeFixo = ''; atvNotifFecha(); });
-
-console.log('\n=== 8k. O CACHE DO MES (v3.322) ===');
-/* A leitura ja era incremental, mas o que ela aprendia ficava trancado
-   DENTRO do arquivo da semana: abrir a semana seguinte comecava do zero e
-   reabria os mesmos orcamentos um por um. O cache tira esse aprendizado
-   de dentro da semana e o poe num arquivo por mes.
-
-   A conferencia e sobre ABERTURAS: o cache so vale se a segunda semana
-   NAO abrir de novo o que a primeira ja leu. */
-Object.keys(FTK).forEach(k => delete FTK[k]);
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.semana = '2026-08-17'; ATV.hojeFixo = '2026-08-16'; });
-delete DRIVE.semanas['2026-08-10'];
-delete DRIVE.semanas['2026-08-17'];
-delete DRIVE.semanas['2026-08-24'];
-/* tres pedidos da semana de 17 e dois da de 24, todos no mesmo mes */
-poeNoDrive([pedido(31, 18, 10, 10), pedido(32, 19, 20, 20), pedido(33, 20, 30, 30),
-            pedido(34, 25, 40, 40), pedido(35, 26, 50, 50)]);
-DRIVE.aberturas = [];
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1600);
-const primeira = DRIVE.aberturas.length;
-const gravou1 = CACHE_GRAVACOES;
-r = await p.evaluate(() => ATV.linhas.length);
-console.log('     1a semana: abriu ' + primeira + ' arquivos, ' + r + ' linhas');
-checa('a primeira semana abre os cinco do mes', primeira, 5);
-checa('  e fica com os tres dela', r, 3);
-checa('  e o cache foi gravado', gravou1 > 0, true);
-
-/* AGORA A SEMANA SEGUINTE: o cache tem de poupar TODAS as aberturas */
-DRIVE.aberturas = [];
-await p.evaluate(() => { ATV.semana = '2026-08-24'; ATV.linhas = []; ATV.vistos = {};
-  ATV.sujo = false; });
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1600);
-const segunda = DRIVE.aberturas.length;
-r = await p.evaluate(() => ({ n: ATV.linhas.length,
-  pedidos: ATV.linhas.map(l => l.pedido).sort() }));
-console.log('     2a semana: abriu ' + segunda + ' arquivos, ' + JSON.stringify(r));
-/* ESTE E O GANHO: zero aberturas, e ainda assim a semana montada certa */
-checa('a segunda semana nao abre nenhum arquivo', segunda, 0);
-checa('  e mesmo assim monta a semana dela', r.pedidos, ['PD004134', 'PD004135']);
-
-/* UM ORCAMENTO QUE MUDA NO DRIVE ENVELHECE A ENTRADA NA HORA.
-   A chave de validade e o modifiedTime, e nao o relogio: cache que expira
-   por tempo guarda demais o que mudou e joga fora o que continua bom. */
-DRIVE.arquivos = DRIVE.arquivos.map(a =>
-  a.id === 'ID00000034xx' ? { ...a, mod: 'MUDOU' } : a);
-DRIVE.conteudo['ID00000034xx'] = { ...DRIVE.conteudo['ID00000034xx'],
-  cliente: 'CLIENTE 34 RENOMEADO', total: 999, subPecas: 999, perPecas: 0 };
-DRIVE.aberturas = [];
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1600);
-r = await p.evaluate(() => {
-  const l = ATV.linhas.find(x => x.id === 'ID00000034xx') || {};
-  return { abriu: null, cliente: l.cliente, total: l.total };
-});
-console.log('     depois de mudar um: abriu ' + JSON.stringify(DRIVE.aberturas)
-  + ' ' + JSON.stringify(r));
-checa('so o arquivo que mudou e reaberto', DRIVE.aberturas, ['ID00000034xx']);
-checa('  e o dado novo dele chega na tela', [r.cliente, r.total],
-  ['CLIENTE 34 RENOMEADO', 999]);
-await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
-  ATV.sujo = false; ATV.hojeFixo = ''; });
 
 console.log('\n=== 8l. O CARREGAMENTO E UM MODAL CENTRAL (v3.322) ===');
 /* Era uma tira fina no alto da lista, junto do conteudo: dizia o que
@@ -1156,89 +967,6 @@ checa('  e o recarregamento devolve a pessoa para ela', r.voltou, 'atividade');
 /* a rede de seguranca: botao escondido por permissao nao e destino */
 checa('secao sem permissao nao e devolvida', r.naoVoltou, 'orcamento');
 
-console.log('\n=== 8n. FINALIZADO NA SEMANA ANTERIOR VALE PARA A FRENTE (v3.324) ===');
-/* O CASO DA VIAPOL, como aconteceu.
-   Quatro pedidos com entrega em 13/08 terminaram na sexta bem tarde e
-   ninguem marcou. Na segunda desceram para a semana de 17, atrasados,
-   ainda em Costura. No dia 17 o administrativo marcou os quatro como
-   finalizados NA SEMANA DE 10 A 15, que e onde eles pertenciam. E eles
-   continuaram na semana de 17 em Costura, gerando de novo quantas vezes
-   fosse: uma linha que ja esta na base guarda a etapa dela, e nada
-   nunca reperguntava.
-
-   Finalizado e terminal, e e a unica etapa que pode andar para a frente
-   sozinha sem risco: um pedido pronto nao tem mais trabalho a decidir. */
-Object.keys(FTK).forEach(k => delete FTK[k]);
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.semana = '2026-08-17'; ATV.hojeFixo = '2026-08-17'; });
-/* a semana de 10 a 15, ja com os quatro marcados como prontos */
-DRIVE.semanas['2026-08-10'] = { semana: '2026-08-10',
-  salvoEm: '2026-08-17T13:17:00.000Z', vistos: {},
-  linhas: ['PD004136', 'PD004137', 'PD004117', 'PD004138'].map((ped, i) => ({
-    id: 'IDVIA' + i + '00000x', pedido: ped, cliente: 'VIAPOL ' + i,
-    vendedor: 'Dani', entrega: '13/08/2026', plan: '2026-08-13',
-    etapa: 'finalizado', departamento: 'DTF + Sublimação',
-    sub: 10, per: 0, total: 10, chegouEm: '' })) };
-/* e a semana de 17, como ficou: os quatro descidos, ainda em Costura */
-DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
-  salvoEm: '2026-08-16T08:53:00.000Z', vistos: {},
-  linhas: ['PD004136', 'PD004137', 'PD004117', 'PD004138'].map((ped, i) => ({
-    id: 'IDVIA' + i + '00000x', pedido: ped, cliente: 'VIAPOL ' + i,
-    vendedor: 'Dani', entrega: '13/08/2026', plan: '2026-08-17',
-    etapa: 'costura', atrasado: true, departamento: 'DTF + Sublimação',
-    sub: 10, per: 0, total: 10, chegouEm: '' }))
-    .concat([{ id: 'IDDESTA17xx', pedido: 'PD009301', cliente: 'DESTA SEMANA',
-      vendedor: 'Dani', entrega: '19/08/2026', plan: '2026-08-19',
-      etapa: 'corte', departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '' }]) };
-poeNoDrive([{ id: 'IDDESTA17xx', pedido: 'PD009301', arquivo: 'D.ft',
-  cliente: 'DESTA SEMANA', vendedor: 'Dani', envio: '19/08/2026', dia: 1,
-  departamento: 'DTF', subPecas: 5, perPecas: 0, total: 5 }]);
-
-/* PRIMEIRO ABRIR: o aviso tem de contar os quatro, e nao zero */
-await p.evaluate(() => atvBuscaSalvo());
-await p.waitForTimeout(900);
-r = await p.evaluate(() => ({ n: ATV.linhas.length, aviso: ATV.aviso }));
-console.log('     ao abrir: ' + JSON.stringify(r));
-checa('abrir traz as cinco linhas gravadas', r.n, 5);
-checa('  e o aviso ja conta os quatro prontos', r.aviso.indexOf('4 pedidos') === 0, true);
-
-/* DEPOIS GERAR: eles saem, e sozinho */
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1600);
-r = await p.evaluate(() => ({ n: ATV.linhas.length,
-  pedidos: ATV.linhas.map(l => l.pedido).sort(),
-  aviso: ATV.aviso }));
-console.log('     depois de gerar: ' + JSON.stringify(r));
-checa('gerar tira os quatro que ja acabaram', r.pedidos, ['PD009301']);
-checa('  e o aviso some junto', r.aviso, '');
-
-/* E O CASO VIZINHO: finalizado na semana anterior MAS com entrega DESTA
-   semana. Ai ele nao sai, porque a semana e dele mesmo -- so que a etapa
-   de la e a mais recente das duas, e vale. */
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
-DRIVE.semanas['2026-08-10'].linhas.push({ id: 'IDDOIS0001xx', pedido: 'PD009302',
-  cliente: 'ENTREGA DESTA SEMANA', vendedor: 'Dani', entrega: '19/08/2026',
-  plan: '2026-08-15', etapa: 'finalizado', departamento: 'DTF',
-  sub: 7, per: 0, total: 7, chegouEm: '' });
-DRIVE.semanas['2026-08-17'].linhas.push({ id: 'IDDOIS0001xx', pedido: 'PD009302',
-  cliente: 'ENTREGA DESTA SEMANA', vendedor: 'Dani', entrega: '19/08/2026',
-  plan: '2026-08-19', etapa: 'costura', departamento: 'DTF',
-  sub: 7, per: 0, total: 7, chegouEm: '' });
-await p.evaluate(() => atvGera());
-await p.waitForTimeout(1600);
-r = await p.evaluate(() => {
-  const l = ATV.linhas.find(x => x.id === 'IDDOIS0001xx');
-  return l ? { etapa: l.etapa, plan: l.plan } : null;
-});
-console.log('     ' + JSON.stringify(r));
-checa('quem tem entrega nesta semana FICA', !!r, true);
-checa('  mas com a etapa mais recente, que e a de la',
-  r && r.etapa, 'finalizado');
-delete DRIVE.semanas['2026-08-10'];
-delete DRIVE.semanas['2026-08-17'];
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.hojeFixo = ''; });
-
 console.log('\n=== 8o. O MENU DE ETAPAS ROLA (v3.324) ===');
 /* Ele fecha ao rolar a PAGINA, porque e position:fixed e ficaria apontando
    para a linha errada. So que o ouvinte estava na fase de captura, no
@@ -1283,78 +1011,6 @@ checa('  com barra de rolagem visivel', r.barra, 'thin');
    para a linha errada */
 checa('rolar a pagina continua fechando', r.fechouComAPagina, true);
 
-console.log('\n=== 8p. O QUE OUTRA MAQUINA SALVOU CHEGA AQUI (v3.325) ===');
-/* O CASO: ele salvou numa maquina e a outra continuou mostrando o de
-   antes. Duas causas, as duas provadas aqui.
-
-   1. Uma vez que a semana estava na memoria desta aba, sair da secao e
-      voltar NAO relia nada (`if(!ATV.linhas.length) atvBuscaSalvo()`).
-      Quem salvasse em outra maquina nao aparecia aqui nunca.
-   2. Atualizar a pagina devolvia a secao certa (v3.322) mas SEMPRE na
-      semana de hoje: a semana aberta nao era lembrada. */
-Object.keys(FTK).forEach(k => delete FTK[k]);
-delete DRIVE.semanas['2026-08-10'];
-await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  ATV.semana = '2026-08-17'; ATV.hojeFixo = '2026-08-17'; });
-DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
-  salvoEm: '2026-08-17T09:00:00.000Z', vistos: {},
-  linhas: [{ id: 'IDANT0001xxx', pedido: 'PD009500', cliente: 'COMO ESTAVA ANTES',
-    vendedor: 'Dani', entrega: '18/08/2026', plan: '2026-08-18', etapa: 'corte',
-    departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '' }] };
-await p.evaluate(() => atvBuscaSalvo());
-await p.waitForTimeout(800);
-checa('a tela comeca com o que estava salvo',
-  await p.evaluate(() => ATV.linhas.map(l => l.etapa)), ['corte']);
-
-/* a OUTRA maquina salva: o arquivo no Drive muda */
-DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
-  salvoEm: '2026-08-17T15:30:00.000Z', vistos: {},
-  linhas: [{ id: 'IDANT0001xxx', pedido: 'PD009500', cliente: 'COMO ESTAVA ANTES',
-    vendedor: 'Dani', entrega: '18/08/2026', plan: '2026-08-18', etapa: 'finalizado',
-    departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '' }] };
-/* aqui a pessoa sai da secao e volta, sem recarregar nada */
-await p.evaluate(() => { atvAlternar(false); atvAlternar(true); });
-await p.waitForTimeout(900);
-r = await p.evaluate(() => ({ etapas: ATV.linhas.map(l => l.etapa),
-  salvoEm: ATV.salvoEm }));
-console.log('     ' + JSON.stringify(r));
-checa('voltar para a secao traz o que a outra maquina salvou', r.etapas, ['finalizado']);
-checa('  com o horario de la', r.salvoEm.slice(11, 16), '15:30');
-
-/* MAS NAO PODE PASSAR POR CIMA DE TRABALHO NAO GRAVADO.
-   Reler e o certo; reler apagando o que a pessoa esta fazendo aqui, nao. */
-await p.evaluate(() => { ATV.linhas[0].etapa = 'costura'; ATV.sujo = true; });
-DRIVE.semanas['2026-08-17'].salvoEm = '2026-08-17T16:45:00.000Z';
-DRIVE.semanas['2026-08-17'].linhas[0].etapa = 'embalagem';
-await p.evaluate(() => { atvAlternar(false); atvAlternar(true); });
-await p.waitForTimeout(900);
-r = await p.evaluate(() => ({ etapas: ATV.linhas.map(l => l.etapa), aviso: ATV.aviso }));
-console.log('     ' + JSON.stringify(r));
-checa('com alteracao nao salva, a tela NAO e sobrescrita', r.etapas, ['costura']);
-checa('  mas o aviso conta que outra maquina salvou',
-  r.aviso.indexOf('Outra máquina salvou') === 0, true);
-
-/* E A SEMANA ABERTA SOBREVIVE AO F5 */
-r = await p.evaluate(() => {
-  const antes = localStorage.getItem('ft_atv_semana');
-  /* sem isto o atvTrocaSemana pergunta antes de sair (ha coisa nao salva
-     do bloco de cima) e o navegador sem gente responde NAO */
-  ATV.sujo = false;
-  atvTrocaSemana(1);                       /* vai para 24/08 e grava */
-  const gravou = localStorage.getItem('ft_atv_semana');
-  /* finge o recarregamento: ATV zerado, como numa pagina nova */
-  ATV.semana = ''; ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
-  atvAlternar(false); atvAlternar(true);
-  return { antes, gravou, depoisDoF5: ATV.semana };
-});
-console.log('     ' + JSON.stringify(r));
-checa('trocar de semana grava qual e', r.gravou, '2026-08-24');
-checa('  e o recarregamento volta para ela, e nao para a de hoje',
-  r.depoisDoF5, '2026-08-24');
-delete DRIVE.semanas['2026-08-17'];
-await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
-  ATV.sujo = false; ATV.hojeFixo = ''; });
-
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
    quase todas moram na mesma linha da tabela, e o que quebra uma quebra a
@@ -1365,17 +1021,20 @@ r = await p.evaluate(() => {
     { id: 'V1', pedido: 'PD009001', cliente: 'CLIENTE A', vendedor: 'Dani',
       entrega: '17/08/2026', plan: '2026-08-17', etapa: 'corte',
       departamento: 'DTF + Silk', sub: 60, per: 40, total: 100, chegouEm: '', novo: false },
-    /* plan DIFERENTE do envio: mudou */
+    /* MARCADO A MAO: e `planManual` que faz o negrito vermelho agora, e
+       nao a comparacao entre plano e entrega. Sao coisas diferentes: uma
+       e a pessoa que moveu, a outra o cliente que remarcou depois. */
     { id: 'V2', pedido: 'PD009002', cliente: 'CLIENTE B', vendedor: 'Dani',
-      entrega: '17/08/2026', plan: '2026-08-19', etapa: 'futurize',
+      entrega: '17/08/2026', plan: '2026-08-19', planManual: true, etapa: 'futurize',
       departamento: 'Sublimação', sub: 10, per: 0, total: 10, chegouEm: '', novo: false },
-    /* atrasado e SEM etapa escolhida: a etiqueta tem de aparecer sozinha */
+    /* ATRASADO E SEM ETAPA: a tarja aparece, e o chip continua dizendo
+       "sem etapa". Antes Atrasado OCUPAVA o chip e a etapa se perdia. */
     { id: 'V3', pedido: 'PD009003', cliente: 'CLIENTE C', vendedor: 'Dani',
-      entrega: '17/08/2026', plan: '2026-08-17', etapa: '', atrasado: true,
+      entrega: '17/08/2026', plan: '2026-08-17', etapa: '',
       departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '', novo: false },
-    /* atrasado MAS com etapa escolhida: a escolha do operador vence */
+    /* ATRASADO E EM COSTURA: as duas coisas ao mesmo tempo, que e o ponto */
     { id: 'V4', pedido: 'PD009004', cliente: 'CLIENTE D', vendedor: 'Dani',
-      entrega: '17/08/2026', plan: '2026-08-17', etapa: 'costura', atrasado: true,
+      entrega: '17/08/2026', plan: '2026-08-17', etapa: 'costura',
       departamento: 'Silk', sub: 5, per: 0, total: 5, chegouEm: '', novo: false },
     /* etapa de arquivo antigo, que saiu da lista */
     { id: 'V5', pedido: 'PD009005', cliente: 'CLIENTE E', vendedor: 'Dani',
@@ -1402,6 +1061,7 @@ r = await p.evaluate(() => {
       .map(b => b.textContent),
     chips: { V1: chip('V1'), V2: chip('V2'), V3: chip('V3'), V4: chip('V4'), V5: chip('V5') },
     velha: li('V5').querySelector('.atv-chip').classList.contains('velha'),
+    tarjaV4: !!li('V4').querySelector('.atv-atraso'),
     pesoPed: peso('V1', '.ped'), pesoTot: peso('V1', '.tot'),
     planParado: [peso('V1', '.plan'), cor('V1', '.plan')],
     planMudou: [peso('V2', '.plan'), cor('V2', '.plan')],
@@ -1419,21 +1079,24 @@ checa('a coluna Departamento entrou no cabecalho', r.cabecalho,
 checa('  e traz o departamento do orcamento', r.dep, 'DTF + Silk');
 
 
-/* ORGANIZAR entrou na frente de todas na v3.318: ela nao e um posto, e a
-   decisao de levar o pedido para a semana que vem. */
-checa('as catorze etapas, na ordem pedida', r.etapas,
-  ['Organizar', 'Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk',
+/* DOZE ETAPAS, e todas sao POSTOS DE VERDADE (v3.326). Sairam as duas que
+   nao eram: Atrasado, que e situacao e nao lugar, e Organizar, que so
+   existia para empurrar pedido de semana -- coisa que agora se faz
+   mudando a data no calendario. */
+checa('as doze etapas sao os doze postos, na ordem pedida', r.etapas,
+  ['Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk',
    'Calandra', 'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem',
-   'Atrasado', 'Finalizado']);
-/* ATRASADO nao se escolhe: ela acontece. Oferecer o botao criaria duas
-   verdades sobre a mesma linha. Organizar, ao contrario, SO existe se
-   alguem escolher. */
-checa('  o menu oferece treze, sem Atrasado', r.noMenu,
-  ['Organizar', 'Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk',
+   'Finalizado']);
+checa('  e o menu oferece as doze mais "sem etapa"', r.noMenu,
+  ['Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk',
    'Calandra', 'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem',
    'Finalizado', 'sem etapa']);
 checa('a etapa escolhida aparece', [r.chips.V1, r.chips.V2], ['Corte', 'Futurize']);
-checa('  atrasado sem etapa vira Atrasado sozinho', r.chips.V3, 'Atrasado');
+/* O CONSERTO: atrasado sem etapa continua "sem etapa", com a tarja por
+   fora. Antes Atrasado tomava o chip e a etapa desaparecia da tela. */
+checa('  atrasado sem etapa continua sem etapa, com tarja', r.chips.V3, 'sem etapa');
+checa('  e atrasado em Costura mostra as duas coisas',
+  [r.chips.V4, r.tarjaV4], ['Costura', true]);
 checa('  mas a escolha do operador vence o atraso', r.chips.V4, 'Costura');
 /* uma semana ja salva nao pode perder o planejamento so porque a lista de
    etapas mudou: a etapa antiga continua desenhada, tracejada */
@@ -1442,7 +1105,7 @@ checa('    e vem marcada como fora da lista', r.velha, true);
 checa('negrito no numero do pedido', r.pesoPed, '700');
 checa('  e no total de pecas', r.pesoTot, '700');
 checa('planejamento na data do envio: sem destaque', r.planParado[0] === '700', false);
-checa('  planejamento que mudou: negrito', r.planMudou[0], '700');
+checa('  planejamento marcado a mao: negrito', r.planMudou[0], '700');
 checa('  e vermelho', r.planMudou[1], 'rgb(198, 22, 27)');
 checa('trilho vertical antes de Total, Subl. e Person.',
   r.trilhos.map(t => /rgb\(240, 195, 197\)|rgb\(187, 211, 242\)|rgb\(240, 220, 182\)/.test(t)),
@@ -1452,7 +1115,11 @@ checa('trilho vertical antes de Total, Subl. e Person.',
    dois lados tem de ser a mesma, e nao "parecida". */
 checa('a pastilha tem a mesma folga dos dois lados',
   r.folgas.map(f => f[0] === f[1]), [true, true, true]);
-checa('o submenu conta pela mesma regra da etiqueta', r.lateral.indexOf('Atrasado=1') >= 0, true);
+/* A SITUACAO E CONTADA A PARTE DA ETAPA, que e a separacao dos dois eixos
+   vista na barra lateral: os dois atrasados aparecem em Entrega vencida E
+   cada um na etapa dele. */
+checa('a barra lateral conta a situacao separada da etapa',
+  r.lateral.indexOf('Entrega vencida=5') >= 0, true);
 checa('  e mostra a etapa antiga so porque ainda ha alguem nela',
   r.lateral.indexOf('Separação=1') >= 0, true);
 
@@ -1555,7 +1222,7 @@ r = await p.evaluate(async () => {
   };
 });
 console.log('     ' + JSON.stringify(r));
-checa('o menu abre com as catorze escolhas', [r.aberto, r.botoes], [true, 14]);
+checa('o menu abre com as treze escolhas', [r.aberto, r.botoes], [true, 13]);
 checa('  inteiro dentro da tela', r.dentroDaTela, true);
 checa('  sem nenhum botao recortado', r.recortados, 0);
 checa('  e sem precisar rolar', r.cabeSemRolar, true);

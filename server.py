@@ -3539,6 +3539,782 @@ async def ft_atividade_cache_grava(request: Request):
             "quantos": len(itens)}
 
 
+# =====================================================================
+#  O INDICE MENSAL  (.ftx)   -- v3.326
+#
+#  A ARQUITETURA VELHA GUARDAVA A RESPOSTA DE UMA PERGUNTA.
+#
+#  Ate a v3.325 cada semana era um arquivo (.fta) com a lista dela
+#  dentro. Mas "semana" nao e um lugar onde um pedido mora: e uma
+#  pergunta que se faz ao calendario ("quais pedidos estao planejados
+#  entre segunda e sabado?"). Guardar a RESPOSTA como se fosse a verdade
+#  cria copias do mesmo pedido em arquivos diferentes, e copias
+#  discordam.
+#
+#  Todo bug do relatorio de atividade nasceu dai:
+#    . a VIAPOL finalizada na semana de 10 a 15 e ainda em Costura na de
+#      17 a 22: duas copias, uma sem saber da outra;
+#    . os 45 pedidos na semana de 24 a 29: 32 deles eram copias escritas
+#      no arquivo errado;
+#    . o pedido do dia 18 aparecendo na semana do dia 31: a varredura
+#      tinha permissao de decidir sozinha onde o pedido mora.
+#  Cada correcao foi uma RECONCILIACAO entre copias. Reconciliacao so
+#  existe porque existe copia.
+#
+#  AGORA O PEDIDO E A UNIDADE, E A SEMANA E UM FILTRO.
+#
+#  Um registro por pedido, com um campo `plan` que e o ENDERECO dele. A
+#  semana de 17 a 22 deixa de ser um arquivo e passa a ser "todo registro
+#  cujo plan cai entre 17 e 22". Um registro tem um plan so, logo aparece
+#  numa semana so. A duplicacao fica IMPOSSIVEL por construcao, e nao
+#  "corrigida por uma rotina".
+#
+#  UM ARQUIVO POR MES, e nao um por pedido. O Drive nao sabe procurar
+#  dentro dos arquivos: so listar nomes e abrir. Um arquivo por pedido
+#  obrigaria a abrir 500 arquivos para montar uma tela de semana, ou a
+#  manter um indice ao lado -- e ai sao duas verdades outra vez. Um
+#  arquivo por mes e UMA leitura de uns 60 KB, e as quatro semanas do mes
+#  saem dele por filtro. As quatro semanas passam a ser o MESMO arquivo:
+#  e por isso que o mesmo pedido nao tem mais onde ser duas coisas.
+#
+#  QUEM ESCREVE MANDA RECADO, NAO MANDA O ARQUIVO. O editor nunca envia
+#  "a semana deve ficar assim". Ele envia "PD004136, etapa = costura".
+#  O servidor abre o mes, encosta naquele campo daquele pedido e grava.
+#  Duas maquinas mexendo em pedidos diferentes no mesmo minuto entram as
+#  duas, porque nenhuma mandou o arquivo. E o que dispensa o aviso de
+#  "outra maquina salvou" da v3.325: nao ha mais o que atropelar.
+# =====================================================================
+
+_ATV_TRAVA_GERAL = threading.Lock()
+_ATV_TRAVAS = {}          # "2026-08" -> Lock, uma por mes
+_ATV_MEMORIA = {}         # "2026-08" -> {"doc":..., "fid":..., "mod":...}
+
+# os unicos campos que uma tela pode mudar. Tudo o mais e da varredura, e
+# essa separacao e a lei que impede o Gerar de desfazer o que foi decidido
+# a mao (ver _atv_varre).
+_ATV_CAMPOS_DA_TELA = {"etapa", "plan", "planManual", "concluidoEm", "obs"}
+_ATV_ETAPAS_VALIDAS = {
+    "", "corte", "subli", "dtf", "prensa", "silk", "calandra", "futurize",
+    "conferencia", "cdcostura", "costura", "embalagem", "finalizado",
+    # as que sairam da lista mas continuam em arquivos antigos
+    "separacao", "despacho", "organizar", "atrasado",
+}
+
+
+def _atv_trava(mes):
+    """Uma trava por mes. Duas gravacoes no mesmo mes se enfileiram; em
+       meses diferentes correm juntas."""
+    with _ATV_TRAVA_GERAL:
+        if mes not in _ATV_TRAVAS:
+            _ATV_TRAVAS[mes] = threading.Lock()
+        return _ATV_TRAVAS[mes]
+
+
+def _atv_mes_ok(mes):
+    if not re.fullmatch(r"\d{4}-\d{2}", str(mes or "")):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    a, m = str(mes).split("-")
+    if not (2000 <= int(a) <= 2999) or not (1 <= int(m) <= 12):
+        raise HTTPException(status_code=400, detail="Mês inválido.")
+    return str(mes)
+
+
+def _atv_mes_nome(mes):
+    return "%s.ftx" % _atv_mes_ok(mes)
+
+
+def _atv_mes_de_iso(iso):
+    """De qual arquivo mensal e uma data AAAA-MM-DD."""
+    return str(iso or "")[:7] if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(iso or "")) else ""
+
+
+def _atv_iso_de_br(br):
+    """13/08/2026 -> 2026-08-13. Vazio quando nao da."""
+    m = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", str(br or "").strip())
+    if not m:
+        return ""
+    d, mo, a = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    try:
+        datetime(a, mo, d)
+    except ValueError:
+        return ""
+    return "%04d-%02d-%02d" % (a, mo, d)
+
+
+def _atv_mes_vazio(mes):
+    return {"_formato": "fourtime-atividade-mes", "_versao": 1,
+            "mes": mes, "versao": 0, "salvoEm": "", "pedidos": {}}
+
+
+def _atv_mes_le(mes, usar_memoria=True):
+    """Abre o indice do mes. Devolve (doc, fid, mod).
+
+       A memoria de processo evita reabrir o mesmo arquivo a cada recado,
+       e e VALIDADA pelo modifiedTime do Drive, nunca por relogio: se
+       outra instancia gravou, o modifiedTime muda e a memoria cai. Cache
+       que expira por tempo erra dos dois lados."""
+    mes = _atv_mes_ok(mes)
+    nome = _atv_mes_nome(mes)
+    pid = _rel_pasta()
+    achados = _drive_get("/files", {
+        "q": ("'%s' in parents and trashed = false and name = '%s'" % (pid, nome)),
+        "fields": "files(id,name,modifiedTime)", "pageSize": "5",
+        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"}).get("files", [])
+    if not achados:
+        return _atv_mes_vazio(mes), None, ""
+    fid = achados[0]["id"]
+    mod = achados[0].get("modifiedTime") or ""
+    guardado = _ATV_MEMORIA.get(mes)
+    if usar_memoria and guardado and guardado.get("mod") == mod and guardado.get("fid") == fid:
+        return json.loads(json.dumps(guardado["doc"])), fid, mod
+    bruto, _ = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"},
+                          binario=True)
+    doc = json.loads(bruto.decode("utf-8"))
+    if not isinstance(doc.get("pedidos"), dict):
+        doc["pedidos"] = {}
+    doc["mes"] = mes
+    _ATV_MEMORIA[mes] = {"doc": json.loads(json.dumps(doc)), "fid": fid, "mod": mod}
+    return doc, fid, mod
+
+
+def _atv_mes_grava(mes, doc, fid):
+    """Grava o indice e devolve o novo modifiedTime, que e o carimbo que a
+       tela usa para saber que algo mudou."""
+    mes = _atv_mes_ok(mes)
+    nome = _atv_mes_nome(mes)
+    doc["_formato"] = "fourtime-atividade-mes"
+    doc["_versao"] = 1
+    doc["mes"] = mes
+    doc["versao"] = int(doc.get("versao") or 0) + 1
+    doc["salvoEm"] = datetime.now(timezone.utc).isoformat()
+    texto = json.dumps(doc, ensure_ascii=False)
+    if not fid:
+        try:
+            pid = _rel_pasta()
+            fid = _orc_acha_arquivo(nome, pid)
+        except Exception:
+            fid = None
+    if fid:
+        _orc_grava_por_id(fid, texto.encode("utf-8"))
+    elif FT_SCRIPT_ORCAMENTOS:
+        r = _script_post({"acao": "salvar", "nome": nome, "conteudo": texto,
+                          "destino": "relatorio", "pastaRelatorios": FT_PASTA_RELATORIOS})
+        fid = r.get("id")
+    if not fid:
+        raise HTTPException(status_code=502,
+            detail="Não consegui gravar o índice do mês: sem cota para criar arquivo.")
+    mod = ""
+    try:
+        d = _drive_get("/files/" + fid, {"fields": "modifiedTime",
+                                         "supportsAllDrives": "true"})
+        mod = d.get("modifiedTime") or ""
+    except Exception:
+        pass
+    _ATV_MEMORIA[mes] = {"doc": json.loads(json.dumps(doc)), "fid": fid, "mod": mod}
+    return fid, mod
+
+
+def _atv_carimbos(meses):
+    """O carimbo de cada mes SEM abrir arquivo nenhum.
+
+       E a pergunta barata que a tela faz de quinze em quinze segundos: uma
+       so listagem do Drive, resposta de algumas dezenas de bytes, e nada
+       e baixado. So quando o carimbo muda e que vale a pena abrir."""
+    meses = [_atv_mes_ok(m) for m in meses][:6]
+    if not meses:
+        return {}
+    pid = _rel_pasta()
+    nomes = " or ".join("name = '%s'" % _atv_mes_nome(m) for m in meses)
+    achados = _drive_get("/files", {
+        "q": "'%s' in parents and trashed = false and (%s)" % (pid, nomes),
+        "fields": "files(id,name,modifiedTime)", "pageSize": "20",
+        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"}).get("files", [])
+    fora = {m: "" for m in meses}
+    for a in achados:
+        k = str(a.get("name") or "")[:-4]
+        if k in fora:
+            fora[k] = a.get("modifiedTime") or ""
+    return fora
+
+
+@app.get("/api/ft/atv/mes")
+def ft_atv_mes(request: Request, resposta: Response, mes: str = ""):
+    """O indice de um mes inteiro. Uma leitura, e as quatro ou cinco semanas
+       dele saem daqui por filtro, sem voltar ao Drive."""
+    exige_atividade(request)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    resposta.headers["Cache-Control"] = "no-store, max-age=0"
+    mes = _atv_mes_ok(mes or datetime.now(timezone.utc).strftime("%Y-%m"))
+    try:
+        doc, fid, mod = _atv_mes_le(mes)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": True, "mes": mes, "existe": False, "pedidos": {},
+                "carimbo": "", "aviso": str(e)[:160]}
+    return {"ok": True, "mes": mes, "existe": bool(fid), "carimbo": mod,
+            "versao": int(doc.get("versao") or 0),
+            "salvoEm": doc.get("salvoEm") or "",
+            "pedidos": doc.get("pedidos") or {}}
+
+
+@app.get("/api/ft/atv/carimbo")
+def ft_atv_carimbo(request: Request, resposta: Response, meses: str = ""):
+    """Mudou alguma coisa? A pergunta mais barata que existe aqui."""
+    exige_atividade(request)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    resposta.headers["Cache-Control"] = "no-store, max-age=0"
+    lista = [m for m in str(meses or "").split(",") if m.strip()]
+    if not lista:
+        lista = [datetime.now(timezone.utc).strftime("%Y-%m")]
+    try:
+        return {"ok": True, "carimbos": _atv_carimbos(lista)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": False, "carimbos": {}, "aviso": str(e)[:160]}
+
+
+def _atv_aplica(doc, id_ped, campo, valor, quem):
+    """Encosta em UM campo de UM pedido. Devolve o registro, ou None se o
+       pedido nao existe naquele mes."""
+    p = (doc.get("pedidos") or {}).get(id_ped)
+    if not p:
+        return None
+    if campo not in _ATV_CAMPOS_DA_TELA:
+        raise HTTPException(status_code=400, detail="Campo '%s' não é da tela." % campo)
+    if campo == "etapa":
+        v = str(valor or "")
+        if v not in _ATV_ETAPAS_VALIDAS:
+            raise HTTPException(status_code=400, detail="Etapa inválida.")
+        p["etapa"] = v
+        # FINALIZADO GRAVA A CONCLUSAO SOZINHO, e sair dela apaga.
+        # Sem isto a data de conclusao seria mais um campo para alguem
+        # lembrar de preencher, e campo que se esquece nasce errado.
+        if v == "finalizado":
+            if not p.get("concluidoEm"):
+                p["concluidoEm"] = p.get("plan") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        else:
+            p["concluidoEm"] = ""
+    elif campo == "plan":
+        v = str(valor or "")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            raise HTTPException(status_code=400, detail="Data de planejamento inválida.")
+        p["plan"] = v
+        # ESCOLHER A DATA E ASSINAR EMBAIXO. A partir daqui a varredura
+        # nunca mais arrasta este pedido: e a marca que separa "acompanha
+        # o orcamento" de "acompanha a pessoa".
+        p["planManual"] = True
+        if p.get("etapa") == "finalizado":
+            # marcar concluido e escolher a data sao a MESMA porta: quem
+            # poe um finalizado no dia 13 esta dizendo que ele acabou no
+            # dia 13.
+            p["concluidoEm"] = v
+    elif campo == "planManual":
+        p["planManual"] = bool(valor)
+    elif campo == "concluidoEm":
+        v = str(valor or "")
+        if v and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            raise HTTPException(status_code=400, detail="Data de conclusão inválida.")
+        p["concluidoEm"] = v
+    elif campo == "obs":
+        p["obs"] = str(valor or "")[:400]
+    p["mexidoEm"] = datetime.now(timezone.utc).isoformat()
+    if quem:
+        p["mexidoPor"] = str(quem)[:80]
+    return p
+
+
+@app.post("/api/ft/atv/recado")
+async def ft_atv_recado(request: Request, resposta: Response):
+    """O RECADO: um campo, um pedido.
+
+       Nunca chega aqui "a semana deve ficar assim". Chega "PD004136,
+       etapa = costura". O servidor e quem funde, e por isso duas maquinas
+       mexendo em pedidos diferentes no mesmo minuto nao se apagam: as duas
+       encostam em linhas diferentes do mesmo arquivo.
+
+       MUDAR O PLANEJAMENTO PODE ATRAVESSAR O MES (30/08 para 02/09). Nesse
+       caso o registro SAI de um indice e ENTRA no outro. E a unica mudanca
+       de endereco de verdade que existe, acontece pouco, e e explicita."""
+    u = exige_atividade(request, planejar=True)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    resposta.headers["Cache-Control"] = "no-store, max-age=0"
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    recados = corpo.get("recados")
+    if not isinstance(recados, list) or not recados:
+        raise HTTPException(status_code=400, detail="Sem recados.")
+    if len(recados) > 200:
+        raise HTTPException(status_code=400, detail="Recados demais de uma vez.")
+    quem = ""
+    if isinstance(u, dict):
+        quem = str(u.get("nome") or u.get("email") or "")
+
+    # agrupa por mes para abrir cada arquivo uma vez so
+    por_mes = {}
+    for r in recados:
+        if not isinstance(r, dict):
+            continue
+        mes = _atv_mes_ok(r.get("mes") or "")
+        por_mes.setdefault(mes, []).append(r)
+
+    mudou, carimbos, mudancas = [], {}, {}
+    # ordem alfabetica dos meses: duas requisicoes que mexem nos mesmos dois
+    # meses pegam as travas na mesma ordem, e por isso nunca se abracam
+    for mes in sorted(por_mes.keys()):
+        mudancas.setdefault(mes, [])
+    # um registro que muda de mes precisa entrar num indice que talvez nao
+    # esteja na lista: descobre-se ao aplicar, entao a mudanca de mes e
+    # feita numa segunda passada
+    mudanca_de_mes = []
+    for mes in sorted(por_mes.keys()):
+        with _atv_trava(mes):
+            doc, fid, _mod = _atv_mes_le(mes)
+            tocou = False
+            for r in por_mes[mes]:
+                pid = str(r.get("id") or "")
+                campo = str(r.get("campo") or "")
+                p = _atv_aplica(doc, pid, campo, r.get("valor"), quem)
+                if p is None:
+                    continue
+                tocou = True
+                if campo == "plan":
+                    destino = _atv_mes_de_iso(p.get("plan"))
+                    if destino and destino != mes:
+                        mudanca_de_mes.append((mes, destino, pid,
+                                               json.loads(json.dumps(p))))
+                mudancas[mes].append({"id": pid, "campo": campo})
+            for de, para, pid, _copia in mudanca_de_mes:
+                if de == mes and pid in (doc.get("pedidos") or {}):
+                    doc["pedidos"].pop(pid, None)
+                    tocou = True
+            if tocou:
+                fid, mod = _atv_mes_grava(mes, doc, fid)
+                carimbos[mes] = mod
+                mudou.append(mes)
+
+    for _de, para, pid, copia in mudanca_de_mes:
+        with _atv_trava(para):
+            doc, fid, _mod = _atv_mes_le(para)
+            doc.setdefault("pedidos", {})[pid] = copia
+            fid, mod = _atv_mes_grava(para, doc, fid)
+            carimbos[para] = mod
+            if para not in mudou:
+                mudou.append(para)
+
+    return {"ok": True, "meses": mudou, "carimbos": carimbos,
+            "salvoEm": datetime.now(timezone.utc).isoformat()}
+
+
+# ---------------------------------------------------------------------
+#  A VARREDURA, E A LEI DAS TRES LINHAS
+#
+#  Todo bug do relatorio veio da varredura ter permissao de decidir onde
+#  um pedido mora. Aqui ela perde essa permissao, e o que sobra e curto o
+#  bastante para caber num paragrafo:
+#
+#    PODE CRIAR    pedido que nunca viu.
+#    PODE ATUALIZAR cliente, departamento, valores, quantidades e entrega.
+#    NUNCA ENCOSTA em etapa, em planejamento marcado a mao, nem em
+#                   data de conclusao.
+#
+#  Um processo que so insere e so atualiza campo burro e INCAPAZ de
+#  baguncar planejamento. Por isso ele pode rodar sozinho de tempos em
+#  tempos, e por isso o botao Gerar deixa de ser obrigacao: apertar ou
+#  nao apertar nao muda mais nada que seja seu.
+# ---------------------------------------------------------------------
+
+def _atv_meses_de_arquivo(mes_alvo):
+    """Os meses de ARQUIVAMENTO a varrer para cobrir um mes de entrega.
+
+       Os orcamentos sao arquivados no Drive pela data em que foram
+       fechados, e nao pela de entrega: um pedido entregue em agosto pode
+       ter sido fechado em julho. O mes anterior cobre a distancia real
+       entre fechar e entregar."""
+    a, m = int(mes_alvo[:4]), int(mes_alvo[5:7])
+    fora = []
+    for delta in (-1, 0):
+        mm = m + delta
+        aa = a
+        if mm < 1:
+            mm += 12; aa -= 1
+        fora.append((aa, mm))
+    return fora
+
+
+def _atv_le_orcamento(fid, nome, dia):
+    bruto, _ = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"},
+                          binario=True)
+    c = json.loads(bruto.decode("utf-8"))
+    header = c.get("header") or {}
+    cli, ped = _rel_cliente_pedido(nome, header)
+    sp, _sv, pp, _pv, _ign = _rel_do_conteudo(c)
+    return {"id": fid, "arquivo": nome, "dia": int(dia or 0),
+            "cliente": cli, "pedido": ped,
+            "vendedor": str(header.get("vendedor") or "").strip(),
+            "departamento": str(header.get("departamento") or "").strip(),
+            "envio": str(header.get("envio") or "").strip(),
+            "subPecas": int(sp), "perPecas": int(pp), "total": int(sp) + int(pp)}
+
+
+def _atv_varre(mes_alvo, teto=400):
+    """Le o Drive e encaixa o que achou nos indices mensais.
+
+       Devolve um resumo do que fez. Nunca levanta: varredura que quebra a
+       tela e pior que varredura que nao rodou."""
+    mes_alvo = _atv_mes_ok(mes_alvo)
+    criados, atualizados, sumidos, abertos = 0, 0, 0, 0
+    docs, fids = {}, {}
+
+    def pega(mes):
+        if mes not in docs:
+            d, f, _m = _atv_mes_le(mes)
+            docs[mes], fids[mes] = d, f
+        return docs[mes]
+
+    # OS VIZINHOS ENTRAM ANTES, e nao por precaucao: um pedido so pode ser
+    # dado por sumido se o indice onde ele mora estiver aberto. Sem abrir o
+    # mes anterior e o seguinte, um registro de la nunca seria conferido e
+    # um orcamento tirado da pasta continuaria na tela para sempre.
+    _a, _m = int(mes_alvo[:4]), int(mes_alvo[5:7])
+    for _d in (-1, 0, 1):
+        _mm, _aa = _m + _d, _a
+        if _mm < 1:
+            _mm += 12; _aa -= 1
+        if _mm > 12:
+            _mm -= 12; _aa += 1
+        try:
+            pega("%04d-%02d" % (_aa, _mm))
+        except Exception:
+            pass
+
+    for (aa, mm) in _atv_meses_de_arquivo(mes_alvo):
+        try:
+            _pid, achados = _rel_fontes(aa, mm, 0)
+        except Exception:
+            continue
+        mes_arq = "%04d-%02d" % (aa, mm)
+        cache_nome = _atv_cache_nome(aa, mm)
+        cache = {}
+        cache_fid = None
+        try:
+            pid = _rel_pasta()
+            enc = _drive_get("/files", {
+                "q": ("'%s' in parents and trashed = false and name = '%s'"
+                      % (pid, cache_nome)),
+                "fields": "files(id,name)", "pageSize": "5",
+                "includeItemsFromAllDrives": "true",
+                "supportsAllDrives": "true"}).get("files", [])
+            if enc:
+                cache_fid = enc[0]["id"]
+                bruto, _ = _drive_get("/files/" + cache_fid,
+                                      {"alt": "media", "supportsAllDrives": "true"},
+                                      binario=True)
+                cache = (json.loads(bruto.decode("utf-8")) or {}).get("itens") or {}
+        except Exception:
+            cache = {}
+
+        vistos_agora = set()
+        cache_mudou = False
+        for a in achados[:teto]:
+            fid = a.get("id"); nome = a.get("nome") or ""
+            mod = a.get("mod") or ""
+            vistos_agora.add(fid)
+            it = cache.get(fid)
+            if not it or it.get("mod") != mod:
+                try:
+                    it = _atv_le_orcamento(fid, nome, a.get("dia"))
+                    it["mod"] = mod
+                    abertos += 1
+                except Exception:
+                    continue
+                cache[fid] = it
+                cache_mudou = True
+            entrega_iso = _atv_iso_de_br(it.get("envio"))
+            if not entrega_iso:
+                continue
+            # ONDE O REGISTRO JA ESTA, se estiver em algum lugar.
+            # Procura em ordem, e nao num conjunto: se um dia houver copia
+            # em dois meses (bagunca herdada), a escolha tem de ser sempre
+            # a mesma, senao a varredura oscila entre duas respostas.
+            achou_em = None
+            try:
+                pega(_atv_mes_de_iso(entrega_iso))
+            except Exception:
+                pass
+            for cand in sorted(docs.keys()):
+                if fid in (docs[cand].get("pedidos") or {}):
+                    achou_em = cand
+                    break
+            if achou_em:
+                p = docs[achou_em]["pedidos"][fid]
+                antes = json.dumps(p, sort_keys=True)
+                # SO OS CAMPOS DE LEITURA. etapa, plan manual e conclusao
+                # nao aparecem aqui, e essa ausencia e a lei.
+                p["pedido"] = it.get("pedido") or p.get("pedido") or ""
+                p["cliente"] = it.get("cliente") or ""
+                p["vendedor"] = it.get("vendedor") or ""
+                p["departamento"] = it.get("departamento") or ""
+                p["sub"] = int(it.get("subPecas") or 0)
+                p["per"] = int(it.get("perPecas") or 0)
+                p["total"] = int(it.get("total") or 0)
+                p["mod"] = mod
+                p["mesArq"] = mes_arq
+                p["sumiu"] = False
+                entrega_velha = p.get("entrega") or ""
+                p["entrega"] = it.get("envio") or ""
+                if entrega_velha and entrega_velha != p["entrega"]:
+                    if p.get("planManual"):
+                        # NAO ARRASTA: avisa. A escolha da pessoa continua
+                        # de pe e a linha ganha uma marca discreta.
+                        p["entregaMudou"] = entrega_velha
+                    else:
+                        p["entregaMudou"] = ""
+                if not p.get("planManual"):
+                    # sem marca, o planejamento acompanha a entrega sozinho
+                    p["plan"] = entrega_iso
+                if json.dumps(p, sort_keys=True) != antes:
+                    atualizados += 1
+                destino = _atv_mes_de_iso(p.get("plan"))
+                if destino and destino != achou_em:
+                    pega(destino)["pedidos"][fid] = docs[achou_em]["pedidos"].pop(fid)
+            else:
+                destino = _atv_mes_de_iso(entrega_iso)
+                if not destino:
+                    continue
+                pega(destino)["pedidos"][fid] = {
+                    "id": fid, "pedido": it.get("pedido") or "",
+                    "cliente": it.get("cliente") or "",
+                    "vendedor": it.get("vendedor") or "",
+                    "departamento": it.get("departamento") or "",
+                    "entrega": it.get("envio") or "",
+                    "sub": int(it.get("subPecas") or 0),
+                    "per": int(it.get("perPecas") or 0),
+                    "total": int(it.get("total") or 0),
+                    "etapa": "", "plan": entrega_iso, "planManual": False,
+                    "concluidoEm": "", "sumiu": False, "entregaMudou": "",
+                    "mod": mod, "mesArq": mes_arq, "arquivo": it.get("arquivo") or "",
+                    "criadoEm": datetime.now(timezone.utc).isoformat()}
+                criados += 1
+
+        # QUEM SAIU DA PASTA. Marca e esconde, nunca apaga: se alguem tirar
+        # um orcamento de Organizados por engano, o registro continua la
+        # para descobrir o que aconteceu.
+        for mes in list(docs.keys()):
+            for pid_reg, p in (docs[mes].get("pedidos") or {}).items():
+                if p.get("mesArq") != mes_arq:
+                    continue
+                if pid_reg in vistos_agora:
+                    continue
+                if not p.get("sumiu"):
+                    p["sumiu"] = True
+                    p["sumiuEm"] = datetime.now(timezone.utc).isoformat()
+                    sumidos += 1
+
+        if cache_mudou and len(cache) <= 4000:
+            try:
+                doc_c = {"_formato": "fourtime-atividade-cache", "_versao": 1,
+                         "salvoEm": datetime.now(timezone.utc).isoformat(),
+                         "nome": cache_nome, "itens": cache}
+                texto = json.dumps(doc_c, ensure_ascii=False).encode("utf-8")
+                if cache_fid:
+                    _orc_grava_por_id(cache_fid, texto)
+                elif FT_SCRIPT_ORCAMENTOS:
+                    _script_post({"acao": "salvar", "nome": cache_nome,
+                                  "conteudo": texto.decode("utf-8"),
+                                  "destino": "relatorio",
+                                  "pastaRelatorios": FT_PASTA_RELATORIOS})
+            except Exception:
+                pass
+
+    carimbos = {}
+    for mes in sorted(docs.keys()):
+        with _atv_trava(mes):
+            try:
+                _f, mod = _atv_mes_grava(mes, docs[mes], fids.get(mes))
+                carimbos[mes] = mod
+            except Exception:
+                pass
+    return {"criados": criados, "atualizados": atualizados, "sumidos": sumidos,
+            "abertos": abertos, "carimbos": carimbos, "meses": sorted(docs.keys())}
+
+
+@app.post("/api/ft/atv/varrer")
+async def ft_atv_varrer(request: Request, resposta: Response):
+    """Conferir agora. O mesmo que o relogio do servidor faz sozinho, so que
+       na hora, para quem acabou de jogar um orcamento na pasta."""
+    exige_atividade(request)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    resposta.headers["Cache-Control"] = "no-store, max-age=0"
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    mes = _atv_mes_ok(corpo.get("mes") or datetime.now(timezone.utc).strftime("%Y-%m"))
+    try:
+        r = _atv_varre(mes)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": False, "aviso": str(e)[:200]}
+    r["ok"] = True
+    return r
+
+
+# ---------------------------------------------------------------------
+#  O RELOGIO DO SERVIDOR
+#
+#  A varredura roda sozinha, uma vez, para todo mundo. No navegador ela
+#  rodaria uma vez POR MAQUINA aberta, refazendo o mesmo trabalho.
+#  No Render de graca a instancia dorme quando ninguem usa, entao o
+#  relogio so bate enquanto ha gente trabalhando -- que e exatamente
+#  quando se quer que ele bata.
+# ---------------------------------------------------------------------
+FT_VARRE_SEG = int(os.environ.get("FT_VARRE_SEG", "300") or "300")
+
+
+def _atv_relogio():
+    time.sleep(45)          # deixa o servidor subir antes
+    while True:
+        try:
+            if FT_VARRE_SEG > 0 and (FT_PASTA_ORGANIZADOS or FT_SCRIPT_ORCAMENTOS):
+                hoje = datetime.now(timezone.utc)
+                _atv_varre(hoje.strftime("%Y-%m"))
+        except Exception:
+            pass
+        time.sleep(max(60, FT_VARRE_SEG))
+
+
+if FT_VARRE_SEG > 0:
+    try:
+        threading.Thread(target=_atv_relogio, daemon=True,
+                         name="ft-varredura").start()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------
+#  A MIGRACAO DOS .fta
+#
+#  As semanas ja salvas viram registros. E onde o mesmo pedido aparece em
+#  varias semanas, esta migracao decide de uma vez qual e a verdade -- ou
+#  seja, ela LIMPA as duplicatas tipo VIAPOL de brinde, em vez de deixar
+#  voce cacar uma a uma.
+#
+#  A regra: se alguma semana diz finalizado, vence a MAIS ANTIGA que diz
+#  isso (foi ali que o trabalho acabou de verdade). Senao, vence a mais
+#  recente. E o planejamento que difere da entrega vira `planManual`,
+#  porque foi alguem que o pos ali.
+# ---------------------------------------------------------------------
+@app.post("/api/ft/atv/migrar")
+async def ft_atv_migrar(request: Request):
+    exige_atividade(request, planejar=True)
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    seco = bool(corpo.get("seco"))
+    pid = _rel_pasta()
+    try:
+        arqs = _drive_get("/files", {
+            "q": "'%s' in parents and trashed = false and name contains '.fta'" % pid,
+            "fields": "files(id,name,modifiedTime)", "pageSize": "300",
+            "orderBy": "name",
+            "includeItemsFromAllDrives": "true",
+            "supportsAllDrives": "true"}).get("files", [])
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Não consegui listar: %s" % str(e)[:160])
+    semanas = []
+    for a in arqs:
+        nome = str(a.get("name") or "")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}\.fta", nome):
+            continue
+        try:
+            bruto, _ = _drive_get("/files/" + a["id"],
+                                  {"alt": "media", "supportsAllDrives": "true"},
+                                  binario=True)
+            doc = json.loads(bruto.decode("utf-8"))
+        except Exception:
+            continue
+        semanas.append((nome[:-4], doc.get("linhas") or []))
+    semanas.sort(key=lambda x: x[0])
+
+    melhor = {}
+    for seg, linhas in semanas:
+        for l in linhas:
+            lid = str(l.get("id") or "")
+            if not lid:
+                continue
+            fim = (l.get("etapa") == "finalizado")
+            atual = melhor.get(lid)
+            if atual is None:
+                melhor[lid] = {"seg": seg, "linha": l, "fim": fim}
+                continue
+            if fim and not atual["fim"]:
+                melhor[lid] = {"seg": seg, "linha": l, "fim": True}
+            elif fim and atual["fim"]:
+                pass                      # o primeiro finalizado ganha
+            elif not atual["fim"]:
+                melhor[lid] = {"seg": seg, "linha": l, "fim": False}
+
+    por_mes = {}
+    for lid, m in melhor.items():
+        l = m["linha"]
+        entrega = str(l.get("entrega") or "")
+        ent_iso = _atv_iso_de_br(entrega)
+        plan = str(l.get("plan") or "") or ent_iso or m["seg"]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", plan):
+            plan = m["seg"]
+        mes = _atv_mes_de_iso(plan)
+        if not mes:
+            continue
+        etapa = str(l.get("etapa") or "")
+        if etapa == "atrasado":
+            etapa = ""                    # atrasado deixou de ser etapa
+        por_mes.setdefault(mes, {})[lid] = {
+            "id": lid, "pedido": l.get("pedido") or "",
+            "cliente": l.get("cliente") or "", "vendedor": l.get("vendedor") or "",
+            "departamento": l.get("departamento") or "", "entrega": entrega,
+            "sub": int(l.get("sub") or 0), "per": int(l.get("per") or 0),
+            "total": int(l.get("total") or 0),
+            "etapa": etapa, "plan": plan,
+            "planManual": bool(ent_iso and ent_iso != plan),
+            "concluidoEm": (plan if etapa == "finalizado" else ""),
+            "sumiu": False, "entregaMudou": "", "mod": "", "mesArq": "",
+            "migradoDe": m["seg"],
+            "criadoEm": datetime.now(timezone.utc).isoformat()}
+
+    resumo = {"semanas": len(semanas), "pedidos": len(melhor),
+              "meses": {k: len(v) for k, v in sorted(por_mes.items())},
+              "duplicatasResolvidas": sum(len(l) for _s, l in semanas) - len(melhor)}
+    if seco:
+        return {"ok": True, "seco": True, **resumo}
+    for mes in sorted(por_mes.keys()):
+        with _atv_trava(mes):
+            doc, fid, _mod = _atv_mes_le(mes)
+            alvo = doc.setdefault("pedidos", {})
+            for lid, reg in por_mes[mes].items():
+                if lid in alvo:
+                    continue          # o que ja existe no indice manda
+                alvo[lid] = reg
+            _atv_mes_grava(mes, doc, fid)
+    return {"ok": True, "seco": False, **resumo}
+
+
 # ------------- PWA (offline + instalável) -------------
 def _acha_pwa_dir():
     """Procura a pasta 'pwa' em locais comuns. Funciona esteja ela na raiz
