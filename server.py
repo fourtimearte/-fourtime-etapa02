@@ -3594,8 +3594,8 @@ _ATV_MEMORIA = {}         # "2026-08" -> {"doc":..., "fid":..., "mod":...}
 # a mao (ver _atv_varre).
 _ATV_CAMPOS_DA_TELA = {"etapa", "plan", "planManual", "concluidoEm", "obs"}
 _ATV_ETAPAS_VALIDAS = {
-    "", "corte", "subli", "dtf", "prensa", "silk", "calandra", "futurize",
-    "conferencia", "cdcostura", "costura", "embalagem", "finalizado",
+    "", "corte", "subli", "dtf", "prensa", "silk", "bordado", "calandra",
+    "futurize", "conferencia", "cdcostura", "costura", "embalagem", "finalizado",
     # as que sairam da lista mas continuam em arquivos antigos
     "separacao", "despacho", "organizar", "atrasado",
 }

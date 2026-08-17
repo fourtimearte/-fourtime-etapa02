@@ -6449,6 +6449,17 @@
 
         <div class="ft-menu-div"></div>
         <div class="atv-lat" id="atvLat"></div>
+        <!-- NA FAIXA ESTREITA a lista não cabe, e empilhá-la ali era o que
+             estava quebrado. Viram dois botões que abrem a mesma lista num
+             modal, com os mesmos filtros. -->
+        <div class="atv-lat-btns" id="atvLatBtns">
+          <button type="button" data-lista="situacao" data-dica="Situação">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          </button>
+          <button type="button" data-lista="etapas" data-dica="Etapas">
+            <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="14" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>
+          </button>
+        </div>
       </div><!-- /painel atividade -->
 
       <!-- ====== PAINEL: BANCO DE DADOS ======
@@ -7301,7 +7312,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.326';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.327';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -12157,6 +12168,9 @@ function menuAplica(fechado){
   const menu=document.querySelector('.ft-menu');
   document.body.classList.toggle('menu-fechado',!!fechado);
   menuLogo(!!fechado);
+  /* o rotulo da semana muda de forma junto com a faixa (v3.327): na
+     estreita ele vira "17|22" e o mes embaixo */
+  if(typeof atvSemanaNoPainel==='function')atvSemanaNoPainel();
 
   if(!menu){ menuRecalcula(); return; }
 
@@ -21365,6 +21379,148 @@ function formataPedido(bruto){
   }
   .atv-cal-solta:hover{background:var(--ft-hover);color:var(--ft-preto);}
 
+  /* ---- O AVISO DE CANTO (v3.327) ----
+     Canto superior direito, e não o centro: o centro é para o que a
+     pessoa está esperando. Isto aqui ela não pediu. */
+  .atv-toast{
+    position:fixed;top:64px;right:18px;z-index:9880;max-width:270px;
+    background:var(--ft-preto);color:#fff;border-radius:9px;padding:9px 13px;
+    font:600 11.5px var(--ft-fonte-ui,inherit);line-height:1.4;
+    box-shadow:0 12px 32px rgba(16,20,26,.24);
+    opacity:0;transform:translateY(-8px);
+    transition:opacity 180ms ease,transform 180ms ease;
+    pointer-events:none;
+  }
+  .atv-toast.on{opacity:1;transform:translateY(0);}
+  @media print{ .atv-toast{display:none !important;} }
+
+  /* ---- A LISTA EM MODAL (v3.327) ----
+     Na faixa estreita, Situação e Etapas viram dois botões. A lista
+     inteira nao cabe em 64px, e empilhá-la ali era o que estava
+     quebrado: números espremidos contra nomes cortados. */
+  .atv-lista-modal{
+    position:fixed;inset:0;z-index:9870;display:grid;place-items:center;
+    background:rgba(16,20,26,.34);backdrop-filter:blur(2px);
+  }
+  .atv-lista-modal[hidden]{display:none;}
+  .atv-lista-modal .cx{
+    width:300px;max-height:78vh;display:flex;flex-direction:column;
+    background:var(--ft-menu-bg,#fff);border-radius:13px;
+    box-shadow:0 24px 60px rgba(16,20,26,.28);overflow:hidden;
+  }
+  .atv-lista-modal .cab{
+    display:flex;align-items:center;gap:8px;padding:12px 14px 10px;
+    border-bottom:1px solid var(--ft-borda);
+  }
+  .atv-lista-modal .cab b{flex:1;font:700 12.5px var(--ft-fonte-ui,inherit);color:var(--ft-preto);}
+  .atv-lista-modal .cab button{
+    width:24px;height:24px;display:grid;place-items:center;border:0;background:none;
+    border-radius:6px;cursor:pointer;color:var(--ft-cinza-40);
+  }
+  .atv-lista-modal .cab button:hover{background:var(--ft-hover);color:var(--ft-preto);}
+  .atv-lista-modal .cab button svg{width:14px;height:14px;fill:none;stroke:currentColor;
+    stroke-width:2.2;stroke-linecap:round;}
+  .atv-lista-modal .corpo{padding:8px;overflow-y:auto;scrollbar-width:thin;}
+
+  /* ---- Situação e Etapas viram FILTRO (v3.327) ---- */
+  .atv-lat .l{
+    width:100%;border:0;background:none;border-radius:7px;padding:4px 6px;margin:0;
+    font:inherit;color:inherit;cursor:pointer;text-align:left;
+  }
+  .atv-lat .l:hover{background:var(--ft-hover);}
+  .atv-lat .l.zero{opacity:.4;cursor:default;}
+  .atv-lat .l.zero:hover{background:none;}
+  .atv-lat .l.on{background:var(--tg);color:#fff;}
+  .atv-lat .l.on i{background:#fff;}
+  .atv-lat .l.on .q{color:#fff;}
+  .atv-filtro-fora{
+    display:flex;align-items:center;gap:7px;margin:0 12px 10px;padding:7px 9px;
+    border-radius:8px;background:var(--ft-vermelho-suave);color:var(--ft-vermelho);
+    font:600 10.5px var(--ft-fonte-ui,inherit);
+  }
+  .atv-filtro-fora b{flex:1;font-weight:700;}
+  .atv-filtro-fora button{
+    border:0;background:none;color:inherit;cursor:pointer;font:inherit;
+    text-decoration:underline;padding:0;
+  }
+
+  /* ---- A FAIXA ESTREITA (v3.327) ----
+     A semana em duas linhas, as setas viram cima e baixo, e o resto do
+     painel vira dois botões. */
+  body.menu-fechado .atv-sem{
+    flex-direction:column;gap:3px;padding:8px 4px 2px;
+  }
+  body.menu-fechado .atv-sem .atv-nav{width:100%;height:20px;border:0;background:none;}
+  body.menu-fechado .atv-sem .atv-nav svg{transform:rotate(90deg);}
+  body.menu-fechado .atv-sem #atvAnterior svg{transform:rotate(90deg);}
+  body.menu-fechado .atv-sem #atvSeguinte svg{transform:rotate(90deg);}
+  body.menu-fechado .atv-sem-txt b{font-size:12px;letter-spacing:-.01em;}
+  body.menu-fechado .atv-sem-txt span{font-size:9px;text-transform:lowercase;}
+  body.menu-fechado .atv-hoje{
+    margin:0 6px 8px;width:calc(100% - 12px);padding:4px 0;font-size:9px;
+  }
+  body.menu-fechado .atv-lat{display:none;}
+  .atv-lat-btns{display:none;}
+  body.menu-fechado .atv-lat-btns{
+    display:flex;flex-direction:column;gap:3px;padding:0 6px 12px;
+  }
+  body.menu-fechado .atv-lat-btns button{
+    position:relative;display:grid;place-items:center;gap:0;
+    width:100%;min-height:36px;padding:8px 0;border:0;border-radius:7px;
+    background:none;cursor:pointer;color:var(--mn-fg,var(--ft-cinza-70));
+  }
+  body.menu-fechado .atv-lat-btns button:hover{background:var(--mn-hover,var(--ft-hover));}
+  body.menu-fechado .atv-lat-btns button svg{width:17px;height:17px;fill:none;
+    stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;opacity:.75;}
+  body.menu-fechado .atv-lat-btns button.filtrando{
+    background:var(--ft-vermelho-suave);color:var(--ft-vermelho);
+  }
+  body.menu-fechado .atv-lat-btns button.filtrando svg{stroke:var(--ft-vermelho);opacity:1;}
+  /* a mesma dica dos outros botões da faixa */
+  body.menu-fechado .atv-lat-btns button::after{
+    content:attr(data-dica);position:absolute;top:50%;left:calc(100% + 8px);
+    transform:translateY(-50%) translateX(-3px);
+    background:var(--ft-preto);color:#fff;font:500 10.5px var(--ft-fonte-ui);
+    padding:0;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;
+    z-index:60;max-width:0;overflow:hidden;
+    transition:opacity 120ms,transform 120ms;
+  }
+  body.menu-fechado .atv-lat-btns button:hover::after{
+    opacity:1;transform:translateY(-50%) translateX(0);max-width:none;padding:5px 9px;}
+
+  /* ---- pedido e nome abrem o orçamento (v3.327) ---- */
+  /* `font` NAO PODE SER `inherit` AQUI.
+     A celula do pedido virou o proprio botao (`class="ped abre"`), e a
+     regra que a deixa em negrito monoespacado mora em `.atv-linha .ped`,
+     com a mesma especificidade desta. Escrito depois, um `font:inherit`
+     apagava familia, tamanho e PESO de uma vez, e a coluna Pedido perdia
+     o negrito sem ninguem encostar nela. Herdam-se so as tres partes que
+     o botao precisa desaprender do navegador. */
+  .atv-linha .abre{
+    border:0;background:none;padding:0;margin:0;color:inherit;
+    font-family:inherit;font-size:inherit;
+    text-align:left;cursor:pointer;border-radius:5px;max-width:100%;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  /* o botao do NOME herda o peso da celula que o contem; o do PEDIDO nao
+     precisa herdar nada, porque a regra do negrito e dele mesmo */
+  .atv-linha .nome .abre{display:inline-block;vertical-align:bottom;font-weight:inherit;}
+  .atv-linha .abre:hover{color:var(--ft-vermelho);text-decoration:underline;}
+
+  /* ---- a tarja do filtro ligado ---- */
+  .atv-filtro-tarja{
+    display:flex;align-items:center;gap:12px;margin:0 0 12px;padding:8px 13px;
+    border-radius:10px;background:var(--ft-vermelho-suave);
+    font:600 11.5px var(--ft-fonte-ui,inherit);color:var(--ft-vermelho);
+  }
+  .atv-filtro-tarja b{font-weight:700;}
+  .atv-filtro-tarja span{flex:1;font-weight:500;color:var(--ft-cinza-70);}
+  .atv-filtro-tarja button{
+    border:0;background:none;color:var(--ft-vermelho);cursor:pointer;
+    font:600 11px var(--ft-fonte-ui,inherit);text-decoration:underline;padding:0;
+  }
+  @media print{ .atv-filtro-tarja{display:none !important;} }
+
   /* a entrega que mudou debaixo de uma escolha sua */
   .atv-remarc{
     display:inline-grid;place-items:center;width:13px;height:13px;margin-left:5px;
@@ -21457,6 +21613,14 @@ function formataPedido(bruto){
   }
   .atv-folha:last-child{page-break-after:auto;break-after:auto;}
   .atv-folha-corpo{flex:1;min-height:0;display:flex;flex-direction:column;}
+  /* O RODAPÉ NÃO ENCOLHE (v3.327).
+     Ele era um item de flex comum, com `flex-shrink:1` por herança do
+     padrão. Numa folha cheia, a tabela empurrava e o rodapé cedia alguns
+     pixels: o filete subia, a última linha passava por cima dele, e a
+     medida feita durante a montagem (que olhava só o corpo) não via nada
+     de errado. Um rodapé que muda de altura conforme o conteúdo não serve
+     de régua para nada. Agora ele é intocável, e a régua para de mentir. */
+  .atv-f-rodape{flex:0 0 auto;}
   /* O TOPO, ALINHADO PELO CENTRO E NAO PELO PE (v3.316).
      Com align-items:flex-end os quatro resumos se alinhavam pela base, e o
      de Saturacao, que tem uma barra a mais, empurrava o proprio rotulo
@@ -21615,6 +21779,15 @@ function formataPedido(bruto){
 
 <div class="atv-menu" id="atvMenuEtapa"></div>
 <div class="atv-cal" id="atvCal"></div>
+<div class="atv-toast" id="atvToast" hidden></div>
+<div class="atv-lista-modal" id="atvListaModal" hidden>
+  <div class="cx">
+    <div class="cab"><b id="atvListaTit">Etapas</b>
+      <button type="button" id="atvListaX" title="Fechar">
+        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+    <div class="corpo" id="atvListaCorpo"></div>
+  </div>
+</div>
 
 <div class="atv-carga-fundo" id="atvCarga" hidden>
   <div class="atv-carga">
@@ -21681,6 +21854,7 @@ const ATV_ETAPAS=[
   {k:'dtf',        n:'Impressão DTF',        c:'#2563EB'},
   {k:'prensa',     n:'Prensa DTF',           c:'#EA580C'},
   {k:'silk',       n:'Silk',                 c:'#D97706'},
+  {k:'bordado',    n:'Bordado',              c:'#9333EA'},
   {k:'calandra',   n:'Calandra',             c:'#0891B2'},
   {k:'futurize',   n:'Futurize',             c:'#4F46E5'},
   {k:'conferencia',n:'Conferência',          c:'#475569'},
@@ -21758,7 +21932,13 @@ const ATV_MESES=['janeiro','fevereiro','março','abril','maio','junho','julho',
 const ATV={
   semana:'',          /* a segunda-feira, em AAAA-MM-DD */
   meses:{},           /* '2026-08' -> {carimbo, pedidos:{id->registro}} */
-  linhas:[],          /* DERIVADA: o filtro dos meses pela semana aberta */
+  linhas:[],          /* DERIVADA: a semana, já passada pelo filtro */
+  todasDaSemana:[],   /* DERIVADA: a semana inteira, sem filtro nenhum.
+                         AS CONTAS SAEM DAQUI, e não de `linhas`. Capacidade
+                         é propriedade da semana, não do que se escolheu
+                         olhar: filtrar por Corte e ver "200 peças, cabe"
+                         seria uma resposta falsa a uma pergunta certa. */
+  filtro:{tipo:'',valor:''},  /* 'situacao' | 'etapa', um por vez */
   salvoEm:'',         /* quando o último recado foi gravado */
   carregando:false,
   prog:{feito:0,total:0,onde:''},
@@ -21886,8 +22066,12 @@ function atvSoma(ls){ return ls.reduce((a,l)=>a+(+l.total||0),0); }
    repetindo os mesmos numeros do topo, duas contas separadas para o mesmo
    valor sao duas chances de discordarem na tela, e quem le nao tem como
    saber qual das duas esta certa. */
+/* AS CONTAS SAO DA SEMANA, e nao do filtro (v3.327).
+   A pergunta que os cartoes respondem e "cabe?", e a resposta nao muda
+   porque alguem clicou em Corte para ver quais sao. Se contassem so o
+   filtrado, filtrar viraria um jeito de a folha mentir. */
 function atvContas(){
-  const L=ATV.linhas;
+  const L=ATV.todasDaSemana.length?ATV.todasDaSemana:ATV.linhas;
   const pecas=atvSoma(L);
   const cap=atvCapSemana();
   const fin=L.filter(l=>l.etapa==='finalizado');
@@ -21928,13 +22112,25 @@ function atvGrupoDe(l){
 function atvPorDia(){
   const grupos=atvDiasDaSemana().map(iso=>{
     const d=atvDeISO(iso);
-    return {chave:iso,nome:ATV_DIAS_NOME[(d.getDay()+6)%7],linhas:[]};
+    return {chave:iso,nome:ATV_DIAS_NOME[(d.getDay()+6)%7],linhas:[],todas:[]};
   });
   const mapa={};
   grupos.forEach(g=>{mapa[g.chave]=g;});
+  /* DUAS LISTAS POR DIA (v3.327): `linhas` e o que se mostra, `todas` e o
+     que se conta. A barra de saturacao do dia nao pode encolher porque
+     alguem filtrou por Costura: a fabrica continua com o mesmo tanto de
+     trabalho naquele dia, filtrado ou nao.
+
+     QUEM FILTRA E O atvMonta, E SO ELE. Aqui nao se pergunta nada sobre o
+     filtro: `ATV.linhas` ja chega peneirada. Filtrar nos dois lugares
+     daria duas regras para manter de acordo, e a segunda erraria calada. */
   ATV.linhas.forEach(l=>{
     const g=mapa[atvGrupoDe(l)]||grupos[0];
     if(g)g.linhas.push(l);
+  });
+  (ATV.todasDaSemana.length?ATV.todasDaSemana:ATV.linhas).forEach(l=>{
+    const g=mapa[atvGrupoDe(l)]||grupos[0];
+    if(g)g.todas.push(l);
   });
   /* atrasado primeiro dentro do dia: e o que tem de sair antes */
   grupos.forEach(g=>{
@@ -21981,9 +22177,19 @@ function atvCelulas(l){
   const av=remarcou?'<span class="atv-remarc" title="A entrega era '
       +atvEsc(l.entregaMudou)+' e virou '+atvEsc(l.entrega)
       +'. O planejamento não foi movido porque você escolheu a data a mão.">!</span>':'';
+  /* PEDIDO E NOME ABREM O ORCAMENTO (v3.327), como no relatorio mensal.
+     Quem esta olhando a semana e decidindo etapa quer, de vez em quando,
+     abrir o pedido para conferir uma peca. Sem isto era procurar o
+     arquivo no Drive pelo nome, a mao. */
+  const podeAbrir=!!l.id;
+  const bt=(cls,txt,tit)=>podeAbrir
+    ? '<button type="button" class="'+cls+' abre" data-abre="'+atvEsc(l.id)+'"'
+      +' title="'+atvEsc(tit)+'">'+txt+'</button>'
+    : '<span class="'+cls+'" title="'+atvEsc(tit)+'">'+txt+'</span>';
   return pux
-    +'<span class="ped">'+vaz(l.pedido)+'</span>'
-    +'<span class="nome" title="'+atvEsc(l.cliente)+'">'+vaz(l.cliente)+tarja+'</span>'
+    +bt('ped',vaz(l.pedido),'Abrir este orçamento no editor')
+    +'<span class="nome" title="'+atvEsc(l.cliente)+'">'
+      +bt('cli',vaz(l.cliente),'Abrir este orçamento no editor')+tarja+'</span>'
     +'<span class="dep" title="'+atvEsc(l.departamento||'')+'">'+vaz(l.departamento)+'</span>'
     +'<span class="data'+(remarcou?' remarc':'')+'">'+vaz(l.entrega)+av+'</span>'
     +'<button type="button" class="data plan atv-cal-bt'+(mud?' mudou':'')+'"'
@@ -22042,6 +22248,18 @@ function atvDesenha(){
   /* o progresso saiu daqui e virou modal (v3.322): ver atvCargaPinta */
   if(ATV.aviso)html+='<div class="atv-prog"><div class="txt">'+atvEsc(ATV.aviso)+'</div></div>';
 
+  /* A TARJA DO FILTRO (v3.327).
+     Filtro sem tarja e a maneira mais rapida de alguem jurar que sumiram
+     pedidos da semana. Ela diz o que esta ligado, quantos ficaram de
+     fora, e como desligar, na mesma linha. */
+  if(ATV.filtro.tipo){
+    const fora=ATV.todasDaSemana.length-ATV.linhas.length;
+    html+='<div class="atv-filtro-tarja"><b>'+atvEsc(atvFiltroNome())+'</b>'
+      +'<span>'+ATV.linhas.length+' de '+ATV.todasDaSemana.length+' pedidos'
+      +(fora?'  ·  '+fora+' fora da vista':'')+'</span>'
+      +'<button type="button" id="atvFiltroLimpa">mostrar todos</button></div>';
+  }
+
   html+='<div class="atv-cab-lista"><span></span><span>Pedido</span><span>Nome</span>'
     +'<span>Departamento</span>'
     +'<span>Entrega</span><span>Planejamento</span><span class="n tr-t">Total</span>'
@@ -22057,12 +22275,13 @@ function atvDesenha(){
   }
 
   atvPorDia().forEach(g=>{
-    const p=atvSoma(g.linhas);
+    /* a conta do dia e de TODAS as linhas dele, filtrado ou nao */
+    const p=atvSoma(g.todas);
     const teto=ATV_CAP.dia;
     const pc=teto?Math.round(p/teto*100):0;
     const f=atvFaixa(pc);
     const folga=teto-p;
-    const atrasados=g.linhas.filter(l=>atvAtrasado(l)).length;
+    const atrasados=g.todas.filter(l=>atvAtrasado(l)).length;
     html+='<div class="atv-dia" data-dia="'+g.chave+'"'
       +' style="--sat:'+f.c+';--sat-bg:'+f.b+'">'
       +'<div class="atv-dia-cab"><b>'+atvEsc(g.nome)+'</b>'
@@ -22140,42 +22359,73 @@ function atvQuando(iso){
     +String(d.getMonth()+1).padStart(2,'0')+' às '+hora);
 }
 
+/* ==================================================================
+   A BARRA LATERAL, E OS DOIS EIXOS COMO FILTRO (v3.327)
+
+   As contas de Situação e Etapa deixaram de ser só contas: cada linha é
+   um botão que filtra a semana. É o caminho mais curto entre a pergunta
+   que a lista provoca ("cinco atrasados?") e a resposta ("quais?").
+
+   Um filtro por vez, de propósito. Combinar situação com etapa daria
+   dezoito estados possíveis e nenhum jeito honesto de mostrar qual está
+   ligado numa faixa de 64px. Clicar em outro troca; clicar no mesmo
+   desliga.
+
+   As MESMAS contas alimentam a lista da lateral aberta e a do modal da
+   faixa estreita, porque são a mesma pergunta. Duas montagens separadas
+   é como a etiqueta da linha e o submenu divergiram uma vez antes.
+   ================================================================== */
+function atvContagem(){
+  /* a mesma base das outras contas: a semana inteira, e nao o filtro */
+  const L=ATV.todasDaSemana.length?ATV.todasDaSemana:ATV.linhas;
+  const conta={};
+  L.forEach(l=>{ const e=atvEtapaDe(l);
+    const k=e?e.k:''; conta[k]=(conta[k]||0)+1; });
+  const fin=conta['finalizado']||0;
+  return {
+    conta,
+    atrasados:L.filter(l=>atvAtrasado(l)).length,
+    finalizados:fin,
+    andamento:L.length-fin,
+  };
+}
+
+/* UMA LINHA DA LISTA, e ela é a mesma nos dois lugares. */
+function atvLinhaFiltro(tipo,valor,nome,cor,n,velha){
+  const on=ATV.filtro.tipo===tipo&&ATV.filtro.valor===valor;
+  return '<button type="button" class="l'+(velha?' velha':'')+(on?' on':'')
+    +(n?'':' zero')+'" data-f="'+tipo+'" data-v="'+atvEsc(valor)+'"'
+    +' style="--tg:'+cor+'"><i></i><span class="n">'+atvEsc(nome)+'</span>'
+    +'<span class="q">'+n+'</span></button>';
+}
+
+function atvListaSituacao(){
+  const c=atvContagem();
+  return atvLinhaFiltro('situacao','atrasado','Entrega vencida','#C6161B',c.atrasados)
+    +atvLinhaFiltro('situacao','finalizado','Finalizados','#16A34A',c.finalizados)
+    +atvLinhaFiltro('situacao','andamento','Em andamento','#9AA3AF',c.andamento);
+}
+function atvListaEtapas(){
+  const c=atvContagem().conta;
+  let h='';
+  ATV_ETAPAS.forEach(e=>{ h+=atvLinhaFiltro('etapa',e.k,e.n,e.c,c[e.k]||0); });
+  /* as que saíram da lista só aparecem se ainda houver alguém nelas */
+  ATV_ETAPAS_VELHAS.forEach(e=>{
+    if(!c[e.k])return;
+    h+=atvLinhaFiltro('etapa',e.k,e.n,e.c,c[e.k],true);
+  });
+  if(c[''])h+=atvLinhaFiltro('etapa','','sem etapa','#D1D5DB',c['']);
+  return h;
+}
+
 function atvLateral(){
   const el=document.getElementById('atvLat');
   if(!el)return;
-  /* a conta segue a MESMA regra da etiqueta da linha. Se contasse de outro
-     jeito, a soma da coluna não fecharia com o que se vê na tela. */
-  const conta={};
-  ATV.linhas.forEach(l=>{ const e=atvEtapaDe(l);
-    const k=e?e.k:''; conta[k]=(conta[k]||0)+1; });
-  const atrasados=ATV.linhas.filter(l=>atvAtrasado(l)).length;
   let h='';
   /* SITUAÇÃO ANTES DE ETAPA, e separada dela: são os dois eixos, e vê-los
      lado a lado é o ponto. Um pedido conta uma vez em cada. */
-  h+='<div class="g"><div class="t">Situação</div>'
-    +'<div class="l" style="--tg:#C6161B"><i></i><span class="n">Entrega vencida</span>'
-    +'<span class="q">'+atrasados+'</span></div>'
-    +'<div class="l" style="--tg:#16A34A"><i></i><span class="n">Finalizados</span>'
-    +'<span class="q">'+(conta['finalizado']||0)+'</span></div>'
-    +'<div class="l" style="--tg:#9AA3AF"><i></i><span class="n">Em andamento</span>'
-    +'<span class="q">'+(ATV.linhas.length-(conta['finalizado']||0))+'</span></div>'
-    +'</div>';
-  h+='<div class="g"><div class="t">Etapas</div>';
-  ATV_ETAPAS.forEach(e=>{
-    h+='<div class="l" style="--tg:'+e.c+'"><i></i><span class="n">'+atvEsc(e.n)+'</span>'
-      +'<span class="q">'+(conta[e.k]||0)+'</span></div>';
-  });
-  /* as que saíram da lista só aparecem se ainda houver alguém nelas */
-  ATV_ETAPAS_VELHAS.forEach(e=>{
-    if(!conta[e.k])return;
-    h+='<div class="l velha" style="--tg:'+e.c+'"><i></i><span class="n">'+atvEsc(e.n)+'</span>'
-      +'<span class="q">'+conta[e.k]+'</span></div>';
-  });
-  if(conta['']){
-    h+='<div class="l" style="--tg:#D1D5DB"><i></i><span class="n">sem etapa</span>'
-      +'<span class="q">'+conta['']+'</span></div>';
-  }
-  h+='</div>';
+  h+='<div class="g"><div class="t">Situação</div>'+atvListaSituacao()+'</div>';
+  h+='<div class="g"><div class="t">Etapas</div>'+atvListaEtapas()+'</div>';
   h+='<div class="g"><div class="t">Gravação</div><div class="obs">';
   /* NÃO HÁ MAIS BOTÃO DE SALVAR (v3.326). Cada mudança vira um recado de
      um campo só, mandado sozinho. Este bloco existe para a pessoa poder
@@ -22190,15 +22440,99 @@ function atvLateral(){
   }else{
     h+='Cada alteração é gravada sozinha, na hora. Não há botão de salvar.';
   }
-  const novos=ATV.linhas.filter(l=>l.novo).length;
+  const novos=(ATV.todasDaSemana.length?ATV.todasDaSemana:ATV.linhas)
+    .filter(l=>l.novo).length;
   if(novos)h+='<br>'+novos+' em <b style="color:var(--atv-novo)">verde escuro</b> chegaram depois que você abriu esta semana.';
   h+='</div></div>';
   h+='<div class="g"><div class="t">Capacidade</div><div class="obs">'
     +ATV_CAP.semana.toLocaleString('pt-BR')+' peças na semana, '+ATV_CAP.dia.toLocaleString('pt-BR')
     +' por dia, em '+ATV_CAP.dias+' dias.<br>Muda em Configurações, aba Produção.</div></div>';
   el.innerHTML=h;
+  /* os dois botões da faixa estreita acendem quando o filtro é deles */
+  const bt=document.getElementById('atvLatBtns');
+  if(bt)bt.querySelectorAll('button').forEach(b=>{
+    b.classList.toggle('filtrando',
+      (b.dataset.lista==='situacao'&&ATV.filtro.tipo==='situacao')
+      ||(b.dataset.lista==='etapas'&&ATV.filtro.tipo==='etapa'));
+  });
+  const md=document.getElementById('atvListaModal');
+  if(md&&!md.hidden){
+    document.getElementById('atvListaCorpo').innerHTML=
+      md.dataset.lista==='situacao'?atvListaSituacao():atvListaEtapas();
+  }
 }
 
+/* ---- ligar e desligar o filtro ---- */
+function atvFiltra(tipo,valor){
+  if(ATV.filtro.tipo===tipo&&ATV.filtro.valor===valor)ATV.filtro={tipo:'',valor:''};
+  else ATV.filtro={tipo,valor};
+  atvMonta();
+}
+window.atvFiltra=atvFiltra;
+function atvLimpaFiltro(){ ATV.filtro={tipo:'',valor:''}; atvMonta(); }
+window.atvLimpaFiltro=atvLimpaFiltro;
+/* o rótulo do que está filtrado, para a tarja da tela dizer o quê */
+function atvFiltroNome(){
+  const f=ATV.filtro;
+  if(!f.tipo)return '';
+  if(f.tipo==='situacao')return {atrasado:'Entrega vencida',
+    finalizado:'Finalizados',andamento:'Em andamento'}[f.valor]||f.valor;
+  if(f.valor==='')return 'sem etapa';
+  return (ATV_ETAPA[f.valor]||{}).n||f.valor;
+}
+window.atvFiltroNome=atvFiltroNome;
+function atvPassaFiltro(l){
+  const f=ATV.filtro;
+  if(!f.tipo)return true;
+  if(f.tipo==='etapa')return (l.etapa||'')===f.valor;
+  if(f.valor==='atrasado')return atvAtrasado(l);
+  if(f.valor==='finalizado')return l.etapa==='finalizado';
+  return l.etapa!=='finalizado';
+}
+
+(function ligaFiltros(){
+  /* um ouvinte só, no documento: a lista é redesenhada o tempo todo e
+     religar ouvintes a cada desenho é como se perde um clique */
+  document.addEventListener('click',e=>{
+    const b=e.target.closest&&e.target.closest('.atv-lat .l,.atv-lista-modal .l');
+    if(b&&!b.classList.contains('zero')){
+      /* ESCOLHER NO MODAL FECHA O MODAL. O motivo de clicar num filtro e
+         ver a lista filtrada, e o modal esta exatamente por cima dela. */
+      const noModal=!!e.target.closest('.atv-lista-modal');
+      atvFiltra(b.dataset.f,b.dataset.v);
+      if(noModal)atvListaModalFecha();
+      return;
+    }
+    const lb=e.target.closest&&e.target.closest('.atv-lat-btns button');
+    if(lb){ atvListaModalAbre(lb.dataset.lista); return; }
+    const lp=e.target.closest&&e.target.closest('#atvFiltroLimpa');
+    if(lp){ atvLimpaFiltro(); return; }
+    const md=document.getElementById('atvListaModal');
+    if(md&&!md.hidden&&(e.target===md||e.target.closest('#atvListaX')))atvListaModalFecha();
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape')return;
+    const md=document.getElementById('atvListaModal');
+    if(md&&!md.hidden)atvListaModalFecha();
+  });
+})();
+
+function atvListaModalAbre(qual){
+  const md=document.getElementById('atvListaModal');
+  if(!md)return;
+  md.dataset.lista=qual;
+  document.getElementById('atvListaTit').textContent=
+    qual==='situacao'?'Situação':'Etapas';
+  document.getElementById('atvListaCorpo').innerHTML=
+    qual==='situacao'?atvListaSituacao():atvListaEtapas();
+  md.hidden=false;
+}
+function atvListaModalFecha(){
+  const md=document.getElementById('atvListaModal');
+  if(md)md.hidden=true;
+}
+window.atvListaModalAbre=atvListaModalAbre;
+window.atvListaModalFecha=atvListaModalFecha;
 /* ---------------- quem pode ---------------- */
 function atvPodeVer(){
   if(typeof FT_EU==='object'&&FT_EU.carregado)return FT_EU.pode.indexOf('atividade')>=0;
@@ -22314,8 +22648,52 @@ async function atvOlhaCarimbos(){
       return meu!==undefined&&d.carimbos&&d.carimbos[k]!==undefined
              &&d.carimbos[k]!==meu;
     });
-    if(mudaram.length)await atvCarregaMeses(mudaram,true);
+    /* EM SILÊNCIO (v3.327). Quem chegou aqui não pediu nada: o mês mudou
+       porque OUTRA máquina mexeu. Tapar a tela inteira com o modal de
+       carregamento nesse momento é interromper o trabalho de quem está
+       aqui para contar uma novidade de outra pessoa. A tela se atualiza
+       por baixo e um aviso pequeno no canto conta o que mudou. */
+    if(mudaram.length)await atvCarregaMeses(mudaram,true,true);
   }catch(e){ /* a pergunta é um extra: falhar nela não pode atrapalhar */ }
+}
+
+/* ==================================================================
+   O AVISO DE CANTO
+
+   Diferente do ftStatus, que é do editor inteiro e fala de coisas que a
+   pessoa pediu. Este fala do que aconteceu SEM ela pedir, e por isso é
+   pequeno, some sozinho e nunca cobre a lista.
+
+   Ele diz O QUE mudou, e não "algo mudou": "2 pedidos atualizados" é uma
+   informação; "atualizado" é um susto sem conteúdo. */
+let atvToastTimer=0;
+function atvToast(txt){
+  const cx=document.getElementById('atvToast');
+  if(!cx||!atvAberto)return;
+  cx.textContent=txt;
+  cx.hidden=false;
+  requestAnimationFrame(()=>cx.classList.add('on'));
+  if(atvToastTimer)clearTimeout(atvToastTimer);
+  atvToastTimer=setTimeout(()=>{
+    cx.classList.remove('on');
+    setTimeout(()=>{ if(!cx.classList.contains('on'))cx.hidden=true; },260);
+  },4200);
+}
+window.atvToast=atvToast;
+
+/* O QUE MUDOU ENTRE O QUE EU TINHA E O QUE CHEGOU.
+   Comparar registro a registro é barato (são algumas centenas) e é a
+   única maneira de o aviso dizer um número em vez de um adjetivo. */
+function atvDiferenca(antes,depois){
+  let mudados=0,novos=0;
+  const velhos=antes||{};
+  Object.entries(depois||{}).forEach(([id,p])=>{
+    const v=velhos[id];
+    if(!v){ novos++; return; }
+    if(v.etapa!==p.etapa||v.plan!==p.plan||v.sumiu!==p.sumiu
+       ||v.concluidoEm!==p.concluidoEm||v.total!==p.total)mudados++;
+  });
+  return {mudados,novos};
 }
 
 function atvPollLiga(){
@@ -22335,13 +22713,22 @@ window.atvOlhaCarimbos=atvOlhaCarimbos;
    os dois: são duas leituras, e depois disso trocar entre essas semanas
    não custa nada.
    ================================================================== */
-async function atvCarregaMeses(chaves,forcar){
+async function atvCarregaMeses(chaves,forcar,quieto){
   if(typeof FT_SYNC!=='object'||!FT_SYNC.url)return;
   const faltam=chaves.filter(k=>forcar||!ATV.meses[k]);
   if(!faltam.length){ atvMonta(); return; }
   const _sem=ATV.semana;
-  ATV.carregando=true; ATV.prog={feito:0,total:faltam.length,onde:''};
-  atvDesenha();
+  /* QUIETO = a pessoa não pediu isto (v3.327).
+     Sem o véu, sem a barra, sem interromper. A diferença entre "estou
+     esperando uma resposta" e "chegou uma novidade" é a diferença entre
+     um modal e um aviso de canto, e confundir as duas foi o que deixou a
+     tela piscando o dia inteiro. */
+  if(!quieto){
+    ATV.carregando=true; ATV.prog={feito:0,total:faltam.length,onde:''};
+    atvDesenha();
+  }
+  const antes={};
+  faltam.forEach(k=>{ antes[k]=(ATV.meses[k]||{}).pedidos||{}; });
   try{
     for(const k of faltam){
       ATV.prog.onde=k;
@@ -22352,10 +22739,21 @@ async function atvCarregaMeses(chaves,forcar){
       if(ATV.semana!==_sem||!atvAberto)return;
       ATV.meses[k]={carimbo:d.carimbo||'',versao:+d.versao||0,
                     pedidos:d.pedidos||{}};
-      ATV.prog.feito++;
+      if(!quieto)ATV.prog.feito++;
       atvMonta();
     }
     ATV.salvoEm=atvUltimoSalvo()||ATV.salvoEm;
+    if(quieto){
+      let m=0,n=0;
+      faltam.forEach(k=>{
+        const d=atvDiferenca(antes[k],(ATV.meses[k]||{}).pedidos);
+        m+=d.mudados; n+=d.novos;
+      });
+      const partes=[];
+      if(n)partes.push(n+(n===1?' pedido novo':' pedidos novos'));
+      if(m)partes.push(m+(m===1?' atualizado':' atualizados'));
+      if(partes.length)atvToast(partes.join(' e ')+' agora');
+    }
   }catch(e){
     ATV.aviso='Não consegui ler o planejamento: '+String(e.message||e).slice(0,160);
   }finally{
@@ -22411,7 +22809,8 @@ function atvMonta(){
      quis responder de verdade. */
   if(atvVistosAoAbrir===null)atvVistosAoAbrir=new Set(fora.map(p=>p.id));
   fora.forEach(p=>{ p.novo=!atvVistosAoAbrir.has(p.id); });
-  ATV.linhas=fora;
+  ATV.todasDaSemana=fora;
+  ATV.linhas=fora.filter(atvPassaFiltro);
   atvDesenha();
 }
 window.atvMonta=atvMonta;
@@ -22544,6 +22943,24 @@ async function atvVarrer(){
   }
 }
 window.atvVarrer=atvVarrer;
+
+/* ABRIR O ORCAMENTO DE UMA LINHA (v3.327).
+   Reaproveita o relAbrePedido do Relatorio de Pedidos: e o mesmo trabalho
+   (pedir o arquivo ao servidor, abrir numa aba e trocar de secao) e uma
+   segunda copia dele so criaria um segundo lugar para quebrar. */
+(function ligaAbrePedido(){
+  document.addEventListener('click',e=>{
+    const b=e.target.closest&&e.target.closest('.atv-linha .abre');
+    if(!b)return;
+    const pg=document.getElementById('atvPage');
+    if(!pg||pg.hidden)return;
+    e.preventDefault();
+    const id=b.dataset.abre;
+    const l=ATV.linhas.find(x=>x.id===id)||{};
+    if(typeof relAbrePedido==='function')
+      relAbrePedido(id,(l.pedido?l.pedido+'  ':'')+(l.cliente||''));
+  });
+})();
 /* o nome antigo continua respondendo: há botão e atalho chamando por ele */
 window.atvGera=atvVarrer;
 async function atvConfere(){ return atvOlhaCarimbos(); }
@@ -22582,15 +22999,35 @@ function atvSemanaGuardada(){
   return /^\d{4}-\d{2}-\d{2}$/.test(v)?v:'';
 }
 
+/* A SEMANA NO PAINEL, NAS DUAS LARGURAS (v3.327).
+
+   Aberto: "17 a 22 de agosto de 2026" e, embaixo, se e a semana de hoje.
+   Estreito (64px): a frase inteira nao cabe de jeito nenhum e o que se via
+   era um texto cortado no meio de uma palavra. Vira "17|22" numa linha e
+   "agosto" na outra, que e a informacao inteira em duas palavras curtas.
+
+   O texto e trocado aqui, e nao escondido por CSS: `text-overflow` em cima
+   de uma frase de trinta caracteres numa faixa de 64px nao produz um
+   resumo, produz "17 a 22 de a…". */
+function atvSemanaEstreita(){
+  return document.body.classList.contains('menu-fechado');
+}
 function atvSemanaNoPainel(){
   const t=document.getElementById('atvSemTit');
   const s=document.getElementById('atvSemSub');
-  if(t)t.textContent=atvSemanaTitulo();
+  const estreito=atvSemanaEstreita();
+  const a=atvSeg(), b=atvFim();
+  if(t)t.textContent=estreito
+    ? (a.getDate()+'|'+b.getDate())
+    : atvSemanaTitulo();
   if(s){
     const hoje=atvISO(atvSegundaDe(new Date()));
-    s.textContent=ATV.semana===hoje?'semana de hoje':'semana de '+atvCurta(ATV.semana);
+    s.textContent=estreito
+      ? ATV_MESES[b.getMonth()].slice(0,3)
+      : (ATV.semana===hoje?'semana de hoje':'semana de '+atvCurta(ATV.semana));
   }
 }
+window.atvSemanaNoPainel=atvSemanaNoPainel;
 
 /* TROCAR DE SEMANA DEIXOU DE PERGUNTAR NADA.
    Não há mais "alterações não salvas": cada mudança já foi gravada no
@@ -23065,11 +23502,41 @@ function atvMontaImpressao(){
     corpo=folha.querySelector('.atv-folha-corpo');
     tbody=folha.querySelector('tbody');
   };
-  /* cabe mais uma linha nesta folha? quem responde é a folha */
-  const cabe=()=>corpo.scrollHeight<=corpo.clientHeight;
+  /* CABE MAIS UMA LINHA NESTA FOLHA?
+
+     A pergunta parece a mesma de antes e não é. Até a v3.326 ela era
+     `corpo.scrollHeight <= corpo.clientHeight`: "o conteúdo transbordou a
+     caixa?". Duas coisas erradas nisso.
+
+     A primeira: essas duas propriedades são INTEIRAS. O navegador arredonda
+     as duas, então um transbordo real de meio pixel lê como "igual", e a
+     linha entra. Meio pixel numa folha basta para o traço do rodapé
+     aparecer riscado no meio do texto da última linha.
+
+     A segunda, e a pior: `scrollHeight` não sabe onde o rodapé está. Ele
+     mede a caixa do corpo, e era o corpo inteiro que empurrava o rodapé
+     para baixo quando este ainda podia encolher.
+
+     Agora a pergunta é a que interessa, medida onde ela acontece: a última
+     linha termina ACIMA do filete do rodapé, com folga? É geometria de
+     verdade, em ponto flutuante, entre os dois elementos que se colidiam.
+
+     A FOLGA de 6px (cerca de 1,6mm) é seguro barato. O navegador arredonda
+     posições de maneiras ligeiramente diferentes na tela e no papel, e
+     insistir no último pixel disponível é apostar que os dois vão
+     arredondar igual. Custa no máximo uma linha por folha; a alternativa
+     custa uma folha ilegível. */
+  const FOLGA_RODAPE=6;
+  const cabe=()=>{
+    const ult=tbody.lastElementChild;
+    if(!ult)return true;
+    const rod=folha.querySelector('.atv-f-rodape');
+    if(!rod)return corpo.scrollHeight<=corpo.clientHeight;
+    return ult.getBoundingClientRect().bottom<=rod.getBoundingClientRect().top-FOLGA_RODAPE;
+  };
 
   const faixaDia=(g,cont)=>{
-    const p=atvSoma(g.linhas);
+    const p=atvSoma(g.todas||g.linhas);
     const teto=ATV_CAP.dia;
     const pc=teto?Math.round(p/teto*100):0;
     const f=atvFaixa(pc);

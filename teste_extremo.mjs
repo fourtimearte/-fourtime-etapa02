@@ -1203,6 +1203,7 @@ const virada = await pEd.evaluate(() => {
       ATV.linhas = Array.from({ length: n }, (_, i) => Object.assign({}, base,
         { id: 'X' + i, pedido: 'PD' + i, cliente: 'CLIENTE DE TESTE ' + i, plan: dias[i % 6],
           etapa, entrega: '17/08/2026', total: 100, sub: 100, per: 0, novo: false, atrasado: false }));
+      ATV.todasDaSemana = ATV.linhas;
       const f = atvMontaImpressao();
       vaza += [...document.querySelectorAll('.atv-folha-corpo')]
         .filter(c => c.scrollHeight > c.clientHeight + 1).length;
@@ -1211,15 +1212,17 @@ const virada = await pEd.evaluate(() => {
     }
     return { corte, vaza }; };
   const com = mede('prensa'), sem = mede('');
-  ATV.linhas = guarda; atvDesenha();
+  ATV.linhas = ATV.todasDaSemana = guarda; atvDesenha();
   return { com, sem }; });
 console.log('     ' + JSON.stringify(virada));
-/* v3.316: era 24 e passou a 25. A folha ganhou a coluna Departamento e um
-   cabecalho mais alto (os quatro cartoes), e AINDA ASSIM cabe um pedido a
-   mais, porque a pastilha da etapa perdeu o ponto colorido e o vao dele. O
-   numero e medido a cada rodada para nao ser suposto. */
-checa('com etapa em toda linha, a folha vira em 25 pedidos', virada.com.corte, 25);
-checa('  sem etapa, vira em 26', virada.sem.corte, 26);
+/* v3.316: era 24 e passou a 25. v3.327: caiu para 24 e 25, de proposito.
+   A quebra deixou de perguntar "o conteudo transbordou?" (em inteiros
+   arredondados, que nao sabem onde o rodape esta) e passou a perguntar "a
+   ultima linha termina acima do rodape, com folga?". A folga custa um
+   pedido por folha e compra o fim do rodape riscado no meio do texto. O
+   numero e medido a cada rodada para a troca ser decisao, e nao surpresa. */
+checa('com etapa em toda linha, a folha vira em 24 pedidos', virada.com.corte, 24);
+checa('  sem etapa, vira em 25', virada.sem.corte, 25);
 checa('  e nada vaza em nenhum dos casos', virada.com.vaza + virada.sem.vaza, 0);
 
 titulo('7e. OS CARTOES E O RODAPE');
@@ -1232,6 +1235,7 @@ r = await pEd.evaluate(() => {
     etapa: i === 0 ? 'finalizado' : 'prensa', sub: 60, per: 40, total: 100,
     chegouEm: '', novo: false, atrasado: false }));
   ATV_CAP.semana = 1500; ATV_CAP.dia = 325; ATV_CAP.dias = 6;
+  ATV.todasDaSemana = ATV.linhas;
   atvDesenha();
   const t = q => (document.querySelector(q) || {}).textContent || '';
   const larg = q => { const e = document.querySelector(q);

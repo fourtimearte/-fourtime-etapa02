@@ -697,6 +697,246 @@ checa('  e com a marca de decidido a mao', r.manual, true);
 checa('  a etapa nao foi junto', r.etapa, 'embalagem');
 checa('nada sobrou voando depois de soltar', r.sobrou, 0);
 
+console.log('\n=== 9b. AS SEIS CORRECOES DA v3.327 ===');
+/* Conferidas juntas porque cinco das seis moram na mesma tela e a sexta
+   (a folha) depende do que as outras deixam nela. */
+
+/* --- 1. atualizacao de outra maquina nao tapa a tela --- */
+MES['2026-08'].pedidos['ID00000003xx'].etapa = 'futurize';
+carimbaNovo('2026-08');
+const viuModal = [];
+const espia = setInterval(async () => {
+  try { viuModal.push(await p.evaluate(() => !document.getElementById('atvCarga').hidden)); }
+  catch (e) {}
+}, 60);
+await p.evaluate(() => atvOlhaCarimbos());
+await carregou();
+clearInterval(espia);
+r = await p.evaluate(() => ({
+  etapa: (ATV.linhas.find(l => l.id === 'ID00000003xx') || {}).etapa,
+  toast: !document.getElementById('atvToast').hidden,
+  txt: document.getElementById('atvToast').textContent,
+}));
+console.log('     ' + JSON.stringify(r) + '  modal visto=' + viuModal.filter(Boolean).length);
+checa('o que a outra maquina fez chegou', r.etapa, 'futurize');
+/* O INCOMODO QUE ISTO CONSERTA: o veu do carregamento piscava no meio do
+   trabalho toda vez que alguem em outra maquina mexia em qualquer coisa. */
+checa('  e o modal de carregamento NAO apareceu', viuModal.filter(Boolean).length, 0);
+checa('  quem avisa e um toast de canto', r.toast, true);
+checa('  dizendo o que mudou, e nao "algo mudou"', /atualizado/.test(r.txt), true);
+/* mas o modal continua existindo para quem PEDIU: abrir e conferir */
+r = await p.evaluate(() => {
+  ATV.carregando = true; ATV.prog = { feito: 1, total: 2, onde: '' }; atvDesenha();
+  const v = !document.getElementById('atvCarga').hidden;
+  ATV.carregando = false; ATV.prog = { feito: 0, total: 0, onde: '' }; atvDesenha();
+  return v;
+});
+checa('  o modal continua valendo para quem esta esperando', r, true);
+
+/* --- 3. Bordado --- */
+r = await p.evaluate(() => ({
+  existe: ATV_ETAPAS.some(e => e.k === 'bordado'),
+  nomes: ATV_ETAPAS.map(e => e.n),
+  noMenu: [...document.getElementById('atvMenuEtapa').querySelectorAll('button')]
+    .map(b => b.textContent).includes('Bordado'),
+}));
+checa('Bordado entrou nas etapas', r.existe, true);
+checa('  entre Silk e Calandra', r.nomes.slice(4, 7), ['Silk', 'Bordado', 'Calandra']);
+checa('  e esta no menu de escolha', r.noMenu, true);
+await p.evaluate(() => atvRecado('ID00000005xx', 'etapa', 'bordado'));
+await filaVazia();
+checa('  e o servidor aceita a etapa nova',
+  MES['2026-08'].pedidos['ID00000005xx'].etapa, 'bordado');
+
+/* --- 6. Situacao e Etapas filtram --- */
+const acha = (f, v) => [...document.querySelectorAll('#atvLat .l')]
+  .find(b => b.dataset.f === f && b.dataset.v === v);
+r = await p.evaluate(() => {
+  atvLimpaFiltro();
+  const antes = ATV.linhas.length;
+  const acha = (f, v) => [...document.querySelectorAll('#atvLat .l')]
+    .find(b => b.dataset.f === f && b.dataset.v === v);
+  acha('etapa', 'bordado').click();
+  return { antes, depois: ATV.linhas.length, todas: ATV.todasDaSemana.length,
+    nome: atvFiltroNome(),
+    tarja: (document.querySelector('.atv-filtro-tarja b') || {}).textContent,
+    /* O ITEM ACESO E OUTRO NO: a lista e redesenhada quando o filtro muda,
+       e o botao clicado ja saiu do documento. Procurar de novo e o certo. */
+    ligado: acha('etapa', 'bordado').classList.contains('on'),
+    /* AS CONTAS NAO PODEM ENCOLHER: capacidade e da semana, nao do filtro */
+    cartao: document.querySelector('.atv-card.c-pec .val').textContent };
+});
+console.log('     ' + JSON.stringify(r));
+checa('clicar numa etapa filtra a semana', r.depois, 1);
+checa('  sem tirar ninguem da semana', r.todas, r.antes);
+checa('  a tarja diz o que esta ligado', r.tarja, 'Bordado');
+checa('  o proprio item fica aceso', r.ligado, true);
+/* a folha diria "cabe" para uma semana que nao cabe, se o filtro contasse */
+const pecasSemana = await p.evaluate(() =>
+  ATV.todasDaSemana.reduce((a, l) => a + (+l.total || 0), 0).toLocaleString('pt-BR'));
+checa('  e os cartoes continuam contando a semana inteira', r.cartao, pecasSemana);
+r = await p.evaluate(() => {
+  const acha = (f, v) => [...document.querySelectorAll('#atvLat .l')]
+    .find(b => b.dataset.f === f && b.dataset.v === v);
+  const total = ATV.todasDaSemana.length;
+  acha('situacao', 'andamento').click();
+  const trocou = { n: ATV.linhas.length, nome: atvFiltroNome() };
+  acha('situacao', 'andamento').click();       /* o mesmo de novo desliga */
+  return { trocou, total, desligado: ATV.filtro.tipo, todos: ATV.linhas.length,
+    semTarja: !document.querySelector('.atv-filtro-tarja'),
+    /* ITEM COM ZERO NAO E CLICAVEL: filtrar para ver nada nao e um pedido
+       que alguem faz de proposito, e um clique perdido */
+    zeroTravado: (acha('etapa', 'prensa') || {}).className || '' };
+});
+console.log('     ' + JSON.stringify(r));
+checa('clicar numa situacao troca o filtro', r.trocou.nome, 'Em andamento');
+checa('  clicar no mesmo desliga', [r.desligado, r.semTarja], ['', true]);
+checa('  e a semana inteira volta', r.todos, r.total);
+checa('  uma etapa com zero pedidos nao e clicavel',
+  /zero/.test(r.zeroTravado), true);
+
+/* --- 2. a faixa estreita --- */
+r = await p.evaluate(() => {
+  document.body.classList.add('menu-fechado');
+  atvSemanaNoPainel(); atvLateral();
+  const tit = document.getElementById('atxSemTitFalso');
+  const est = { tit: document.getElementById('atvSemTit').textContent,
+    sub: document.getElementById('atvSemSub').textContent,
+    listaEscondida: getComputedStyle(document.getElementById('atvLat')).display,
+    botoes: [...document.querySelectorAll('#atvLatBtns button')].map(b => b.dataset.lista),
+    /* CABEM NA FAIXA: a regua e a largura do painel, e nao um numero
+       escrito aqui. O painel muda de largura com o zoom da tela. */
+    cabeNaFaixa: (() => {
+      const cx = document.getElementById('atvLatBtns');
+      const larg = cx.getBoundingClientRect().width;
+      return [...cx.querySelectorAll('button')]
+        .every(b => b.getBoundingClientRect().width <= larg + 0.5); })() };
+  document.getElementById('atvLatBtns').querySelector('[data-lista="etapas"]').click();
+  est.modal = !document.getElementById('atvListaModal').hidden;
+  est.itens = document.querySelectorAll('#atvListaCorpo .l').length;
+  est.titulo = document.getElementById('atvListaTit').textContent;
+  return est;
+});
+console.log('     ' + JSON.stringify(r));
+checa('na faixa estreita a semana vira duas linhas', [r.tit, r.sub], ['17|22', 'ago']);
+checa('  a lista empilhada some', r.listaEscondida, 'none');
+checa('  e viram dois botoes', r.botoes, ['situacao', 'etapas']);
+checa('  que cabem na faixa de 64px', r.cabeNaFaixa, true);
+checa('clicar em Etapas abre a lista num modal', [r.modal, r.titulo], [true, 'Etapas']);
+/* treze postos: os doze da v3.326 mais o Bordado. "sem etapa" so aparece
+   quando ha alguem sem etapa, e aqui nao ha. */
+checa('  com as treze etapas', r.itens, 13);
+r = await p.evaluate(() => {
+  atvLimpaFiltro();
+  atvListaModalAbre('etapas');
+  const b = [...document.querySelectorAll('#atvListaCorpo .l')]
+    .find(x => x.dataset.v === 'bordado');
+  b.click();
+  const fora = { filtro: ATV.filtro.valor, linhas: ATV.linhas.length,
+    fechou: document.getElementById('atvListaModal').hidden,
+    acendeu: document.querySelector('#atvLatBtns [data-lista="etapas"]')
+      .classList.contains('filtrando') };
+  atvLimpaFiltro();
+  document.body.classList.remove('menu-fechado');
+  atvSemanaNoPainel(); atvLateral();
+  fora.voltouLargo = document.getElementById('atvSemTit').textContent;
+  return fora;
+});
+console.log('     ' + JSON.stringify(r));
+checa('escolher no modal filtra igual', [r.filtro, r.linhas], ['bordado', 1]);
+checa('  e fecha o modal, senao ele tapa o que se foi ver', r.fechou, true);
+checa('  o botao da faixa fica aceso enquanto o filtro dele vale', r.acendeu, true);
+checa('voltar para a faixa larga devolve a frase inteira',
+  r.voltouLargo, '17 a 22 de agosto de 2026');
+
+/* --- 4. o nome e o numero abrem o orcamento --- */
+let pediuAbrir = '';
+await p.route('**/api/ft/abrir/*', async rt => {
+  pediuAbrir = rt.request().url().split('/abrir/')[1];
+  await p.evaluate(() => { window.__pediuAbrir = 1; }).catch(() => {});
+  await rt.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ ok: false, detail: 'so queria saber que voce pediu' }) });
+});
+r = await p.evaluate(() => ({
+  botoes: document.querySelectorAll('.atv-linha .abre').length,
+  linhas: document.querySelectorAll('.atv-linha').length,
+}));
+checa('cada linha tem dois botoes que abrem (pedido e nome)',
+  r.botoes, r.linhas * 2);
+await p.evaluate(() => { document.querySelector('.atv-linha .ped.abre').click(); });
+/* O ORCAMENTO ABERTO TEM ALTERACOES NAO SALVAS, e o editor pergunta antes
+   de trocar de documento. Isso e o certo, e faz parte do caminho: o teste
+   responde a pergunta em vez de fingir que ela nao existe. */
+const perguntou = await p.waitForSelector('#ftEscFundo.on .ft-esc-bt.principal',
+  { timeout: 8000 }).then(() => true).catch(() => false);
+if (perguntou) await p.click('#ftEscFundo.on .ft-esc-bt.principal');
+await p.waitForFunction(() => !!window.__pediuAbrir, null, { timeout: 8000 })
+  .catch(() => {});
+console.log('     pediu abrir: ' + pediuAbrir + '  perguntou=' + perguntou);
+checa('o editor pergunta antes de trocar um documento nao salvo', perguntou, true);
+checa('  e clicar no numero do pedido pede o orcamento ao servidor',
+  /^ID0000000/.test(pediuAbrir), true);
+await p.unroute('**/api/ft/abrir/*');
+await p.evaluate(() => { if (typeof ftStatus === 'object' && ftStatus.fecha) ftStatus.fecha(); });
+
+/* --- 5. a folha nunca mais come o rodape --- */
+console.log('\n=== 9c. A FOLHA NAO COME O RODAPE (v3.327) ===');
+/* O defeito: a medida antiga era `corpo.scrollHeight <= corpo.clientHeight`,
+   duas propriedades INTEIRAS que nao sabem onde o rodape esta. Meio pixel
+   de transbordo lia como "igual", e o rodape saia riscado no meio da
+   ultima linha. Agora a pergunta e geometrica, entre os dois elementos que
+   se colidiam, com folga. */
+const FORMAS = [
+  ['nomes curtos', 'ACME', 'DTF'],
+  ['nome que quebra', 'PREFEITURA MUNICIPAL DE SAO BERNARDO DO CAMPO SECRETARIA DE ESPORTES', 'DTF + Sublimação'],
+  ['departamento longo', 'ACME', 'Silk + sublimação + DTF'],
+];
+for (const [rot, cli, dep] of FORMAS) {
+  const q = await p.evaluate(([cli, dep]) => {
+    const fora = [];
+    [12, 26, 30, 31, 34, 48, 77].forEach(n => {
+      ATV.todasDaSemana = Array.from({ length: n }, (_, i) => ({
+        id: 'F' + i, pedido: 'PD00' + (7000 + i), cliente: cli + ' ' + i, vendedor: 'Dani',
+        entrega: String(17 + (i % 6)).padStart(2, '0') + '/08/2026',
+        plan: '2026-08-' + String(17 + (i % 6)).padStart(2, '0'),
+        etapa: 'corte', departamento: dep, sub: 5, per: 5, total: 10, novo: false }));
+      ATV.linhas = ATV.todasDaSemana.slice();
+      const folhas = atvMontaImpressao();
+      document.body.classList.add('atv-imprimindo');
+      let invade = 0, pior = 0, dados = 0, maxLinhas = 0, vaza = 0;
+      document.querySelectorAll('.atv-folha').forEach(f => {
+        const rod = f.querySelector('.atv-f-rodape').getBoundingClientRect();
+        const cai = f.querySelector('.atv-folha-corpo');
+        if (cai.scrollHeight > cai.clientHeight + 1) vaza++;
+        maxLinhas = Math.max(maxLinhas, f.querySelectorAll('.atv-tab tbody tr').length);
+        dados += f.querySelectorAll('.atv-tab tbody tr:not(.f-dia)').length;
+        f.querySelectorAll('.atv-tab tr').forEach(tr => {
+          const t = tr.getBoundingClientRect();
+          if (t.bottom > rod.top) { invade++; pior = Math.max(pior, t.bottom - rod.top); }
+        });
+      });
+      document.body.classList.remove('atv-imprimindo');
+      atvDesmontaImpressao();
+      fora.push({ n, folhas, invade, px: +pior.toFixed(2), dados, maxLinhas, vaza });
+    });
+    return fora;
+  }, [cli, dep]);
+  const invadiu = q.filter(x => x.invade).length;
+  const perdeu = q.filter(x => x.dados !== x.n).length;
+  const transbordou = q.filter(x => x.vaza).length;
+  console.log('     ' + rot.padEnd(20) + ' ' + JSON.stringify(q.map(x => x.n + '=>' + x.folhas + 'f/' + x.maxLinhas + 'l')));
+  checa('[' + rot + '] nenhuma linha passa por cima do rodape', invadiu, 0);
+  checa('  nenhuma folha transborda', transbordou, 0);
+  checa('  e nenhum pedido se perde na quebra', perdeu, 0);
+  checa('  no maximo 31 linhas por folha, contando os cabecalhos de dia',
+    q.every(x => x.maxLinhas <= 31), true);
+}
+/* O FILTRO E ESTADO DA TELA, e as secoes seguintes montam fixtures na mao:
+   deixar um filtro ligado aqui faria as linhas delas simplesmente nao
+   aparecerem, e o erro apontaria para o lugar errado. */
+await p.evaluate(() => { ATV.filtro = { tipo: '', valor: '' };
+  ATV.linhas = ATV.todasDaSemana = []; atvDesenha(); });
+
 console.log('\n=== 10. QUEM SO OLHA NAO MEXE ===');
 r = await p.evaluate(() => {
   const real = FT_EU.papel;
@@ -719,6 +959,7 @@ await p.evaluate(() => {
     id: 'F' + i, pedido: 'PD007' + i, cliente: 'CLIENTE ' + i, vendedor: 'Dani',
     entrega: '1' + (7 + (i % 6)) + '/08/2026', plan: '2026-08-1' + (7 + (i % 6)),
     etapa: 'corte', departamento: 'DTF', sub: 5, per: 5, total: 10, novo: false }));
+  ATV.todasDaSemana = ATV.linhas;
   atvDesenha();
 });
 r = await p.evaluate(() => {
@@ -791,10 +1032,17 @@ console.log('     vira 2 folhas a partir de ' + virada.comChip.corte
    V3.316: era 23 com etapa e 25 sem; passou a 24 e 25. A folha ganhou uma
    coluna (Departamento) e um cabecalho mais alto (os quatro cartoes), e
    mesmo assim cabe MAIS um pedido: a pastilha perdeu o ponto colorido e o
-   vao dele, e o que ela deixou de gastar em altura pagou o cabecalho. O
-   numero e medido a cada rodada justamente para nao ser suposto. */
-checa('com etapa em toda linha, a folha vira em 25 pedidos', virada.comChip.corte, 25);
-checa('  sem etapa, vira em 26', virada.semChip.corte, 26);
+   vao dele, e o que ela deixou de gastar em altura pagou o cabecalho.
+
+   V3.327: caiu um pedido em cada caso (25 -> 24 e 26 -> 25). E o preco
+   escolhido: a quebra deixou de perguntar "o conteudo transbordou?", em
+   inteiros arredondados, e passou a perguntar "a ultima linha termina
+   acima do rodape, com 6px de folga?". Esses 6px sao um pedido por folha,
+   e compram a garantia de que o rodape nunca mais aparece riscado no meio
+   da ultima linha. O numero e medido a cada rodada justamente para a troca
+   ser uma decisao, e nao uma surpresa. */
+checa('com etapa em toda linha, a folha vira em 24 pedidos', virada.comChip.corte, 24);
+checa('  sem etapa, vira em 25', virada.semChip.corte, 25);
 checa('  e em nenhum dos casos alguma coisa vaza da folha',
   virada.comChip.vaza + virada.semChip.vaza, 0);
 
@@ -812,6 +1060,7 @@ r = await p.evaluate(() => {
     etapa: i === 0 ? 'finalizado' : 'prensa',
     sub: 60, per: 40, total: 100, chegouEm: '', novo: false }));
   ATV_CAP.semana = 1500; ATV_CAP.dia = 325; ATV_CAP.dias = 6;
+  ATV.todasDaSemana = ATV.linhas;
   atvDesenha();
   const txt = s => (document.querySelector(s) || {}).textContent || '';
   const larg = s => { const e = document.querySelector(s);
@@ -979,6 +1228,7 @@ r = await p.evaluate(async () => {
   ATV.linhas = [{ id: 'R1', pedido: 'PD009400', cliente: 'CLIENTE', vendedor: 'Dani',
     entrega: '18/08/2026', plan: '2026-08-18', etapa: 'corte', departamento: 'DTF',
     sub: 1, per: 0, total: 1, chegouEm: '', novo: false }];
+  ATV.todasDaSemana = ATV.linhas;
   atvDesenha();
   const m = document.getElementById('atvMenuEtapa');
   document.querySelector('.atv-chip').dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -1012,6 +1262,10 @@ checa('  com barra de rolagem visivel', r.barra, 'thin');
 checa('rolar a pagina continua fechando', r.fechouComAPagina, true);
 
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
+console.log('     estado: ' + JSON.stringify(await p.evaluate(() => ({
+  semana: ATV.semana, filtro: ATV.filtro, aberto: atvAberto,
+  pgHidden: document.getElementById('atvPage').hidden,
+  linhas: document.querySelectorAll('.atv-linha').length }))));
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
    quase todas moram na mesma linha da tabela, e o que quebra uma quebra a
    do lado (uma coluna a mais desloca todas as outras). */
@@ -1041,6 +1295,11 @@ r = await p.evaluate(() => {
       entrega: '17/08/2026', plan: '2026-08-17', etapa: 'separacao',
       departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '', novo: false },
   ];
+  /* ATV.linhas E DERIVADA (v3.326): quem monta fixture na mao tem de pôr
+     tambem a lista de contagem, senao os cartoes e a barra lateral contam
+     a semana de verdade enquanto a tabela mostra a de mentira. */
+  ATV.todasDaSemana = ATV.linhas;
+  ATV.todasDaSemana = ATV.linhas;
   atvDesenha();
   const li = id => document.querySelector('.atv-linha[data-id="' + id + '"]');
   const chip = id => (li(id).querySelector('.atv-chip span') || {}).textContent;
@@ -1083,14 +1342,15 @@ checa('  e traz o departamento do orcamento', r.dep, 'DTF + Silk');
    nao eram: Atrasado, que e situacao e nao lugar, e Organizar, que so
    existia para empurrar pedido de semana -- coisa que agora se faz
    mudando a data no calendario. */
-checa('as doze etapas sao os doze postos, na ordem pedida', r.etapas,
+/* treze na v3.327: Bordado entrou entre Silk e Calandra, a pedido */
+checa('as treze etapas sao os treze postos, na ordem pedida', r.etapas,
   ['Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk',
-   'Calandra', 'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem',
-   'Finalizado']);
-checa('  e o menu oferece as doze mais "sem etapa"', r.noMenu,
+   'Bordado', 'Calandra', 'Futurize', 'Conferência', 'Cd costura', 'Costura',
+   'Embalagem', 'Finalizado']);
+checa('  e o menu oferece as treze mais "sem etapa"', r.noMenu,
   ['Corte', 'Impressão sublimação', 'Impressão DTF', 'Prensa DTF', 'Silk',
-   'Calandra', 'Futurize', 'Conferência', 'Cd costura', 'Costura', 'Embalagem',
-   'Finalizado', 'sem etapa']);
+   'Bordado', 'Calandra', 'Futurize', 'Conferência', 'Cd costura', 'Costura',
+   'Embalagem', 'Finalizado', 'sem etapa']);
 checa('a etapa escolhida aparece', [r.chips.V1, r.chips.V2], ['Corte', 'Futurize']);
 /* O CONSERTO: atrasado sem etapa continua "sem etapa", com a tarja por
    fora. Antes Atrasado tomava o chip e a etapa desaparecia da tela. */
@@ -1134,6 +1394,7 @@ const rDep = await p.evaluate(deps => {
     cliente: 'CLIENTE ' + i, vendedor: 'Dani', entrega: '18/08/2026',
     plan: '2026-08-18', etapa: 'corte', departamento: d,
     sub: 1, per: 1, total: 2, chegouEm: '', novo: false }));
+  ATV.todasDaSemana = ATV.linhas;
   atvDesenha();
   const cortado = e => e.scrollWidth > e.clientWidth + 0.5;
   const tela = [...document.querySelectorAll('.atv-linha .dep')]
@@ -1201,6 +1462,7 @@ r = await p.evaluate(async () => {
     id: 'M' + i, pedido: 'PD007' + String(i).padStart(3, '0'), cliente: 'CLIENTE ' + i,
     vendedor: 'Dani', entrega: '17/08/2026', plan: '2026-08-17', etapa: 'corte',
     departamento: 'DTF', sub: 1, per: 0, total: 1, chegouEm: '', novo: false }));
+  ATV.todasDaSemana = ATV.linhas;
   atvDesenha();
   const chips = [...document.querySelectorAll('.atv-chip')];
   const ultimo = chips[chips.length - 1];
@@ -1222,7 +1484,7 @@ r = await p.evaluate(async () => {
   };
 });
 console.log('     ' + JSON.stringify(r));
-checa('o menu abre com as treze escolhas', [r.aberto, r.botoes], [true, 13]);
+checa('o menu abre com as catorze escolhas', [r.aberto, r.botoes], [true, 14]);
 checa('  inteiro dentro da tela', r.dentroDaTela, true);
 checa('  sem nenhum botao recortado', r.recortados, 0);
 checa('  e sem precisar rolar', r.cabeSemRolar, true);
