@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.324';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.325';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -22120,7 +22120,12 @@ function atvAlternar(abrir){
   if(atvAberto){
     if(typeof bdAlternar==='function')bdAlternar(false);
     if(typeof relAlternar==='function'&&window.relAlternar)relAlternar(false);
-    if(!ATV.semana)ATV.semana=atvISO(atvSegundaDe(new Date()));
+    /* A SEMANA TAMBÉM SOBREVIVE AO F5 (v3.325).
+       Sem isto, atualizar a página devolvia a pessoa para a seção certa
+       (v3.322) mas SEMPRE na semana de hoje. Quem estava planejando a de
+       31/08 recarregava e via a de 17/08, com a impressão de que o
+       trabalho tinha sumido. */
+    if(!ATV.semana)ATV.semana=atvSemanaGuardada()||atvISO(atvSegundaDe(new Date()));
     pg.hidden=false;
     if(area)area.style.display='none';
     atvDesenha();
@@ -22128,8 +22133,18 @@ function atvAlternar(abrir){
     /* abrir a semana já traz o que estiver salvo: quem entra quer ver o
        planejamento, e não uma tela vazia com um botão. Ler o Drive inteiro
        é que fica para o botão. */
-    if(!ATV.linhas.length&&!ATV.carregando)atvBuscaSalvo();
-    else atvConfere();
+    atvSemanaGuarda();
+    /* SEMPRE RELÊ O QUE O SERVIDOR TEM (v3.325).
+
+       Antes: `if(!ATV.linhas.length) atvBuscaSalvo()`. Uma vez que a
+       semana estivesse na memória desta aba, sair da seção e voltar não
+       relia nada. Quem salvasse em outra máquina não aparecia aqui
+       NUNCA, e as duas telas mostravam planejamentos diferentes do mesmo
+       dia sem nada avisar.
+
+       O atvBuscaSalvo agora sabe se proteger: com alteração não salva na
+       tela ele NÃO passa por cima, avisa. */
+    if(!ATV.carregando)atvBuscaSalvo();
   }else{
     pg.hidden=true;
     if(area)area.style.display='';
@@ -22139,6 +22154,17 @@ function atvAlternar(abrir){
   if(typeof ftAtualizaBarraAbas==='function')ftAtualizaBarraAbas();
 }
 window.atvAlternar=atvAlternar;
+
+/* VOLTAR PARA A ABA TAMBÉM RELÊ.
+   O caso de sempre: a tela fica aberta a manhã inteira numa máquina
+   enquanto outra pessoa salva na dela. Sem isto, só um F5 traria o novo.
+   A mesma proteção do atvBuscaSalvo vale aqui: com alteração não salva na
+   tela, ele avisa em vez de passar por cima. */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible')return;
+  if(!atvAberto||ATV.carregando)return;
+  atvBuscaSalvo();
+});
 
 /* ==================================================================
    A CHECAGEM BÁSICA: falta alguém nesta semana?
@@ -22247,6 +22273,17 @@ window.atvNotifFecha=atvNotifFecha;
   });
 })();
 
+/* a semana aberta, guardada por navegador. Mesma ideia do ft_secao. */
+const ATV_SEM_CHAVE='ft_atv_semana';
+function atvSemanaGuarda(){
+  try{ localStorage.setItem(ATV_SEM_CHAVE,ATV.semana||''); }catch(e){}
+}
+function atvSemanaGuardada(){
+  let v='';
+  try{ v=localStorage.getItem(ATV_SEM_CHAVE)||''; }catch(e){}
+  return /^\d{4}-\d{2}-\d{2}$/.test(v)?v:'';
+}
+
 function atvSemanaNoPainel(){
   const t=document.getElementById('atvSemTit');
   const s=document.getElementById('atvSemSub');
@@ -22260,6 +22297,7 @@ function atvSemanaNoPainel(){
 function atvTrocaSemana(passos){
   if(ATV.sujo&&!confirm('Há alterações não salvas nesta semana. Trocar de semana perde o que não foi gravado. Continuar?'))return;
   ATV.semana=atvISO(atvMais(atvSeg(),passos*7));
+  atvSemanaGuarda();
   ATV.linhas=[]; ATV.vistos={}; ATV.salvoEm=''; ATV.sujo=false; ATV.aviso='';
   atvNotifFecha();          /* o aviso era da semana que acabou de sair */
   atvSemanaNoPainel();
@@ -22285,6 +22323,21 @@ async function atvBuscaSalvo(){
     const d=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(_sem));
     if(ATV.semana!==_sem)return;
     if(d&&d.existe){
+      /* O QUE ESTÁ NA TELA E NÃO FOI GRAVADO NÃO SE PERDE.
+         Reler é o certo (outra máquina pode ter salvado), mas reler não
+         pode apagar trabalho de quem está no meio de uma mudança aqui.
+         Quando as duas coisas acontecem, quem decide é a pessoa: a tela
+         fica como está e o aviso diz que o servidor mudou. */
+      if(ATV.sujo&&ATV.linhas.length&&(d.salvoEm||'')!==(ATV.salvoEm||'')){
+        /* o atvQuando já vem com o "às" ou o "em dd/mm às": juntar mais um
+           "às" aqui daria "às às 16:45" */
+        ATV.aviso='Outra máquina salvou este planejamento'
+          +(d.salvoEm?' '+atvQuando(d.salvoEm):'')
+          +'. O que está na tela aqui ainda não foi gravado: salvar vai por '
+          +'cima do que veio. Para ver o de lá, troque de semana e volte.';
+        atvDesenha();
+        return;
+      }
       ATV.linhas=(d.linhas||[]).map(l=>Object.assign({},l,{novo:false}));
       ATV.vistos=d.vistos||{};
       ATV.salvoEm=d.salvoEm||'';

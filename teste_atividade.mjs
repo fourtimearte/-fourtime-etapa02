@@ -1283,6 +1283,78 @@ checa('  com barra de rolagem visivel', r.barra, 'thin');
    para a linha errada */
 checa('rolar a pagina continua fechando', r.fechouComAPagina, true);
 
+console.log('\n=== 8p. O QUE OUTRA MAQUINA SALVOU CHEGA AQUI (v3.325) ===');
+/* O CASO: ele salvou numa maquina e a outra continuou mostrando o de
+   antes. Duas causas, as duas provadas aqui.
+
+   1. Uma vez que a semana estava na memoria desta aba, sair da secao e
+      voltar NAO relia nada (`if(!ATV.linhas.length) atvBuscaSalvo()`).
+      Quem salvasse em outra maquina nao aparecia aqui nunca.
+   2. Atualizar a pagina devolvia a secao certa (v3.322) mas SEMPRE na
+      semana de hoje: a semana aberta nao era lembrada. */
+Object.keys(FTK).forEach(k => delete FTK[k]);
+delete DRIVE.semanas['2026-08-10'];
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.semana = '2026-08-17'; ATV.hojeFixo = '2026-08-17'; });
+DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
+  salvoEm: '2026-08-17T09:00:00.000Z', vistos: {},
+  linhas: [{ id: 'IDANT0001xxx', pedido: 'PD009500', cliente: 'COMO ESTAVA ANTES',
+    vendedor: 'Dani', entrega: '18/08/2026', plan: '2026-08-18', etapa: 'corte',
+    departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '' }] };
+await p.evaluate(() => atvBuscaSalvo());
+await p.waitForTimeout(800);
+checa('a tela comeca com o que estava salvo',
+  await p.evaluate(() => ATV.linhas.map(l => l.etapa)), ['corte']);
+
+/* a OUTRA maquina salva: o arquivo no Drive muda */
+DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
+  salvoEm: '2026-08-17T15:30:00.000Z', vistos: {},
+  linhas: [{ id: 'IDANT0001xxx', pedido: 'PD009500', cliente: 'COMO ESTAVA ANTES',
+    vendedor: 'Dani', entrega: '18/08/2026', plan: '2026-08-18', etapa: 'finalizado',
+    departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '' }] };
+/* aqui a pessoa sai da secao e volta, sem recarregar nada */
+await p.evaluate(() => { atvAlternar(false); atvAlternar(true); });
+await p.waitForTimeout(900);
+r = await p.evaluate(() => ({ etapas: ATV.linhas.map(l => l.etapa),
+  salvoEm: ATV.salvoEm }));
+console.log('     ' + JSON.stringify(r));
+checa('voltar para a secao traz o que a outra maquina salvou', r.etapas, ['finalizado']);
+checa('  com o horario de la', r.salvoEm.slice(11, 16), '15:30');
+
+/* MAS NAO PODE PASSAR POR CIMA DE TRABALHO NAO GRAVADO.
+   Reler e o certo; reler apagando o que a pessoa esta fazendo aqui, nao. */
+await p.evaluate(() => { ATV.linhas[0].etapa = 'costura'; ATV.sujo = true; });
+DRIVE.semanas['2026-08-17'].salvoEm = '2026-08-17T16:45:00.000Z';
+DRIVE.semanas['2026-08-17'].linhas[0].etapa = 'embalagem';
+await p.evaluate(() => { atvAlternar(false); atvAlternar(true); });
+await p.waitForTimeout(900);
+r = await p.evaluate(() => ({ etapas: ATV.linhas.map(l => l.etapa), aviso: ATV.aviso }));
+console.log('     ' + JSON.stringify(r));
+checa('com alteracao nao salva, a tela NAO e sobrescrita', r.etapas, ['costura']);
+checa('  mas o aviso conta que outra maquina salvou',
+  r.aviso.indexOf('Outra máquina salvou') === 0, true);
+
+/* E A SEMANA ABERTA SOBREVIVE AO F5 */
+r = await p.evaluate(() => {
+  const antes = localStorage.getItem('ft_atv_semana');
+  /* sem isto o atvTrocaSemana pergunta antes de sair (ha coisa nao salva
+     do bloco de cima) e o navegador sem gente responde NAO */
+  ATV.sujo = false;
+  atvTrocaSemana(1);                       /* vai para 24/08 e grava */
+  const gravou = localStorage.getItem('ft_atv_semana');
+  /* finge o recarregamento: ATV zerado, como numa pagina nova */
+  ATV.semana = ''; ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  atvAlternar(false); atvAlternar(true);
+  return { antes, gravou, depoisDoF5: ATV.semana };
+});
+console.log('     ' + JSON.stringify(r));
+checa('trocar de semana grava qual e', r.gravou, '2026-08-24');
+checa('  e o recarregamento volta para ela, e nao para a de hoje',
+  r.depoisDoF5, '2026-08-24');
+delete DRIVE.semanas['2026-08-17'];
+await p.evaluate(() => { ATV.semana = '2026-08-17'; ATV.linhas = []; ATV.vistos = {};
+  ATV.sujo = false; ATV.hojeFixo = ''; });
+
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
    quase todas moram na mesma linha da tabela, e o que quebra uma quebra a

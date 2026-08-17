@@ -83,10 +83,24 @@ export async function roda(F) {
   /* espera o relatorio parar de se redesenhar: o que interessa e o campo de
      Dia da lateral ja ter as opcoes do desenho ATUAL (o original dormia
      600 ms fixos e media no meio) */
-  const relAssentou = () => F.assenta(p, () => {
-    const s = document.getElementById('rlDia');
-    return { n: s ? s.options.length : -1, dd: !!(s && s.closest('.ft-dd')) };
-  });
+  /* ASSENTAR NAO BASTA: TEM DE TER CHEGADO.
+     O relAssentou so cobrava duas leituras iguais do numero de opcoes. A
+     busca do relatorio e assincrona, e antes de ela voltar o select tem UMA
+     opcao ("Todos"): duas leituras de 1 dao iguais e o teste dava por
+     assentado o estado ANTIGO. Ai o menu abria com uma opcao so e a suite
+     falhava com "1" em vez de "32", uma vez a cada tantas rodadas.
+     A lista de dias so existe DEPOIS que os dados chegam: esperar por ela
+     e esperar o sinal certo. */
+  const relAssentou = async () => {
+    await p.waitForFunction(() => {
+      const s = document.getElementById('rlDia');
+      return !!s && s.options.length > 1;
+    }, null, { timeout: 20000 }).catch(() => {});
+    return F.assenta(p, () => {
+      const s = document.getElementById('rlDia');
+      return { n: s ? s.options.length : -1, dd: !!(s && s.closest('.ft-dd')) };
+    });
+  };
 
   const carregaRelatorio = async () => {
     await p.evaluate(async () => {

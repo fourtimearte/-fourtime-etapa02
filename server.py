@@ -3268,7 +3268,7 @@ def _atv_nome_arquivo(semana):
 
 
 @app.get("/api/ft/atividade-lista")
-def ft_atividade_lista(request: Request, ano: int = 0, mes: int = 0):
+def ft_atividade_lista(request: Request, resposta: Response, ano: int = 0, mes: int = 0):
     """Quais arquivos existem no mes, sem abrir nenhum.
 
        Vem com o modifiedTime de cada um, e e ele que torna a geracao
@@ -3278,6 +3278,7 @@ def ft_atividade_lista(request: Request, ano: int = 0, mes: int = 0):
     exige_token(request)
     exige_editor_atual(request)
     exige_orcamentos()
+    resposta.headers["Cache-Control"] = "no-store, max-age=0"
     h = datetime.now(timezone.utc)
     ano = int(ano or h.year); mes = int(mes or h.month)
     if not (1 <= mes <= 12):
@@ -3342,8 +3343,16 @@ async def ft_atividade_lote(request: Request):
 
 
 @app.get("/api/ft/atividade-guardado")
-def ft_atividade_guardado(request: Request, semana: str = ""):
-    """O planejamento salvo de uma semana, se houver."""
+def ft_atividade_guardado(request: Request, resposta: Response, semana: str = ""):
+    """O planejamento salvo de uma semana, se houver.
+
+       SEM CACHE, EXPLICITAMENTE. A resposta nao trazia cabecalho de cache
+       nenhum, e "nenhum" nao e o mesmo que "nao guarde": navegador e
+       intermediario ficam livres para decidir por conta propria. Num dado
+       que muda quando OUTRA MAQUINA salva, uma copia velha servida em
+       silencio e a pior falha possivel -- duas telas mostrando
+       planejamentos diferentes do mesmo dia, sem nada avisar."""
+    resposta.headers["Cache-Control"] = "no-store, max-age=0"
     exige_atividade(request)
     exige_token(request)
     exige_editor_atual(request)
