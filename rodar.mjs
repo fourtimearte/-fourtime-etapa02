@@ -55,6 +55,8 @@ const SUITES = [
      registro. Este roda o server.py por dentro, sem HTTP nem navegador,
      porque a regra do recado precisa ser cobrada onde ela mora. */
   'teste_indice_mensal',
+  /* v3.328 — o anexo que se reconhece sozinho e o cliente com tres nomes */
+  'teste_info_e_busca',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor

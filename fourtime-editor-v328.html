@@ -1222,6 +1222,12 @@
   .hd-abrir svg,.ft-combo-abrir svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
   .ft-combo-abrir{align-self:center;margin-right:1.6mm;}
   .pick-item.pick-novo{color:var(--ft-vermelho);font-weight:600;}
+  /* o "achei por aqui" da busca ampliada: discreto, do lado direito */
+  .pick-item .pick-por{
+    margin-left:auto;padding-left:10px;font-size:9.5px;font-weight:500;
+    color:var(--ft-cinza-40);white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;max-width:46%;flex:0 1 auto;
+  }
   @media print{ .pick-menu,.hd-abrir,.ft-combo-abrir{display:none !important;} }
 
   /* ---- calendário (popover próprio, como os menus de DTF/Cor) ---- */
@@ -1516,6 +1522,49 @@
   .lay-img.com-img img{display:block;}
   /* ---- coluna esquerda (2/3) ---- */
   .lay-topo{display:flex;align-items:stretch;gap:2mm;margin-bottom:2mm;}
+
+  /* ================================================================
+     MÓDULO DE INFORMAÇÕES (v3.328)
+
+     Um layout que só tem imagem (e, no máximo, uma observação) não é um
+     layout de produção: é um anexo. Etiqueta de cliente, tabela de
+     medidas, croqui de embalagem. Some tudo o que a fábrica leria como
+     "faltou preencher" — tecido, cor e a grade de tamanhos — e ficam a
+     imagem, o design, a observação, a referência e o botão do layout.
+
+     O que some é EXATAMENTE o que o reconhecimento olha (ver layEhInfo):
+     é isso que garante que virar informação nunca esconde dado nenhum.
+     ================================================================ */
+  .lay-info-selo{display:none;}
+  .lay-modulo.info .combo-ref .lay-info-selo{
+    display:block;position:absolute;left:0;top:50%;transform:translateY(-50%);
+    font-weight:800;letter-spacing:.10em;color:var(--ft-vermelho);
+    /* o clique atravessa e cai no campo: a referência continua digitável,
+       e digitar é como se sai do modo informação */
+    pointer-events:none;white-space:nowrap;
+  }
+  .lay-modulo.info .combo-ref .ft-combo-caixa{position:relative;}
+  /* o campo por baixo fica transparente enquanto o selo está por cima:
+     dois textos no mesmo lugar seriam ilegíveis */
+  .lay-modulo.info .combo-ref textarea{color:transparent;caret-color:var(--ft-preto);}
+  .lay-modulo.info .combo-ref textarea::placeholder{color:transparent;}
+  .lay-modulo.info .combo-ref .ft-combo-caixa:focus-within .lay-info-selo{opacity:.28;}
+
+  /* os três blocos que somem. `:nth-child` continua contando o que está
+     escondido, então a grade do modo sem-dinheiro não se desmonta. */
+  .lay-modulo.info .lay-ficha > :nth-child(1),   /* tecidos */
+  .lay-modulo.info .lay-ficha > :nth-child(2),   /* cor     */
+  .lay-modulo.info .lay-ficha > :nth-child(4){   /* tabela  */
+    display:none !important;
+  }
+  /* sem a tabela, a observação é que ocupa a coluna inteira */
+  body.sem-dinheiro .lay-modulo.info .lay-ficha{grid-template-columns:1fr;}
+  body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(3),
+  body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(5){grid-column:1;}
+  body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(3){grid-row:1;}
+  body.sem-dinheiro .lay-modulo.info .lay-ficha > :nth-child(5){grid-row:2 / span 3;}
+  /* a imagem manda no módulo: sem ficha para equilibrar, ela ocupa mais */
+  .lay-modulo.info{grid-template-columns:2.1fr 1fr;}
   /* Referência: linha única — nunca quebra nem cresce em altura */
   .combo-ref textarea{
     white-space:nowrap;overflow-x:hidden;overflow-y:hidden;
@@ -6685,7 +6734,7 @@
               <span class="lay-selo"><span class="lay-btn-txt">L-01</span></span>
               <div class="ft-combo combo-ref">
                 <div class="ft-combo-caixa">
-                  <textarea rows="1" placeholder="Referência" spellcheck="false"></textarea>
+                  <textarea rows="1" placeholder="Referência" spellcheck="false"></textarea><!-- O SELO DO MODULO DE INFORMACOES (v3.328). Fica SOBRE o campo, e nao DENTRO dele: escrito no textarea, "INFORMACOES" seria uma referencia preenchida, e o modulo deixaria de ser reconhecido como informacao no instante em que virasse uma. Como selo, ele diz o que e sem mentir sobre o conteudo, e deixa o clique passar para o campo poder ser digitado por baixo. --><span class="lay-info-selo">INFORMAÇÕES</span>
                   <button class="ft-combo-abrir" tabindex="-1" title="Abrir lista"><svg viewBox="0 0 24 24"><path d="M6 9L12 15L18 9"/></svg></button>
                 </div>
                 
@@ -7312,7 +7361,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.327';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.328';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -8233,9 +8282,29 @@ function pickRenderRefs(filtro){
   }).join('');
   return true;
 }
+/* PROCURAR POR MAIS DO QUE O QUE APARECE (v3.328).
+
+   O campo Cliente mostra o nome, e era só por ele que dava para procurar.
+   Só que quem atende conhece o cliente por outros dois nomes: a razão
+   social (que é o que está na nota) e o responsável (que é a pessoa com
+   quem se fala). Procurar "Dona Marta" e não achar nada, sabendo que ela
+   está cadastrada, é o tipo de coisa que faz alguém desistir do cadastro
+   e digitar tudo a mão.
+
+   `pickExtra` é um mapa "o que aparece" -> "o que também procura". Quem
+   monta a lista é quem sabe o que mais vale procurar; o picker só olha os
+   dois textos. E quando o achado veio pelo texto de fora, a linha DIZ por
+   onde veio: encontrar "ACME LTDA" ao digitar "Marta" sem explicação
+   pareceria defeito. */
+let pickExtra=null;
+function pickTexto(v){
+  const s=String(v);
+  const ex=pickExtra&&pickExtra[s];
+  return ex?(s+' \u0001 '+ex):s;
+}
 function pickRender(filtro){
   const q=(filtro||'').trim().toLowerCase();
-  const itens=(pickFonte||[]).filter(v=>String(v).toLowerCase().includes(q));
+  const itens=(pickFonte||[]).filter(v=>pickTexto(v).toLowerCase().includes(q));
   if(pickEhRef && pickRenderRefs(filtro)){
     /* o "usar assim mesmo" continua valendo: referência fora do catálogo é
        caso real, e some se a lista agrupada engolir a opção */
@@ -8252,7 +8321,11 @@ function pickRender(filtro){
           const [c,...n]=s.split(' — ');
           return `<button class="pick-item" data-v="${pickEsc(s)}"><span class="cod">${pickEsc(c)}</span>${pickEsc(n.join(' — '))}</button>`;
         }
-        return `<button class="pick-item" data-v="${pickEsc(s)}">${pickEsc(s)}</button>`;
+        /* achado pelo texto de fora: a linha explica por quê */
+        const ex=pickExtra&&pickExtra[s];
+        const porFora=ex&&q&&!s.toLowerCase().includes(q)
+          ? `<span class="pick-por">${pickEsc(pickTrechoQueCasou(ex,q))}</span>` : '';
+        return `<button class="pick-item" data-v="${pickEsc(s)}">${pickEsc(s)}${porFora}</button>`;
       }).join('')
     : '';
   /* texto livre: se o que foi digitado não existe na lista, dá para usar assim mesmo */
@@ -8265,6 +8338,14 @@ function pickRender(filtro){
     pickLista.innerHTML='<div class="pick-vazio">Nenhum item encontrado</div>';
   }
 }
+/* de todos os textos de fora daquele item, qual foi o que casou. Mostrar
+   os tres seria ruido; mostrar o certo e a explicacao. */
+function pickTrechoQueCasou(extra,q){
+  const partes=String(extra||'').split('\u0001');
+  const achou=partes.find(x=>x.toLowerCase().includes(q));
+  return (achou||partes[0]||'').trim().slice(0,42);
+}
+
 /* fechar CONFIRMANDO o que foi digitado (padrão) ou CANCELANDO (Esc) */
 function pickFecha(confirmar){
   if(pickCampo && confirmar===false && pickOriginal!==null){
@@ -8277,8 +8358,9 @@ function pickFecha(confirmar){
   pickMenu.style.display='none';
   pickCampo=null; pickOriginal=null;
 }
-function pickAbre(campo,fonte,depois,comboGenero){
+function pickAbre(campo,fonte,depois,comboGenero,extra){
   pickCampo=campo; pickFonte=fonte; pickDepois=depois||null;
+  pickExtra=extra||null;
   pickOriginal=String(campo.value||'');             /* para o Esc poder desfazer */
   pickGeneroAlvo=comboGenero||null;                 /* só a Referência traz a barra de gênero */
   pickEhRef=refEhListaDeReferencia(fonte);
@@ -8389,7 +8471,11 @@ Object.entries(HD_FONTES).forEach(([campo,cat])=>{
   /* clientes viram {n,doc}: a lista mostra só os nomes */
   const fonte=()=>campo==='cliente'?CLIENTES_NOMES:(DB[cat]||[]);
   const depois=campo==='cliente'?()=>preencheDocCliente():null;
-  const abrir=e=>{e.preventDefault();e.stopPropagation();pickAbre(inp,fonte(),depois);};
+  /* O QUE FICA NO CABEÇALHO CONTINUA SENDO O NOME. Razão social e
+     responsável entram só como caminho para chegar até ele. */
+  const extra=()=>campo==='cliente'?clientesBuscaExtra():null;
+  const abrir=e=>{e.preventDefault();e.stopPropagation();
+    pickAbre(inp,fonte(),depois,null,extra());};
   inp.addEventListener('mousedown',abrir);          /* clique direto no campo abre */
   if(btn)btn.addEventListener('mousedown',abrir);   /* e o botão também */
 });
@@ -8740,6 +8826,11 @@ function colocaImagem(mod,layImg,btnLimpar,src,jaComprimida){
   img.src=src;
   layImg.insertBefore(img,btnLimpar);
   layImg.classList.add('com-img');
+  /* A IMAGEM É UM DOS CAMPOS QUE DECIDEM (v3.328).
+     Ela não é digitada, então não dispara `input` nem `change`: o ouvinte
+     que reconhece o módulo de informações nunca ficaria sabendo dela.
+     Pôr e tirar imagem passam por aqui, e é aqui que se avisa. */
+  if(typeof layAvisaImagem==='function')layAvisaImagem(mod);
   agendaCompressao(img);        /* converte depois, sem segurar ninguém */
 }
 /* troca a imagem de uma área (remove a anterior, se houver) */
@@ -9113,6 +9204,9 @@ function initLayout(mod){
     layImg.classList.remove('com-img');
     mod.classList.remove('img-h','img-v');
     layImg.querySelector('.lay-img-txt').style.display='';
+    /* tirar a imagem desfaz o módulo de informações: sem imagem ele não é
+       anexo nenhum, é um layout em branco */
+    if(typeof layAvisaImagem==='function')layAvisaImagem(mod);
     reajustaSoon();          /* sobrou espaço: a tabela volta ao tamanho natural */
   });
   const tab=mod.querySelector('.lay-tabela-mini');
@@ -9552,7 +9646,7 @@ function moduloHTML(n){
               <span class="lay-selo"><span class="lay-btn-txt">L-${String(n).padStart(2,'0')}</span></span>
               <div class="ft-combo combo-ref">
                 <div class="ft-combo-caixa">
-                  <textarea rows="1" placeholder="Referência" spellcheck="false"></textarea>
+                  <textarea rows="1" placeholder="Referência" spellcheck="false"></textarea><!-- O SELO DO MODULO DE INFORMACOES (v3.328). Fica SOBRE o campo, e nao DENTRO dele: escrito no textarea, "INFORMACOES" seria uma referencia preenchida, e o modulo deixaria de ser reconhecido como informacao no instante em que virasse uma. Como selo, ele diz o que e sem mentir sobre o conteudo, e deixa o clique passar para o campo poder ser digitado por baixo. --><span class="lay-info-selo">INFORMAÇÕES</span>
                   <button class="ft-combo-abrir" tabindex="-1" title="Abrir lista"><svg viewBox="0 0 24 24"><path d="M6 9L12 15L18 9"/></svg></button>
                 </div>
                 
@@ -9619,6 +9713,124 @@ function moduloHTML(n){
           </div>
         </div>`;
 }
+
+/* ==================================================================
+   O MÓDULO DE INFORMAÇÕES (v3.328)
+
+   Nem toda imagem num orçamento é um layout de produção. Etiqueta de
+   cliente, tabela de medidas, foto de referência, croqui de embalagem:
+   coisas que precisam ir junto do pedido e que não têm tecido, nem cor,
+   nem grade de tamanhos. Até agora elas entravam como layout normal e
+   levavam junto uma ficha inteira em branco, que a fábrica lia como
+   "alguém esqueceu de preencher".
+
+   COMO ELE É RECONHECIDO, e por que assim.
+
+   A regra podia ser um botão ("marcar como informação"), e não é. Um
+   layout com imagem e mais nada JÁ É uma informação; pedir que alguém
+   diga isso de novo num botão é pedir duas vezes a mesma coisa, e um dos
+   dois vai ficar desatualizado.
+
+   O critério é: tem imagem, e NADA DO QUE SOME está preenchido. Note que
+   a lista de "o que some" é a mesma lista que o critério olha, e isso não
+   é coincidência: é a garantia de que virar módulo de informações nunca
+   esconde dado nenhum. Design e observação continuam à vista, então
+   podem estar preenchidos sem atrapalhar.
+
+   A SAÍDA É A REFERÊNCIA. O campo continua ali, por baixo do selo: quem
+   digitar qualquer referência devolve o módulo ao normal na hora. Sem
+   essa porta, um layout de verdade em que a imagem foi posta antes do
+   resto viraria informação e ficaria preso assim.
+   ================================================================== */
+function layTemImagem(mod){
+  return !!(mod&&mod.querySelector('.lay-img img'));
+}
+/* o que DESAPARECE num módulo de informações. Uma lista só, usada para
+   decidir e para esconder. */
+function layCamposQueSomem(mod){
+  const txt=sel=>[...mod.querySelectorAll(sel)]
+    .map(t=>String(t.value||'').trim()).filter(Boolean);
+  const tabela=[...mod.querySelectorAll('.lay-tabela-mini tbody .c-qtd,.lay-tabela-mini tbody .c-uni')]
+    .map(c=>String(c.textContent||'').trim()).filter(Boolean);
+  return {
+    ref:txt('.combo-ref textarea'),
+    tecido:txt('.combo-tecido textarea'),
+    cor:txt('.combo-cor textarea'),
+    tabela,
+  };
+}
+function layEhInfo(mod){
+  if(!mod||!layTemImagem(mod))return false;
+  const c=layCamposQueSomem(mod);
+  return !c.ref.length&&!c.tecido.length&&!c.cor.length&&!c.tabela.length;
+}
+window.layEhInfo=layEhInfo;
+
+/* Aplica (ou tira) o modo. Devolve `true` quando MUDOU, porque quem
+   chama precisa saber se vale repaginar: reordenar as folhas a cada
+   tecla digitada seria caro e piscaria a tela. */
+function layAtualizaInfo(mod){
+  if(!mod)return false;
+  const era=mod.classList.contains('info');
+  const e=layEhInfo(mod);
+  if(era===e)return false;
+  mod.classList.toggle('info',e);
+  return true;
+}
+window.layAtualizaInfo=layAtualizaInfo;
+
+/* Passa por todos e diz se algum mudou de lado. */
+function layAtualizaInfoTodos(){
+  let mudou=false;
+  document.querySelectorAll('.lay-modulo').forEach(m=>{ if(layAtualizaInfo(m))mudou=true; });
+  return mudou;
+}
+window.layAtualizaInfoTodos=layAtualizaInfoTodos;
+
+/* O REORDENAMENTO: informações no fim, sempre.
+
+   Eles não são o pedido, são o anexo do pedido. Espalhados no meio, uma
+   etiqueta de cliente aparece entre dois layouts de produção e quem está
+   no chão de fábrica precisa pular por cima dela. No fim, o pedido se lê
+   inteiro e os anexos vêm depois, que é a ordem em que se usa.
+
+   A ordem RELATIVA de cada grupo é preservada: quem estava antes continua
+   antes, dentro do seu grupo. */
+function layOrdenaInfo(mods){
+  const normais=mods.filter(m=>!m.classList.contains('info'));
+  const infos=mods.filter(m=>m.classList.contains('info'));
+  return normais.concat(infos);
+}
+window.layOrdenaInfo=layOrdenaInfo;
+
+/* PÔR OU TIRAR IMAGEM TAMBÉM RECONFERE.
+   Imagem não é campo digitado: não há evento de teclado para escutar. */
+function layAvisaImagem(mod){
+  if(!mod)return;
+  if(!layAtualizaInfo(mod))return;
+  if(typeof repagina==='function')repagina();
+  if(typeof reajusta==='function')requestAnimationFrame(()=>requestAnimationFrame(reajusta));
+}
+window.layAvisaImagem=layAvisaImagem;
+
+/* QUANDO RECONFERIR. Um ouvinte só, na captura, para os campos que
+   decidem. Repaginar só acontece quando o lado muda de verdade. */
+(function ligaInfoAuto(){
+  const reage=e=>{
+    const mod=e.target&&e.target.closest&&e.target.closest('.lay-modulo');
+    if(!mod)return;
+    if(!layAtualizaInfo(mod))return;
+    /* mudou de lado: o módulo troca de lugar no pedido */
+    if(typeof repagina==='function')repagina();
+    if(typeof reajusta==='function')requestAnimationFrame(()=>requestAnimationFrame(reajusta));
+  };
+  document.addEventListener('input',reage,true);
+  document.addEventListener('change',reage,true);
+  /* a tabela é contenteditable: `input` cobre, mas colar e apagar em
+     bloco às vezes chegam só como blur */
+  document.addEventListener('blur',reage,true);
+})();
+
 function novaFolha(){
   const f=document.createElement('section');
   f.className='folha-a4';
@@ -9666,7 +9878,13 @@ function repagina(){
   const area=document.querySelector('.area-paginas');
   /* limpa o que é gerado (clones de rodapé/aviso e logos) antes de redistribuir */
   document.querySelectorAll('.doc-rodape.rodape-clone,.folha-topo,.warn-clone,.folha-logo').forEach(el=>el.remove());
-  const mods=[...document.querySelectorAll('.lay-modulo')];
+  /* INFORMAÇÕES NO FIM (v3.328). A ordem em que os módulos são
+     distribuídos pelas folhas é a ordem do pedido impresso; é aqui, e em
+     nenhum outro lugar, que ela se decide. */
+  if(typeof layAtualizaInfoTodos==='function')layAtualizaInfoTodos();
+  const mods=(typeof layOrdenaInfo==='function')
+    ? layOrdenaInfo([...document.querySelectorAll('.lay-modulo')])
+    : [...document.querySelectorAll('.lay-modulo')];
   const rodape=document.querySelector('.doc-rodape:not(.rodape-clone)');
   const folhas=[...document.querySelectorAll('.folha-a4')];
   const primeira=folhas[0];
@@ -9679,7 +9897,11 @@ function repagina(){
       if(!prox)prox=novaFolha();
       alvo=prox;
     }
-    if(!alvo.contains(m))alvo.appendChild(m);
+    /* appendChild SEMPRE, e não só quando o módulo está noutra folha.
+       Reordenar dentro da MESMA folha era impossível com o `if`: um
+       módulo que virou informação e devia descer para o fim ficava
+       exatamente onde estava, porque já pertencia àquela folha. */
+    alvo.appendChild(m);
     if(alvo.querySelectorAll('.lay-modulo').length>=2)
       alvo=alvo; /* mantém; próxima iteração decide */
   });
@@ -9713,6 +9935,12 @@ function repagina(){
      e renumera — vai DEPOIS do posicionaObsFin(), que ainda pode abrir uma
      folha nova. */
   if(typeof numeraPaginas==='function')numeraPaginas();
+  /* RENUMERAR DEPOIS DE REORDENAR (v3.328).
+     Um modulo de informacoes desce para o fim do pedido, e o numero dele
+     tem de descer junto: o L-02 impresso na terceira posicao e a receita
+     para alguem procurar a folha errada no chao de fabrica. `renumera` e
+     por ordem de documento, e agora a ordem de documento e a definitiva. */
+  if(typeof renumera==='function')renumera();
   /* E, por fim, recomprimir. Repaginar muda as alturas de todas as folhas;
      sem esta linha a tabela ficava presa no nível de ANTES da mudança —
      era o que acontecia ao alternar com/sem valores: a folha passava a
@@ -19504,6 +19732,26 @@ function clienteTel(c){
   if(!c||typeof c!=='object')return '';
   return String(c.zap||c.fone||c.email||'');
 }
+/* NOME -> OS OUTROS NOMES PELOS QUAIS ELE E CONHECIDO.
+
+   Tres campos do cadastro, separados por um caractere que ninguem digita,
+   para o picker poder dizer depois QUAL deles casou. O documento entra
+   junto de brinde: procurar um cliente pelo CNPJ quando se tem a nota na
+   mao e a mesma necessidade com outra chave. */
+function clientesBuscaExtra(){
+  const m={};
+  (DB.clientes||[]).forEach(c=>{
+    if(!c||typeof c!=='object')return;
+    const nome=clienteNome(c).trim();
+    if(!nome)return;
+    const outros=[cliCampo(c,'razao'),cliCampo(c,'resp'),clienteDoc(c)]
+      .map(x=>String(x||'').trim()).filter(Boolean);
+    if(outros.length)m[nome]=outros.join('\u0001');
+  });
+  return m;
+}
+window.clientesBuscaExtra=clientesBuscaExtra;
+
 /* acha o cadastro inteiro pelo nome — o cabeçalho precisa de mais que o doc */
 function achaCliente(nome){
   const alvo=String(nome||'').trim().toLowerCase();
@@ -21394,45 +21642,80 @@ function formataPedido(bruto){
   .atv-toast.on{opacity:1;transform:translateY(0);}
   @media print{ .atv-toast{display:none !important;} }
 
-  /* ---- A LISTA EM MODAL (v3.327) ----
-     Na faixa estreita, Situação e Etapas viram dois botões. A lista
-     inteira nao cabe em 64px, e empilhá-la ali era o que estava
-     quebrado: números espremidos contra nomes cortados. */
-  .atv-lista-modal{
-    position:fixed;inset:0;z-index:9870;display:grid;place-items:center;
-    background:rgba(16,20,26,.34);backdrop-filter:blur(2px);
-  }
-  .atv-lista-modal[hidden]{display:none;}
-  .atv-lista-modal .cx{
-    width:300px;max-height:78vh;display:flex;flex-direction:column;
-    background:var(--ft-menu-bg,#fff);border-radius:13px;
-    box-shadow:0 24px 60px rgba(16,20,26,.28);overflow:hidden;
-  }
-  .atv-lista-modal .cab{
-    display:flex;align-items:center;gap:8px;padding:12px 14px 10px;
-    border-bottom:1px solid var(--ft-borda);
-  }
-  .atv-lista-modal .cab b{flex:1;font:700 12.5px var(--ft-fonte-ui,inherit);color:var(--ft-preto);}
-  .atv-lista-modal .cab button{
-    width:24px;height:24px;display:grid;place-items:center;border:0;background:none;
-    border-radius:6px;cursor:pointer;color:var(--ft-cinza-40);
-  }
-  .atv-lista-modal .cab button:hover{background:var(--ft-hover);color:var(--ft-preto);}
-  .atv-lista-modal .cab button svg{width:14px;height:14px;fill:none;stroke:currentColor;
-    stroke-width:2.2;stroke-linecap:round;}
-  .atv-lista-modal .corpo{padding:8px;overflow-y:auto;scrollbar-width:thin;}
+  /* ---- A LISTA AO LADO DO BOTÃO (v3.328) ----
 
-  /* ---- Situação e Etapas viram FILTRO (v3.327) ---- */
-  .atv-lat .l{
-    width:100%;border:0;background:none;border-radius:7px;padding:4px 6px;margin:0;
-    font:inherit;color:inherit;cursor:pointer;text-align:left;
+     Era um modal no centro da tela com véu escuro por trás. Errado por
+     dois motivos. O primeiro é de linguagem: véu e centro querem dizer
+     "pare tudo e decida", e escolher um filtro não é isso. O segundo é de
+     distância: o botão está na beira esquerda e a resposta aparecia no
+     meio da tela, longe do dedo e longe da lista que vai mudar.
+
+     Agora é um menu flutuante ancorado no próprio botão, com a mesma
+     roupa do menu de etapas — que é o popover que este editor já usa
+     para escolher coisa. */
+  .atv-fmenu{
+    position:fixed;z-index:9870;display:none;
+    background:var(--ft-menu-bg,#fff);border:1px solid var(--ft-borda);
+    border-radius:11px;box-shadow:0 14px 38px rgba(16,20,26,.2);
+    padding:6px;min-width:208px;max-height:70vh;overflow-y:auto;
+    overscroll-behavior:contain;
+    /* a mesma exceção do menu de etapas: o editor apaga toda barra de
+       rolagem, e numa lista que rola isso esconde que há mais embaixo */
+    scrollbar-width:thin;scrollbar-color:var(--ft-borda) transparent;
   }
-  .atv-lat .l:hover{background:var(--ft-hover);}
-  .atv-lat .l.zero{opacity:.4;cursor:default;}
-  .atv-lat .l.zero:hover{background:none;}
-  .atv-lat .l.on{background:var(--tg);color:#fff;}
-  .atv-lat .l.on i{background:#fff;}
-  .atv-lat .l.on .q{color:#fff;}
+  .atv-fmenu.on{display:block;}
+  .atv-fmenu .tt{
+    font:700 9.5px var(--ft-fonte-ui,inherit);letter-spacing:.06em;
+    text-transform:uppercase;color:var(--ft-cinza-40);padding:3px 8px 6px;
+  }
+  .atv-fmenu .lim{
+    display:block;width:100%;margin-top:4px;padding:6px;border:0;border-top:1px solid var(--ft-borda);
+    background:none;cursor:pointer;border-radius:0 0 7px 7px;
+    font:600 10.5px var(--ft-fonte-ui,inherit);color:var(--ft-cinza-40);
+  }
+  .atv-fmenu .lim:hover{background:var(--ft-hover);color:var(--ft-preto);}
+
+  /* ---- Situação e Etapas viram FILTRO (v3.327) ----
+
+     ESCRITA UMA VEZ SÓ, PARA OS DOIS LUGARES (corrigido na v3.328).
+     A lista existe na barra lateral e no menu da faixa estreita, e a
+     primeira versão descreveu só a da barra (`.atv-lat .l`). No menu,
+     portanto, os itens não tinham estilo nenhum: viravam botões crus do
+     navegador, com borda cinza, em linha, embolados um no outro. E na
+     barra, duas regras para `.l` em pontos diferentes da folha brigavam
+     pelo espaçamento, e a de baixo (um `padding:2px 0` antigo) ganhava.
+     Uma descrição, um seletor, os dois lugares. */
+  .atv-lat .l,
+  .atv-fmenu .l{
+    display:flex;align-items:center;justify-content:space-between;gap:9px;
+    width:100%;border:0;background:none;border-radius:7px;
+    padding:6px 8px;margin:0 0 1px;
+    font:inherit;color:inherit;cursor:pointer;text-align:left;
+    transition:background var(--mov-rapido,120ms);
+  }
+  .atv-lat .l i,
+  .atv-fmenu .l i{width:8px;height:8px;border-radius:99px;background:var(--tg);flex:0 0 auto;}
+  .atv-lat .l .n,
+  .atv-fmenu .l .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .atv-lat .l .q,
+  .atv-fmenu .l .q{
+    font-family:var(--ft-fonte-mono,monospace);font-variant-numeric:tabular-nums;
+    color:var(--ft-cinza-40);flex:0 0 auto;
+  }
+  .atv-lat .l:hover,
+  .atv-fmenu .l:hover{background:var(--ft-hover);}
+  .atv-lat .l.zero,
+  .atv-fmenu .l.zero{opacity:.4;cursor:default;}
+  .atv-lat .l.zero:hover,
+  .atv-fmenu .l.zero:hover{background:none;}
+  .atv-lat .l.on,
+  .atv-fmenu .l.on{background:var(--tg);color:#fff;}
+  .atv-lat .l.on i,
+  .atv-fmenu .l.on i{background:#fff;}
+  .atv-lat .l.on .q,
+  .atv-fmenu .l.on .q{color:#fff;}
+  .atv-lat .l.velha .n,
+  .atv-fmenu .l.velha .n{font-style:italic;}
   .atv-filtro-fora{
     display:flex;align-items:center;gap:7px;margin:0 12px 10px;padding:7px 9px;
     border-radius:8px;background:var(--ft-vermelho-suave);color:var(--ft-vermelho);
@@ -21581,10 +21864,6 @@ function formataPedido(bruto){
   .atv-lat .g{margin-bottom:12px;}
   .atv-lat .t{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
     color:var(--ft-cinza-40);margin-bottom:6px;}
-  .atv-lat .l{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0;}
-  .atv-lat .l i{width:8px;height:8px;border-radius:99px;background:var(--tg);flex:0 0 auto;}
-  .atv-lat .l .n{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .atv-lat .l .q{font-family:var(--ft-fonte-mono,monospace);font-variant-numeric:tabular-nums;color:var(--ft-cinza-40);}
   .atv-lat .obs{font-size:10.5px;color:var(--ft-cinza-40);line-height:1.45;}
 
   /* ---- a barra de progresso da geração ---- */
@@ -21780,14 +22059,7 @@ function formataPedido(bruto){
 <div class="atv-menu" id="atvMenuEtapa"></div>
 <div class="atv-cal" id="atvCal"></div>
 <div class="atv-toast" id="atvToast" hidden></div>
-<div class="atv-lista-modal" id="atvListaModal" hidden>
-  <div class="cx">
-    <div class="cab"><b id="atvListaTit">Etapas</b>
-      <button type="button" id="atvListaX" title="Fechar">
-        <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-    <div class="corpo" id="atvListaCorpo"></div>
-  </div>
-</div>
+<div class="atv-fmenu" id="atvListaModal"><div id="atvListaCorpo"></div></div>
 
 <div class="atv-carga-fundo" id="atvCarga" hidden>
   <div class="atv-carga">
@@ -22455,11 +22727,8 @@ function atvLateral(){
       (b.dataset.lista==='situacao'&&ATV.filtro.tipo==='situacao')
       ||(b.dataset.lista==='etapas'&&ATV.filtro.tipo==='etapa'));
   });
-  const md=document.getElementById('atvListaModal');
-  if(md&&!md.hidden){
-    document.getElementById('atvListaCorpo').innerHTML=
-      md.dataset.lista==='situacao'?atvListaSituacao():atvListaEtapas();
-  }
+  if(atvListaModalAberto())atvListaModalAbre(
+    document.getElementById('atvListaModal').dataset.lista);
 }
 
 /* ---- ligar e desligar o filtro ---- */
@@ -22494,43 +22763,83 @@ function atvPassaFiltro(l){
   /* um ouvinte só, no documento: a lista é redesenhada o tempo todo e
      religar ouvintes a cada desenho é como se perde um clique */
   document.addEventListener('click',e=>{
-    const b=e.target.closest&&e.target.closest('.atv-lat .l,.atv-lista-modal .l');
+    const b=e.target.closest&&e.target.closest('.atv-lat .l,.atv-fmenu .l');
     if(b&&!b.classList.contains('zero')){
       /* ESCOLHER NO MODAL FECHA O MODAL. O motivo de clicar num filtro e
          ver a lista filtrada, e o modal esta exatamente por cima dela. */
-      const noModal=!!e.target.closest('.atv-lista-modal');
+      const noModal=!!e.target.closest('.atv-fmenu');
       atvFiltra(b.dataset.f,b.dataset.v);
       if(noModal)atvListaModalFecha();
       return;
     }
     const lb=e.target.closest&&e.target.closest('.atv-lat-btns button');
-    if(lb){ atvListaModalAbre(lb.dataset.lista); return; }
-    const lp=e.target.closest&&e.target.closest('#atvFiltroLimpa');
-    if(lp){ atvLimpaFiltro(); return; }
-    const md=document.getElementById('atvListaModal');
-    if(md&&!md.hidden&&(e.target===md||e.target.closest('#atvListaX')))atvListaModalFecha();
+    if(lb){
+      /* clicar no mesmo botão fecha: é um menu, não uma gaveta que só abre */
+      const md=document.getElementById('atvListaModal');
+      if(atvListaModalAberto()&&md.dataset.lista===lb.dataset.lista)atvListaModalFecha();
+      else atvListaModalAbre(lb.dataset.lista,lb);
+      return;
+    }
+    const lp=e.target.closest&&e.target.closest('#atvFiltroLimpa,#atvFmenuLimpa');
+    if(lp){ atvLimpaFiltro(); atvListaModalFecha(); return; }
+    /* clicar em qualquer outro lugar fecha o menu */
+    if(atvListaModalAberto()&&!e.target.closest('.atv-fmenu'))atvListaModalFecha();
   });
   document.addEventListener('keydown',e=>{
-    if(e.key!=='Escape')return;
-    const md=document.getElementById('atvListaModal');
-    if(md&&!md.hidden)atvListaModalFecha();
+    if(e.key==='Escape'&&atvListaModalAberto())atvListaModalFecha();
   });
+  window.addEventListener('resize',atvListaModalFecha);
+  /* fecha ao rolar a página, mas não ao rolar o próprio menu: a mesma
+     lição do menu de etapas na v3.324 */
+  document.addEventListener('scroll',e=>{
+    const md=document.getElementById('atvListaModal');
+    if(!md||!md.classList.contains('on'))return;
+    if(e.target&&e.target.nodeType===1&&md.contains(e.target))return;
+    if(e.target===md)return;
+    atvListaModalFecha();
+  },true);
 })();
 
-function atvListaModalAbre(qual){
+/* O MENU ANCORADO NO BOTÃO (v3.328).
+
+   Ele abre para o LADO, e não no centro: o botão mora na beira esquerda e
+   a lista que vai mudar está logo ali. Ancorar é a diferença entre "isto
+   pertence àquele botão" e "isto é um assunto novo".
+
+   O posicionamento é o mesmo do menu de etapas, pela mesma razão: com
+   treze etapas ele não cabe embaixo de um botão que está no pé da faixa,
+   então quem decide é o lado com mais espaço, e o teto é o espaço real
+   daquele lado. Ou cabe inteiro, ou rola de propósito. */
+function atvListaModalAbre(qual,botao){
   const md=document.getElementById('atvListaModal');
   if(!md)return;
   md.dataset.lista=qual;
-  document.getElementById('atvListaTit').textContent=
-    qual==='situacao'?'Situação':'Etapas';
   document.getElementById('atvListaCorpo').innerHTML=
-    qual==='situacao'?atvListaSituacao():atvListaEtapas();
-  md.hidden=false;
+    '<div class="tt">'+(qual==='situacao'?'Situação':'Etapas')+'</div>'
+    +(qual==='situacao'?atvListaSituacao():atvListaEtapas())
+    +(ATV.filtro.tipo?'<button type="button" class="lim" id="atvFmenuLimpa">mostrar todos</button>':'');
+  md.classList.add('on');
+  const bt=botao||document.querySelector('#atvLatBtns [data-lista="'+qual+'"]');
+  if(!bt)return;
+  const r=bt.getBoundingClientRect();
+  const larg=md.offsetWidth, alt=md.scrollHeight;
+  /* à direita da faixa; se não couber, encosta na borda da tela */
+  md.style.left=Math.min(innerWidth-larg-8,r.right+8)+'px';
+  const teto=Math.min(alt,innerHeight-16);
+  md.style.maxHeight=teto+'px';
+  /* alinhado pelo meio do botão, sem sair da tela por cima nem por baixo */
+  const meio=r.top+r.height/2;
+  md.style.top=Math.max(8,Math.min(innerHeight-teto-8,meio-teto/2))+'px';
 }
 function atvListaModalFecha(){
   const md=document.getElementById('atvListaModal');
-  if(md)md.hidden=true;
+  if(md)md.classList.remove('on');
 }
+function atvListaModalAberto(){
+  const md=document.getElementById('atvListaModal');
+  return !!md&&md.classList.contains('on');
+}
+window.atvListaModalAberto=atvListaModalAberto;
 window.atvListaModalAbre=atvListaModalAbre;
 window.atvListaModalFecha=atvListaModalFecha;
 /* ---------------- quem pode ---------------- */
@@ -23026,6 +23335,10 @@ function atvSemanaNoPainel(){
       ? ATV_MESES[b.getMonth()].slice(0,3)
       : (ATV.semana===hoje?'semana de hoje':'semana de '+atvCurta(ATV.semana));
   }
+  /* "semana de hoje" em 64px quebrava em TRÊS linhas e virava um bloco de
+     texto empilhado no meio da faixa. Na estreita ele é só "hoje". */
+  const bh=document.getElementById('atvHoje');
+  if(bh)bh.textContent=estreito?'hoje':'semana de hoje';
 }
 window.atvSemanaNoPainel=atvSemanaNoPainel;
 
