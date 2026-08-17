@@ -1156,6 +1156,133 @@ checa('  e o recarregamento devolve a pessoa para ela', r.voltou, 'atividade');
 /* a rede de seguranca: botao escondido por permissao nao e destino */
 checa('secao sem permissao nao e devolvida', r.naoVoltou, 'orcamento');
 
+console.log('\n=== 8n. FINALIZADO NA SEMANA ANTERIOR VALE PARA A FRENTE (v3.324) ===');
+/* O CASO DA VIAPOL, como aconteceu.
+   Quatro pedidos com entrega em 13/08 terminaram na sexta bem tarde e
+   ninguem marcou. Na segunda desceram para a semana de 17, atrasados,
+   ainda em Costura. No dia 17 o administrativo marcou os quatro como
+   finalizados NA SEMANA DE 10 A 15, que e onde eles pertenciam. E eles
+   continuaram na semana de 17 em Costura, gerando de novo quantas vezes
+   fosse: uma linha que ja esta na base guarda a etapa dela, e nada
+   nunca reperguntava.
+
+   Finalizado e terminal, e e a unica etapa que pode andar para a frente
+   sozinha sem risco: um pedido pronto nao tem mais trabalho a decidir. */
+Object.keys(FTK).forEach(k => delete FTK[k]);
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.semana = '2026-08-17'; ATV.hojeFixo = '2026-08-17'; });
+/* a semana de 10 a 15, ja com os quatro marcados como prontos */
+DRIVE.semanas['2026-08-10'] = { semana: '2026-08-10',
+  salvoEm: '2026-08-17T13:17:00.000Z', vistos: {},
+  linhas: ['PD004136', 'PD004137', 'PD004117', 'PD004138'].map((ped, i) => ({
+    id: 'IDVIA' + i + '00000x', pedido: ped, cliente: 'VIAPOL ' + i,
+    vendedor: 'Dani', entrega: '13/08/2026', plan: '2026-08-13',
+    etapa: 'finalizado', departamento: 'DTF + Sublimação',
+    sub: 10, per: 0, total: 10, chegouEm: '' })) };
+/* e a semana de 17, como ficou: os quatro descidos, ainda em Costura */
+DRIVE.semanas['2026-08-17'] = { semana: '2026-08-17',
+  salvoEm: '2026-08-16T08:53:00.000Z', vistos: {},
+  linhas: ['PD004136', 'PD004137', 'PD004117', 'PD004138'].map((ped, i) => ({
+    id: 'IDVIA' + i + '00000x', pedido: ped, cliente: 'VIAPOL ' + i,
+    vendedor: 'Dani', entrega: '13/08/2026', plan: '2026-08-17',
+    etapa: 'costura', atrasado: true, departamento: 'DTF + Sublimação',
+    sub: 10, per: 0, total: 10, chegouEm: '' }))
+    .concat([{ id: 'IDDESTA17xx', pedido: 'PD009301', cliente: 'DESTA SEMANA',
+      vendedor: 'Dani', entrega: '19/08/2026', plan: '2026-08-19',
+      etapa: 'corte', departamento: 'DTF', sub: 5, per: 0, total: 5, chegouEm: '' }]) };
+poeNoDrive([{ id: 'IDDESTA17xx', pedido: 'PD009301', arquivo: 'D.ft',
+  cliente: 'DESTA SEMANA', vendedor: 'Dani', envio: '19/08/2026', dia: 1,
+  departamento: 'DTF', subPecas: 5, perPecas: 0, total: 5 }]);
+
+/* PRIMEIRO ABRIR: o aviso tem de contar os quatro, e nao zero */
+await p.evaluate(() => atvBuscaSalvo());
+await p.waitForTimeout(900);
+r = await p.evaluate(() => ({ n: ATV.linhas.length, aviso: ATV.aviso }));
+console.log('     ao abrir: ' + JSON.stringify(r));
+checa('abrir traz as cinco linhas gravadas', r.n, 5);
+checa('  e o aviso ja conta os quatro prontos', r.aviso.indexOf('4 pedidos') === 0, true);
+
+/* DEPOIS GERAR: eles saem, e sozinho */
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1600);
+r = await p.evaluate(() => ({ n: ATV.linhas.length,
+  pedidos: ATV.linhas.map(l => l.pedido).sort(),
+  aviso: ATV.aviso }));
+console.log('     depois de gerar: ' + JSON.stringify(r));
+checa('gerar tira os quatro que ja acabaram', r.pedidos, ['PD009301']);
+checa('  e o aviso some junto', r.aviso, '');
+
+/* E O CASO VIZINHO: finalizado na semana anterior MAS com entrega DESTA
+   semana. Ai ele nao sai, porque a semana e dele mesmo -- so que a etapa
+   de la e a mais recente das duas, e vale. */
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false; });
+DRIVE.semanas['2026-08-10'].linhas.push({ id: 'IDDOIS0001xx', pedido: 'PD009302',
+  cliente: 'ENTREGA DESTA SEMANA', vendedor: 'Dani', entrega: '19/08/2026',
+  plan: '2026-08-15', etapa: 'finalizado', departamento: 'DTF',
+  sub: 7, per: 0, total: 7, chegouEm: '' });
+DRIVE.semanas['2026-08-17'].linhas.push({ id: 'IDDOIS0001xx', pedido: 'PD009302',
+  cliente: 'ENTREGA DESTA SEMANA', vendedor: 'Dani', entrega: '19/08/2026',
+  plan: '2026-08-19', etapa: 'costura', departamento: 'DTF',
+  sub: 7, per: 0, total: 7, chegouEm: '' });
+await p.evaluate(() => atvGera());
+await p.waitForTimeout(1600);
+r = await p.evaluate(() => {
+  const l = ATV.linhas.find(x => x.id === 'IDDOIS0001xx');
+  return l ? { etapa: l.etapa, plan: l.plan } : null;
+});
+console.log('     ' + JSON.stringify(r));
+checa('quem tem entrega nesta semana FICA', !!r, true);
+checa('  mas com a etapa mais recente, que e a de la',
+  r && r.etapa, 'finalizado');
+delete DRIVE.semanas['2026-08-10'];
+delete DRIVE.semanas['2026-08-17'];
+await p.evaluate(() => { ATV.linhas = []; ATV.vistos = {}; ATV.sujo = false;
+  ATV.hojeFixo = ''; });
+
+console.log('\n=== 8o. O MENU DE ETAPAS ROLA (v3.324) ===');
+/* Ele fecha ao rolar a PAGINA, porque e position:fixed e ficaria apontando
+   para a linha errada. So que o ouvinte estava na fase de captura, no
+   documento inteiro, e nao olhava de onde o evento vinha: rolar DENTRO do
+   menu fechava ele no gesto de escolher. Quando a lista nao cabia na tela
+   (que e justamente quando rolar importa), era impossivel chegar nas
+   ultimas etapas. */
+r = await p.evaluate(async () => {
+  ATV.semana = '2026-08-17';
+  ATV.linhas = [{ id: 'R1', pedido: 'PD009400', cliente: 'CLIENTE', vendedor: 'Dani',
+    entrega: '18/08/2026', plan: '2026-08-18', etapa: 'corte', departamento: 'DTF',
+    sub: 1, per: 0, total: 1, chegouEm: '', novo: false }];
+  atvDesenha();
+  const m = document.getElementById('atvMenuEtapa');
+  document.querySelector('.atv-chip').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 250));
+  /* forca o caso ruim: teto pequeno, lista maior que ele */
+  m.style.maxHeight = '120px';
+  await new Promise(r => setTimeout(r, 80));
+  const precisaRolar = m.scrollHeight > m.clientHeight + 1;
+  /* rolar DENTRO do menu, como a roda do mouse faz */
+  m.scrollTop = 60;
+  m.dispatchEvent(new Event('scroll', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 150));
+  const continuaAberto = m.classList.contains('on');
+  const andou = m.scrollTop > 0;
+  /* e rolar a PAGINA continua fechando, que e o certo */
+  document.getElementById('atvPage').dispatchEvent(new Event('scroll', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 150));
+  const fechouComAPagina = !m.classList.contains('on');
+  return { precisaRolar, continuaAberto, andou, fechouComAPagina,
+    barra: getComputedStyle(m).scrollbarWidth };
+});
+console.log('     ' + JSON.stringify(r));
+checa('com pouco espaco, a lista precisa rolar', r.precisaRolar, true);
+checa('  rolar DENTRO do menu nao fecha ele', r.continuaAberto, true);
+checa('  e a rolagem anda de verdade', r.andou, true);
+/* a barra de rolagem volta a aparecer aqui: o editor apaga todas, e sem
+   ela nada diz que ha mais etapa embaixo */
+checa('  com barra de rolagem visivel', r.barra, 'thin');
+/* mas rolar a PAGINA continua fechando: o menu e fixed e ficaria apontando
+   para a linha errada */
+checa('rolar a pagina continua fechando', r.fechouComAPagina, true);
+
 console.log('\n=== 13b. AS MUDANCAS DA v3.316 ===');
 /* As sete coisas pedidas de uma vez. Sao conferidas JUNTAS de proposito:
    quase todas moram na mesma linha da tabela, e o que quebra uma quebra a

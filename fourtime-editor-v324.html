@@ -7300,7 +7300,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.323';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.324';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -21287,6 +21287,15 @@ function formataPedido(bruto){
     position:fixed;z-index:9800;display:none;background:var(--ft-menu-bg,#fff);
     border:1px solid var(--ft-borda);border-radius:10px;box-shadow:0 12px 34px rgba(16,20,26,.18);
     padding:5px;min-width:196px;max-height:340px;overflow-y:auto;
+    overscroll-behavior:contain;
+    /* A BARRA VOLTA AQUI, e é exceção de propósito, a mesma do menu dos
+       dropdowns: lá em cima o editor apaga TODA barra de rolagem do
+       aplicativo (`*{scrollbar-width:none}`), o que é bonito numa página e
+       péssimo numa lista curta — sem ela nada diz que há mais etapa
+       embaixo. Pelas propriedades padrão, e não pelas ::-webkit-*: no
+       Chrome, com scrollbar-width definido em qualquer ancestral, as
+       regras webkit são ignoradas. */
+    scrollbar-width:thin;scrollbar-color:var(--ft-borda) transparent;
   }
   .atv-menu.on{display:block;}
   .atv-menu button{
@@ -21738,9 +21747,25 @@ function atvSeg(){ return atvDeISO(ATV.semana)||atvSegundaDe(atvHoje()); }
         tres semanas atras.
      4. ninguem marcou nada                   -> so fica se alguem a
         arrastou para ca de proposito (o plano cai nesta semana).       */
-function atvPertence(l,segIso,fimIso,anteriorIso,hoje){
+function atvPertence(l,segIso,fimIso,anteriorIso,hoje,fimAntes){
   const ent=atvDeBR(l.entrega);
   const entIso=ent?atvISO(ent):'';
+  /* JÁ FOI FINALIZADO NA SEMANA ANTERIOR (v3.324).
+
+     O caso que ensinou isto: quatro pedidos da VIAPOL, entrega em 13/08,
+     terminaram na sexta bem tarde e ninguém marcou. Na segunda eles
+     desceram para a semana de 17, como atrasados, ainda em Costura. No
+     dia 17 o administrativo marcou os quatro como finalizados NA SEMANA
+     DE 10 A 15, que é onde eles pertenciam. E eles continuaram na semana
+     de 17 em Costura, gerando de novo quantas vezes fosse: uma linha que
+     já estava na base guarda a etapa dela, e nada nunca reperguntava.
+
+     Finalizado é terminal, e é a única etapa que pode andar para a
+     frente sozinha sem risco: um pedido pronto não tem mais trabalho a
+     ser decidido a mão. Se a semana anterior diz que acabou, aqui ele
+     não é assunto. */
+  if(fimAntes&&fimAntes.has(l.id)&&!(entIso&&entIso>=segIso&&entIso<=fimIso))
+    return false;
   if(entIso&&entIso>=segIso&&entIso<=fimIso)return true;
   if(l.etapa==='organizar')return true;
   const planAqui=l.plan>=segIso&&l.plan<=fimIso;
@@ -22272,7 +22297,18 @@ async function atvBuscaSalvo(){
       const iSeg=atvISO(atvSeg()), iFim=atvISO(atvFim());
       const iAnt=atvISO(atvMais(atvSeg(),-7));
       const hoje=atvHoje();
-      const intrusas=ATV.linhas.filter(l=>!atvPertence(l,iSeg,iFim,iAnt,hoje)).length;
+      /* a MESMA pergunta do gerar, com a MESMA informação: sem ler os
+         finalizados da semana anterior, o aviso contaria um número e o
+         Gerar faria outro, que é como a limpeza e o aviso divergiram uma
+         vez antes */
+      const fimAntes=new Set();
+      try{
+        const da=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(iAnt));
+        if(ATV.semana!==_sem)return;
+        if(da&&da.existe)(da.linhas||[]).forEach(l=>{
+          if(l.etapa==='finalizado')fimAntes.add(l.id); });
+      }catch(e){}
+      const intrusas=ATV.linhas.filter(l=>!atvPertence(l,iSeg,iFim,iAnt,hoje,fimAntes)).length;
       if(intrusas)ATV.aviso=intrusas+(intrusas===1
         ? ' pedido salvo aqui não é desta semana. Clique em Gerar / Atualizar para tirá-lo.'
         : ' pedidos salvos aqui não são desta semana. Clique em Gerar / Atualizar para tirá-los.');
@@ -22391,10 +22427,13 @@ async function atvGera(){
        enchia as semanas da frente de tarja vermelha.
        Atrasado é quem já devia ter saído: entrega ANTES de hoje. */
     const hoje=atvHoje();
+    /* quem a semana anterior diz que ACABOU. Ver o achado no atvPertence. */
+    const fimAntes=new Set();
     try{
       const ant=atvISO(atvMais(segAtual,-7));
       const d=await atvPega('/api/ft/atividade-guardado?semana='+encodeURIComponent(ant));
       if(d&&d.existe){
+        (d.linhas||[]).forEach(l=>{ if(l.etapa==='finalizado')fimAntes.add(l.id); });
         (d.linhas||[]).forEach(l=>{
           if(l.etapa==='finalizado')return;
           if(porId.has(l.id))return;
@@ -22540,7 +22579,12 @@ async function atvGera(){
     const _isoSeg=atvISO(_seg), _isoFim=atvISO(_fim);
     const _isoAnt=atvISO(atvMais(_seg,-7));
     [...porId.values()].forEach(l=>{
-      if(!atvPertence(l,_isoSeg,_isoFim,_isoAnt,hoje)){ porId.delete(l.id); return; }
+      if(!atvPertence(l,_isoSeg,_isoFim,_isoAnt,hoje,fimAntes)){ porId.delete(l.id); return; }
+      /* ficou porque a entrega É desta semana, mas a semana anterior já o
+         dava por pronto: a etapa de lá é a mais recente das duas */
+      if(fimAntes.has(l.id)&&l.etapa!=='finalizado'){
+        l.etapa='finalizado'; l.atrasado=false; delete l.herdada;
+      }
       const ent=atvDeBR(l.entrega);
       if(!ent)return;
       /* a entrega caiu DENTRO desta semana: a linha volta a ser um pedido
@@ -22715,7 +22759,22 @@ window.atvSalva=atvSalva;
     menu.style.left=Math.max(8,Math.min(innerWidth-larg-8,r.left))+'px';
   });
   window.addEventListener('resize',fecha);
-  document.addEventListener('scroll',fecha,true);
+  /* FECHAR AO ROLAR A PÁGINA, MAS NÃO AO ROLAR O PRÓPRIO MENU (v3.324).
+
+     O menu é `position:fixed`: se a lista atrás dele rolar, ele fica
+     apontando para a linha errada, e por isso fecha. Só que o ouvinte
+     estava na fase de CAPTURA, no documento inteiro, e não olhava de onde
+     o evento vinha. Rolar dentro do menu disparava a mesma coisa, e ele
+     se fechava no gesto de escolher.
+
+     Resultado: quando a lista não cabia na tela (que é justamente quando
+     rolar importa), era impossível chegar nas últimas etapas. Ele abria,
+     mostrava metade, e sumia ao primeiro giro da roda. */
+  document.addEventListener('scroll',e=>{
+    if(e.target&&e.target.nodeType===1&&menu.contains(e.target))return;
+    if(e.target===menu)return;
+    fecha();
+  },true);
 })();
 
 /* ---------------- o arraste ---------------- */

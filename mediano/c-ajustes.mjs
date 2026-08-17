@@ -318,7 +318,13 @@ export async function roda(F) {
   await p.waitForFunction(() => {
     const fs = [...document.querySelectorAll('.folha-a4')];
     return fs.slice(1).every(f => !!f.querySelector('.folha-topo'));
-  }, null, { timeout: 15000 });
+  }, null, { timeout: 30000 })
+    /* ESTOURAR O TEMPO NAO PODE MATAR O BLOCO INTEIRO.
+       Sem o catch, um estouro aqui derruba as outras quarenta
+       conferencias da suite e o relatorio so diz "o bloco quebrou",
+       sem dizer o que estava errado. Com ele, a espera desiste e a
+       conferencia logo abaixo falha mostrando o que viu. */
+    .catch(() => {});
   const antes = await F.assenta(p, SINAL);
   const depois = await trocaDinheiro();
   const voltou = await trocaDinheiro();                 /* devolve o modo original */
@@ -504,8 +510,21 @@ export async function roda(F) {
          borda e lida em dois cinzas de um degrau de diferenca
          (rgb(56,62,68) e rgb(57,63,69)). A medida so vale quando parou de
          mudar: tres leituras iguais seguidas. */
+      /* E ANTES DA ESTABILIDADE, A TRANSICAO.
+         Esperar "parar de mudar" tem uma armadilha: a troca de media e
+         feita FORA daqui, e a transicao que ela dispara pode nem ter
+         comecado quando o laco abaixo tira as tres leituras iguais. Ai o
+         teste da por assentado o estado ANTIGO, e mede um documento no
+         meio do caminho -- foi assim que apareceram tres cores de linha
+         onde ha uma so. O getAnimations() responde a pergunta certa:
+         ainda ha alguma coisa em movimento? */
+      for (let i = 0; i < 120; i++) {
+        if (!document.getAnimations().some(a => a.playState === 'running')) break;
+        await new Promise(s => setTimeout(s, 40));
+      }
       const medir = () => [...document.querySelectorAll('.folha-a4 *')]
-        .map(e => getComputedStyle(e).borderTopColor).join('|');
+        .map(e => { const c = getComputedStyle(e);
+          return c.borderTopColor + c.borderLeftColor + c.borderBottomColor; }).join('|');
       let igual = 0, ultima = '';
       for (let i = 0; i < 80 && igual < 3; i++) {
         await new Promise(s => setTimeout(s, 60));

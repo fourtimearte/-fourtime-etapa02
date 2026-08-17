@@ -249,7 +249,13 @@ export async function roda(F) {
     const igual = window.__op === o;
     window.__op = o;
     return igual;
-  }, null, { timeout: 15000, polling: 100 });
+  }, null, { timeout: 30000, polling: 100 })
+    /* ESTOURAR O TEMPO NAO PODE MATAR O BLOCO INTEIRO.
+       Sem o catch, um estouro aqui derruba as outras quarenta
+       conferencias da suite e o relatorio so diz "o bloco quebrou",
+       sem dizer o que estava errado. Com ele, a espera desiste e a
+       conferencia logo abaixo falha mostrando o que viu. */
+    .catch(() => {});
   const um = await pc.p.evaluate(() => {
     const alvo = window.__alvo, esperado = window.__esperado;
     const mods = [...document.querySelectorAll('.lay-modulo')];
@@ -319,6 +325,16 @@ export async function roda(F) {
   });
   await F.assenta(pc.p, () => document.querySelectorAll('.lay-modulo.ft-apagado').length);
   await pc.p.emulateMedia({ media: 'print' });
+  /* ESPERA A TRANSICAO, E NAO DUAS LEITURAS IGUAIS.
+     O .ft-apagado tem transition:opacity .18s. Trocar para o papel dispara
+     a volta de 0.2 para 1, e o assenta() so cobra duas leituras iguais
+     separadas por 120ms: dentro da transicao ele pega 0.2 duas vezes e da
+     por assentado. Sob a carga da bateria isso acontecia uma vez a cada
+     tantas rodadas. O sinal honesto e o getAnimations(), como no resto da
+     suite. */
+  await pc.p.waitForFunction(() =>
+    !document.getAnimations().some(a => a.playState === 'running'),
+    null, { timeout: 8000 }).catch(() => {});
   const papel = await F.assenta(pc.p, () => {
     const f = document.querySelector('.ft-filtros');
     const ap = document.querySelector('.lay-modulo.ft-apagado');

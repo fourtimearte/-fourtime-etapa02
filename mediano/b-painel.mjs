@@ -204,7 +204,13 @@ export async function roda(F) {
       if (t === window.__ftEstado) window.__ftIguais++;
       else { window.__ftEstado = t; window.__ftIguais = 0; }
       return window.__ftIguais >= 3;
-    }, null, { timeout: 15000, polling: 120 });
+    }, null, { timeout: 30000, polling: 120 })
+      /* ESTOURAR O TEMPO NAO PODE MATAR O BLOCO INTEIRO.
+         Sem o catch, um estouro aqui derruba as outras quarenta
+         conferencias da suite e o relatorio so diz "o bloco quebrou",
+         sem dizer o que estava errado. Com ele, a espera desiste e a
+         conferencia logo abaixo falha mostrando o que viu. */
+      .catch(() => {});
   }
 
   const mede = () => p.evaluate(() => {
