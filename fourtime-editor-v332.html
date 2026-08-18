@@ -7423,7 +7423,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.331';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.332';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -16109,11 +16109,36 @@ function gerarHTML(imagens){
      comprou.
      ==================================================================== */
   if(bodyClone){
+    /* A LISTA CURTA DO QUE O ARQUIVO DO CLIENTE PRECISA.
+
+       Ela é curta de propósito e cada linha tem um dono:
+
+         #ftBarra  a barra fixa do arquivo, montada logo abaixo
+         .app      o documento
+         #viewer   a tela cheia do visualizador de imagem. Ela é o único
+                   flutuante que o arquivo do cliente USA: o
+                   VIEWER_RUNTIME injetado no fim procura por ela ao
+                   clicar numa imagem, e sem ela o clique não abre nada.
+                   Foi o que a v3.330 quebrou ao trocar a lista de
+                   bloqueio por esta: acertou o vazamento e levou junto
+                   uma coisa que era para ficar.
+         style/link  os estilos
+
+       Acrescentar um nome aqui é uma decisão, e não um esquecimento: só
+       entra o que o arquivo do cliente precisa para funcionar sozinho. */
     const FICA = el =>
       el.id === 'ftBarra'
+      || el.id === 'viewer'
       || el.classList.contains('app')
       || el.tagName === 'STYLE' || el.tagName === 'LINK';
     [...bodyClone.children].forEach(el=>{ if(!FICA(el))el.remove(); });
+    /* o visualizador vai FECHADO, seja qual for o estado do editor */
+    const vw=bodyClone.querySelector('#viewer');
+    if(vw){
+      vw.classList.remove('open','arrastando');
+      const vi=vw.querySelector('#vImg');
+      if(vi){ vi.removeAttribute('src'); vi.removeAttribute('style'); }
+    }
   }
 
   /* some tudo que só existe para editar */

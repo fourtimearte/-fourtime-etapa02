@@ -360,14 +360,95 @@ const solto = await pt.evaluate(() => {
     /* e as telas do editor nao existem mais aqui dentro */
     sobrouDoEditor: ['ftUsersFundo', 'ftLoginFundo', 'relPage', 'bdPage', 'cliPage',
       'bugPage', 'atvPage', 'atvMenuEtapa', 'atvNotif', 'atvCarga', 'cssRel', 'ftAtvCss',
-      'ftArqFundo', 'ftNotifWrap', 'viewer', 'atvCal', 'atvToast', 'atvListaModal',
+      'ftArqFundo', 'ftNotifWrap', 'atvCal', 'atvToast', 'atvListaModal',
       'atvPrint', 'atvMedindo']
       .filter(id => !!document.getElementById(id)) };
 });
-diz('no arquivo só existem a barra fixa e o documento',
-  solto.fora.map(x => x.id || x.cls || x.tag), ['ftBarra', 'app']);
+diz('no arquivo só existem a barra fixa, o documento e o visualizador',
+  solto.fora.map(x => x.id || x.cls || x.tag).sort(), ['app', 'ftBarra', 'viewer']);
 diz('  e o documento começa no alto da página', solto.topoDoDocumento, 0);
 diz('  nenhuma tela do editor viajou junto', solto.sobrouDoEditor, []);
+
+secao('B. o visualizador de imagem ABRE dentro do arquivo do cliente');
+/* A OUTRA METADE DA MESMA MOEDA (v3.332).
+
+   A v3.330 trocou a lista de bloqueio por uma lista de permissão para
+   que nenhum flutuante novo do editor vaze para a folha do cliente.
+   Acertou nisso, e levou junto o #viewer: ele MORA no mesmo nível dos
+   flutuantes, mas não é do editor, e sim do arquivo. Sem ele o clique
+   numa imagem não abre nada, e ninguém percebe porque o arquivo continua
+   com a cara certa.
+
+   Conferir "nada sobrou" nunca ia pegar isso. Só conferir "o que tem de
+   funcionar funciona" pega, e é por isso que esta seção clica de
+   verdade. */
+const vw = await pt.evaluate(() => {
+  const v = document.getElementById('viewer');
+  return { existe: !!v,
+    nasceFechado: v ? !v.classList.contains('open') : null,
+    temImg: !!document.getElementById('vImg'),
+    temFechar: !!document.getElementById('vClose'),
+    temBaixar: !!document.getElementById('vDown') };
+});
+diz('o visualizador viajou junto', vw.existe, true);
+diz('  fechado, seja qual for o estado do editor', vw.nasceFechado, true);
+diz('  com a imagem, o fechar e o baixar',
+  [vw.temImg, vw.temFechar, vw.temBaixar], [true, true, true]);
+
+if (!vw.existe) {
+  /* sem o elemento não há o que clicar: as conferências abaixo
+     reprovam de uma vez, sem derrubar a suíte */
+  diz('clicar na imagem abre o visualizador', 'não há visualizador no arquivo', true);
+} else {
+  await pt.click('.lay-modulo .lay-img.com-img img');
+  await pt.waitForTimeout(300);
+  const aberto = await pt.evaluate(() => {
+    const v = document.getElementById('viewer');
+    const im = document.getElementById('vImg');
+    const r = v.getBoundingClientRect();
+    return { abriu: v.classList.contains('open'),
+      visivel: getComputedStyle(v).display !== 'none' && r.width > 0,
+      /* a imagem que abriu é a do layout que foi clicado, e não outra */
+      mesmaImagem: im.src === document.querySelector('.lay-modulo .lay-img.com-img img').src,
+      /* o ajuste à tela roda no onload: sem ele a imagem fica com o
+         tamanho natural e o zoom não bate */
+      zoom: (document.getElementById('vZoom') || {}).textContent || '' };
+  });
+  diz('clicar na imagem abre o visualizador', aberto.abriu, true);
+  diz('  e ele aparece de verdade', aberto.visivel, true);
+  diz('  mostrando a imagem daquele layout', aberto.mesmaImagem, true);
+  diz('  com o zoom calculado', /%$/.test(aberto.zoom), true);
+
+  await pt.keyboard.press('Escape');
+  await pt.waitForTimeout(250);
+  diz('e o Esc fecha', await pt.evaluate(() =>
+    !document.getElementById('viewer').classList.contains('open')), true);
+}
+
+secao('B. tudo que os runtimes procuram existe no arquivo');
+/* A REGRA GERAL, para não depender de eu lembrar (v3.332).
+
+   O arquivo do cliente leva cinco runtimes injetados no fim: visualizador,
+   barra fixa, brilho, filtros e DTF. Cada um procura elementos por id. Se
+   a limpeza da exportação levar um deles, o arquivo continua com a cara
+   certa e para de funcionar em silêncio, que foi exatamente o que
+   aconteceu com o #viewer.
+
+   Em vez de conferir um id de cada vez, esta seção LÊ o script que foi
+   para o arquivo, extrai todo id que ele procura e cobra que exista. Um
+   runtime novo, com um elemento novo, já nasce coberto. */
+const ids = await pt.evaluate(() => {
+  const txt = [...document.querySelectorAll('script')].map(s => s.textContent).join('\n');
+  const achados = new Set();
+  const re1 = /getElementById\(['"]([\w-]+)/g, re2 = /querySelector(?:All)?\(['"]#([\w-]+)/g;
+  let m;
+  while ((m = re1.exec(txt))) achados.add(m[1]);
+  while ((m = re2.exec(txt))) achados.add(m[1]);
+  const lista = [...achados].sort();
+  return { procurados: lista, faltando: lista.filter(id => !document.getElementById(id)) };
+});
+console.log('     procurados: ' + JSON.stringify(ids.procurados));
+diz('nenhum elemento procurado pelos runtimes está faltando', ids.faltando, []);
 
 secao('B. o arquivo COM valores não leva botão');
 const comValor = await pb.evaluate(() => {
