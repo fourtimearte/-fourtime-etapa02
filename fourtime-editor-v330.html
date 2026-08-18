@@ -7399,7 +7399,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.329';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.330';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -16013,6 +16013,40 @@ function gerarHTML(imagens){
     delete bodyClone.dataset.tema;
     bodyClone.removeAttribute('data-tema');
   }
+  /* ====================================================================
+     O QUE FICA, E NÃO O QUE SAI (v3.330)
+
+     Esta é a TERCEIRA vez que um flutuante do editor viaja para o
+     arquivo do cliente. Primeiro o #ftLoginFundo, depois o
+     #ftUsersFundo (o "Pessoas" solto no canto), agora o #atvCal com o
+     calendário de planejamento inteiro escrito no pé do orçamento.
+
+     Sempre pelo mesmo motivo: a correção anterior foi acrescentar um id
+     a uma lista de remoção. Uma lista de bloqueio envelhece a cada
+     elemento novo, e quem cria o elemento não tem como saber que ela
+     existe. As três vezes o autor era eu, e as três vezes eu esqueci.
+
+     A regra passa a ser invertida. No arquivo do cliente, os filhos
+     diretos de <body> são a barra fixa, a casca do documento e os
+     estilos. Qualquer outra coisa nesse nível é flutuante do editor, e
+     sai sem precisar ser nomeada. Um flutuante novo criado amanhã já
+     nasce fora do arquivo.
+
+     Por que isso é grave e não cosmético: um <div> sem o CSS dele NÃO é
+     invisível. Ele vira um bloco de texto comum. Neste caso, o pé do
+     orçamento do cliente ganhou o calendário do mês e a frase
+     "Este pedido está finalizado. A data escolhida aqui é a da
+     conclusão", que é conversa interna nossa aparecendo para quem
+     comprou.
+     ==================================================================== */
+  if(bodyClone){
+    const FICA = el =>
+      el.id === 'ftBarra'
+      || el.classList.contains('app')
+      || el.tagName === 'STYLE' || el.tagName === 'LINK';
+    [...bodyClone.children].forEach(el=>{ if(!FICA(el))el.remove(); });
+  }
+
   /* some tudo que só existe para editar */
   /* O "Pessoas" NO CANTO DA TELA (corrigido na v3.323).
 
@@ -16026,7 +16060,12 @@ function gerarHTML(imagens){
 
      Duas mudanças certas, cada uma apoiada numa suposição sobre a outra,
      e ninguém releu a do lado. O #ftLoginFundo, que é irmão dele e nasceu
-     antes, já estava aqui. */
+     antes, já estava aqui.
+
+     A LISTA CONTINUA, mas mudou de papel: os flutuantes de nível de
+     <body> já saíram na regra acima. O que ela alcança agora é o que
+     vive DENTRO da casca (botões de editar, menus ancorados, as telas
+     das outras seções), que não tem como ser pego por posição. */
   raiz.querySelectorAll('#ftTabBar,.ft-menu,.ft-rail,#ftLoginFundo,#ftUsersFundo,#cliPage,#bugPage,#bdPage,#relPage,#cssRel,#corMenu,#calMenu,#pickMenu,#ctxCustom,#ccPrev,#ctxConfig,#cfgFundo,#ctxCores,#ctxTags,#ctxObs,.hd-tags-add,#selbar,#fileOpen,'+
     '#ftFill,#ftDropFt,#ftStatusFundo,#ftEscFundo,#ftTxtFundo,#ftLinkFundo,'+   /* flutuantes do editor: não vão para o arquivo exportado */
     /* controles que só fazem sentido DENTRO do editor. A barra de zoom era a

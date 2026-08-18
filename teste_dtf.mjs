@@ -333,24 +333,39 @@ secao('B. nada do editor vaza para o arquivo do cliente');
    mais alto sobrou alem da barra fixa e do documento. Assim o proximo
    modal que alguem criar e esquecer de remover cai aqui, e nao na tela de
    um cliente. */
+/* TERCEIRA VEZ que isto acontece: primeiro o #ftLoginFundo, depois o
+   #ftUsersFundo (o "Pessoas |" da v3.323), agora o calendario do
+   planejamento aparecendo no canto de baixo do pedido de um cliente.
+   Sempre a mesma causa: o exportador apagava por LISTA DE IDS, e toda
+   lista envelhece no dia em que alguem cria mais uma tela.
+
+   E a conferencia daqui deixou passar porque media VISIBILIDADE: pulava
+   quem estava com altura zero. Um modal fechado tem altura zero, entao
+   ele passava limpo aqui e vazava na maquina do usuario, que tinha o
+   calendario aberto na hora de exportar.
+
+   A regra agora e de EXISTENCIA: no <body> do arquivo gerado so podem
+   existir a barra fixa, o documento e as folhas de estilo. Aberto ou
+   fechado, com altura ou sem, qualquer outra coisa reprova. */
 const solto = await pt.evaluate(() => {
   const fora = [];
   document.querySelectorAll('body > *').forEach(el => {
-    const cs = getComputedStyle(el);
-    const r = el.getBoundingClientRect();
-    if (cs.display === 'none' || cs.visibility === 'hidden' || !r.height) return;
-    fora.push({ id: el.id || '', cls: (el.className || '').toString().split(' ')[0] });
+    if (el.tagName === 'STYLE' || el.tagName === 'LINK' || el.tagName === 'SCRIPT') return;
+    fora.push({ id: el.id || '', cls: (el.className || '').toString().split(' ')[0],
+      tag: el.tagName.toLowerCase() });
   });
   return { fora,
     /* nada pode estar EMPURRANDO o documento para baixo */
     topoDoDocumento: Math.round(document.querySelector('.app').getBoundingClientRect().top),
     /* e as telas do editor nao existem mais aqui dentro */
     sobrouDoEditor: ['ftUsersFundo', 'ftLoginFundo', 'relPage', 'bdPage', 'cliPage',
-      'bugPage', 'atvPage', 'atvMenuEtapa', 'atvNotif', 'atvCarga', 'cssRel', 'ftAtvCss']
+      'bugPage', 'atvPage', 'atvMenuEtapa', 'atvNotif', 'atvCarga', 'cssRel', 'ftAtvCss',
+      'ftArqFundo', 'ftNotifWrap', 'viewer', 'atvCal', 'atvToast', 'atvListaModal',
+      'atvPrint', 'atvMedindo']
       .filter(id => !!document.getElementById(id)) };
 });
 diz('no arquivo só existem a barra fixa e o documento',
-  solto.fora.map(x => x.id || x.cls), ['ftBarra', 'app']);
+  solto.fora.map(x => x.id || x.cls || x.tag), ['ftBarra', 'app']);
 diz('  e o documento começa no alto da página', solto.topoDoDocumento, 0);
 diz('  nenhuma tela do editor viajou junto', solto.sobrouDoEditor, []);
 
