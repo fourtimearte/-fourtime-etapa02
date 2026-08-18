@@ -1,22 +1,34 @@
-/* O MÓDULO DE INFORMAÇÕES E A BUSCA AMPLIADA DE CLIENTE (v3.328)
+/* O MÓDULO DE INFORMAÇÕES E A BUSCA AMPLIADA DE CLIENTE
+   (v3.328, e o botão da v3.331)
 
-   Duas mudanças no editor de orçamento, conferidas juntas porque as duas
-   têm a mesma forma: uma coisa que já existia passa a reconhecer sozinha
-   um caso que antes obrigava a pessoa a se virar.
+   O anexo (etiqueta de cliente, tabela de medidas, croqui) precisa ir
+   junto do pedido sem levar uma ficha de produção em branco atrás. Da
+   v3.328 à v3.330 ele era reconhecido sozinho: imagem e mais nada virava
+   informação na hora.
 
-     · Um layout com só imagem JÁ ERA um anexo (etiqueta de cliente,
-       tabela de medidas, croqui). Ele só não sabia disso, e levava junto
-       uma ficha em branco que a fábrica lia como "faltou preencher".
-     · Um cliente JÁ ERA conhecido por três nomes (fantasia, razão social
-       e a pessoa de contato). A busca só olhava um deles.
+   ERA ISSO QUE ESTAVA ERRADO, e é o que esta suíte passa a cobrar ao
+   contrário. Montar um layout começa por colar a imagem: naquele
+   instante o módulo tinha imagem e nada mais, virava anexo, e tecido,
+   cor e tabela sumiam da frente de quem estava indo preenchê-los. O
+   automatismo acertava o caso raro e atrapalhava o caso comum.
 
-   O que este teste cobra, acima de tudo, é a SEGURANÇA das duas: virar
-   módulo de informações não pode esconder dado nenhum, e procurar por
-   outro caminho não pode mudar o que fica escrito no cabeçalho.  */
+   Agora quem decide é um botão ao lado da referência. As duas
+   propriedades que esta suíte defende:
+
+     · NADA muda de forma sozinho. Imagem, observação, design, o que for:
+       enquanto o botão estiver apagado, é layout de produção.
+     · Marcar nunca PERDE dado. O que some fica guardado e volta inteiro
+       ao desmarcar; se havia algo preenchido, o editor avisa.
+
+   A segunda metade é a busca de cliente por três nomes (fantasia, razão
+   social e responsável), que não pode mudar o que vai para o cabeçalho.  */
 import { abreNavegador, editorAtual } from './ft_navegador.mjs';
 import { pathToFileURL } from 'url';
 
 const DIR = import.meta.dirname + '/';
+/* FT_ARQ permite apontar para uma versao especifica: e assim que se
+   confere que uma conferencia nova REPROVA na versao anterior. */
+const ARQ = process.env.FT_ARQ || editorAtual();
 /* um pixel PNG: o teste precisa de uma imagem de verdade, não do maior
    arquivo que couber */
 const PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf'
@@ -35,7 +47,7 @@ const p = await ctx.newPage();
 p.setDefaultTimeout(60000);
 const err = [];
 p.on('pageerror', e => err.push(String(e).slice(0, 200)));
-await p.goto(pathToFileURL(DIR + editorAtual()).href, { waitUntil: 'domcontentloaded' });
+await p.goto(pathToFileURL(DIR + ARQ).href, { waitUntil: 'domcontentloaded' });
 await p.waitForTimeout(1500);
 await p.evaluate(() => document.fonts.ready);
 
@@ -53,6 +65,15 @@ const imagem = (i, px) => p.evaluate(([i, px]) => {
   const m = document.querySelectorAll('.lay-modulo')[i];
   aplicaImagem(m.querySelector('.lay-img'), px);
 }, [i, px]);
+/* o botão que transforma em informações, à direita da referência */
+const marca = (i) => p.evaluate(i => {
+  document.querySelectorAll('.lay-modulo')[i].querySelector('.lay-info-btn').click();
+}, i);
+const marcaNoInfo = () => p.evaluate(() => {
+  const m = document.querySelector('.lay-modulo.info')
+    || [...document.querySelectorAll('.lay-modulo')].pop();
+  m.querySelector('.lay-info-btn').click();
+});
 const retrato = () => p.evaluate(() =>
   [...document.querySelectorAll('.lay-modulo')].map(m => ({
     num: m.dataset.num,
@@ -60,7 +81,7 @@ const retrato = () => p.evaluate(() =>
     ref: (m.querySelector('.combo-ref textarea') || {}).value || '',
   })));
 
-console.log('\n=== 1. UM LAYOUT COMUM NAO VIRA INFORMACAO ===');
+console.log('\n=== 1. NADA VIRA INFORMACAO SOZINHO ===');
 await p.evaluate(() => { document.getElementById('btnNovoLayout').click();
                          document.getElementById('btnNovoLayout').click(); });
 await esperaCalmo();
@@ -72,19 +93,50 @@ await imagem(0, PX);
 await esperaCalmo();
 let r = await retrato();
 console.log('     ' + JSON.stringify(r));
-/* IMAGEM SOZINHA NAO BASTA: o que decide e nada do que SOME estar
-   preenchido. Um layout com referencia e tecido continua sendo layout,
-   com imagem ou sem. */
 checa('layout com referencia e tecido nao vira informacao', r[0].info, false);
-checa('  nem os que estao vazios, porque nao tem imagem',
-  [r[1].info, r[2].info], [false, false]);
+checa('  nem os vazios', [r[1].info, r[2].info], [false, false]);
 
-console.log('\n=== 2. SO IMAGEM: VIRA MODULO DE INFORMACOES ===');
+console.log('\n=== 1b. O DEFEITO DELE: A IMAGEM PRIMEIRO ===');
+/* "se uma pessoa comeca criando um modulo de layout e coloca a imagem
+   primeiro ele automaticamente ja remove o resto e deixa so observacao".
+
+   Esta e a ordem natural de montar um layout, e era exatamente a que
+   quebrava. O modulo tem imagem e mais nada; os campos que ela vai
+   preencher em seguida PRECISAM continuar na frente dela. */
 await imagem(1, PX);
+await esperaCalmo();
+r = await p.evaluate(() => {
+  const m = document.querySelectorAll('.lay-modulo')[1];
+  const vis = n => getComputedStyle(m.querySelector('.lay-ficha > :nth-child(' + n + ')')).display;
+  return { info: m.classList.contains('info'),
+    tecido: vis(1), cor: vis(2), tabela: vis(4),
+    aceso: ((m.querySelector('.lay-info-btn')||{getAttribute:()=>'sem botão'}).getAttribute('aria-pressed')),
+    quantosInfo: document.querySelectorAll('.lay-modulo.info').length };
+});
+console.log('     ' + JSON.stringify(r));
+checa('so a imagem NAO transforma o modulo', r.info, false);
+checa('  tecido, cor e tabela continuam na frente de quem vai preencher',
+  [r.tecido, r.cor, r.tabela].map(x => x !== 'none'), [true, true, true]);
+checa('  e o botao esta apagado', r.aceso, 'false');
+checa('  nenhum anexo apareceu no pedido', r.quantosInfo, 0);
+/* e da para terminar de montar o layout normalmente */
+await põe(1, '.combo-tecido textarea', 'DRY FIT');
+await põe(1, '.combo-cor textarea', 'PRETO');
+await põeTabela(1, '10');
+await esperaCalmo();
+r = await retrato();
+checa('o layout se monta inteiro sem virar anexo no meio do caminho',
+  r.map(x => x.info), [false, false, false]);
+
+console.log('\n=== 2. O BOTAO TRANSFORMA, E DESCE PARA O FIM ===');
+/* o modulo 3, vazio, recebe imagem e o clique */
+await imagem(2, PX);
+await esperaCalmo();
+await marca(2);
 await esperaCalmo();
 r = await retrato();
 console.log('     ' + JSON.stringify(r));
-checa('o layout que so tem imagem vira informacao',
+checa('marcar o botao transforma em informacao',
   r.filter(x => x.info).length, 1);
 /* E DESCE PARA O FIM. Um anexo no meio do pedido obriga quem esta no chao
    de fabrica a pular por cima dele. */
@@ -94,7 +146,7 @@ checa('  e desce para o fim do pedido', r[r.length - 1].info, true);
 checa('  com o numero do layout acompanhando', r.map(x => x.num), ['1', '2', '3']);
 
 r = await p.evaluate(() => {
-  const m = [...document.querySelectorAll('.lay-modulo')].find(x => x.classList.contains('info'));
+  const m = document.querySelector('.lay-modulo.info');
   const vis = n => getComputedStyle(m.querySelector('.lay-ficha > :nth-child(' + n + ')')).display;
   return {
     selo: getComputedStyle(m.querySelector('.lay-info-selo')).display,
@@ -102,6 +154,8 @@ r = await p.evaluate(() => {
     tecido: vis(1), cor: vis(2), design: vis(3), tabela: vis(4), obs: vis(5),
     referencia: getComputedStyle(m.querySelector('.combo-ref')).display,
     botao: getComputedStyle(m.querySelector('.lay-btn')).display,
+    aceso: ((m.querySelector('.lay-info-btn')||{getAttribute:()=>'sem botão'}).getAttribute('aria-pressed')),
+    convite: m.querySelector('.combo-ref textarea').placeholder,
     imagem: !!m.querySelector('.lay-img img'),
   };
 });
@@ -115,35 +169,45 @@ checa('  ficam design e observacao',
   [r.design !== 'none', r.obs !== 'none'], [true, true]);
 checa('  e tambem a imagem, a referencia e o botao de layout',
   [r.imagem, r.referencia !== 'none', r.botao !== 'none'], [true, true, true]);
+checa('  o botao fica aceso, dizendo por que a ficha encolheu', r.aceso, 'true');
+checa('  e o campo convida a dizer o que e', r.convite, 'o que é esta informação…');
 
-console.log('\n=== 3. IMAGEM E OBSERVACAO TAMBEM CONTA ===');
-/* Observacao e design continuam a vista no modulo, entao preenche-los nao
-   pode tirar ninguem do modo: nada estaria sendo escondido. */
+console.log('\n=== 2b. DESMARCAR VOLTA A SER LAYOUT ===');
+await marcaNoInfo();
+await esperaCalmo();
+r = await p.evaluate(() => {
+  const m = [...document.querySelectorAll('.lay-modulo')].pop();
+  const vis = n => getComputedStyle(m.querySelector('.lay-ficha > :nth-child(' + n + ')')).display;
+  return { quantosInfo: document.querySelectorAll('.lay-modulo.info').length,
+    tecido: vis(1), cor: vis(2), tabela: vis(4),
+    aceso: ((m.querySelector('.lay-info-btn')||{getAttribute:()=>'sem botão'}).getAttribute('aria-pressed')),
+    convite: m.querySelector('.combo-ref textarea').placeholder };
+});
+console.log('     ' + JSON.stringify(r));
+checa('desmarcar devolve o layout de producao', r.quantosInfo, 0);
+checa('  com tecido, cor e tabela de volta',
+  [r.tecido, r.cor, r.tabela].map(x => x !== 'none'), [true, true, true]);
+checa('  o botao apaga', r.aceso, 'false');
+checa('  e o campo volta a pedir a referencia', r.convite, 'Referência');
+await marca(2); await esperaCalmo();   /* volta a ser anexo para as proximas secoes */
+
+console.log('\n=== 3. NADA DO QUE SE DIGITA TIRA O MODULO DO MODO ===');
+/* Na versao automatica, preencher tecido, cor ou a tabela expulsava o
+   modulo do modo na tecla. Isso era o outro lado da mesma moeda: o
+   estado mudava debaixo da mao de quem estava digitando. Agora so o
+   botao muda o estado. */
 await p.evaluate(() => {
-  const m = [...document.querySelectorAll('.lay-modulo')].find(x => x.classList.contains('info'));
+  const m = document.querySelector('.lay-modulo.info');
   const a = m.querySelector('.lay-area');
   a.textContent = 'Etiqueta que vai costurada na gola.';
   a.dispatchEvent(new Event('input', { bubbles: true }));
 });
 await esperaCalmo();
-checa('escrever a observacao nao tira o modulo do modo informacoes',
+checa('escrever a observacao nao tira o modulo do modo',
   (await retrato()).filter(x => x.info).length, 1);
 
-console.log('\n=== 4. O QUE SOME E EXATAMENTE O QUE DECIDE ===');
-/* A propriedade que faz esta feature ser segura: se um campo que some
-   estiver preenchido, o modulo NAO fica no modo. Assim virar informacao
-   nunca esconde dado nenhum. Conferido campo a campo, sempre no mesmo
-   modulo, sempre partindo do zero. */
-const zera = () => p.evaluate(px => {
-  const m = [...document.querySelectorAll('.lay-modulo')].pop();
-  m.querySelectorAll('.combo-ref textarea,.combo-tecido textarea,.combo-cor textarea')
-    .forEach(t => { t.value = ''; t.dispatchEvent(new Event('input', { bubbles: true })); });
-  m.querySelectorAll('.lay-tabela-mini tbody .c-qtd,.lay-tabela-mini tbody .c-uni')
-    .forEach(c => { c.textContent = ''; c.dispatchEvent(new Event('input', { bubbles: true })); });
-  aplicaImagem(m.querySelector('.lay-img'), px);
-}, PX);
 const noAnexo = (sel, v) => p.evaluate(([sel, v]) => {
-  const m = [...document.querySelectorAll('.lay-modulo')].find(x => x.classList.contains('info'))
+  const m = document.querySelector('.lay-modulo.info')
     || [...document.querySelectorAll('.lay-modulo')].pop();
   if (sel === 'tabela') {
     const c = m.querySelector('.lay-tabela-mini tbody .c-qtd');
@@ -156,35 +220,83 @@ const noAnexo = (sel, v) => p.evaluate(([sel, v]) => {
 const quantosInfo = () => p.evaluate(() =>
   document.querySelectorAll('.lay-modulo.info').length);
 
-/* A REFERENCIA SAIU DESTA LISTA na v3.329: ela NAO some no modo
-   informacoes, entao escrever nela nao esconde nada e nao precisa tirar
-   ninguem do modo. E ali que se escreve o que a informacao e. */
 const porCampo = [];
 for (const [rot, sel, v] of [
   ['tecido', '.combo-tecido textarea', 'DRY FIT'],
   ['cor', '.combo-cor textarea', 'PRETO'],
   ['tabela', 'tabela', '12'],
 ]) {
-  await zera(); await esperaCalmo();
-  const virou = await quantosInfo();
   await noAnexo(sel, v); await esperaCalmo();
-  porCampo.push({ campo: rot, viraAnexoSozinho: virou === 1, depois: await quantosInfo() });
+  porCampo.push({ campo: rot, continua: await quantosInfo() });
 }
 console.log('     ' + JSON.stringify(porCampo));
-checa('so com a imagem, ele vira anexo nas tres vezes',
-  porCampo.map(x => x.viraAnexoSozinho), [true, true, true]);
-checa('  e qualquer campo que SOME o tira do modo na hora',
-  porCampo.map(x => x.depois), [0, 0, 0]);
+checa('preencher os campos escondidos nao expulsa mais ninguem',
+  porCampo.map(x => x.continua), [1, 1, 1]);
+
+console.log('\n=== 4. MARCAR ESCONDE, MAS NUNCA PERDE ===');
+/* A versao automatica garantia que virar informacao nunca escondia dado
+   nenhum porque dado preenchido impedia a conversao. Com um botao, essa
+   recusa seria um clique sem resposta. A garantia passa a ser outra, e
+   mais forte: o dado nao e apagado, so fica guardado, e volta inteiro. */
+r = await p.evaluate(async () => {
+  const m = document.querySelector('.lay-modulo.info');
+  /* ele esta marcado e com tecido, cor e tabela preenchidos pela secao 3 */
+  const escondido = {
+    tecido: getComputedStyle(m.querySelector('.lay-ficha > :nth-child(1)')).display,
+    cor: getComputedStyle(m.querySelector('.lay-ficha > :nth-child(2)')).display,
+    tabela: getComputedStyle(m.querySelector('.lay-ficha > :nth-child(4)')).display };
+  const guardado = {
+    tecido: m.querySelector('.combo-tecido textarea').value,
+    cor: m.querySelector('.combo-cor textarea').value,
+    tabela: m.querySelector('.lay-tabela-mini tbody .c-qtd').textContent.trim() };
+  /* e o arquivo leva tudo junto: desmarcar amanha devolve o layout inteiro */
+  const L = coletaEstado().layouts.filter(x => x.info)[0] || {};
+  return { escondido, guardado,
+    noArquivo: { tecidos: L.tecidos, cor: L.cor, tamanhos: Object.keys(L.tamanhos || {}).length > 0 } };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o que some esta mesmo escondido',
+  [r.escondido.tecido, r.escondido.cor, r.escondido.tabela], ['none', 'none', 'none']);
+checa('  mas continua guardado no campo',
+  [r.guardado.tecido, r.guardado.cor, r.guardado.tabela], ['DRY FIT', 'PRETO', '12']);
+checa('  e vai inteiro para o arquivo',
+  [r.noArquivo.tecidos[0], r.noArquivo.cor, r.noArquivo.tamanhos],
+  ['DRY FIT', 'PRETO', true]);
+/* desmarcar traz tudo de volta a vista, exatamente como estava */
+await marcaNoInfo(); await esperaCalmo();
+r = await p.evaluate(() => {
+  const m = [...document.querySelectorAll('.lay-modulo')].pop();
+  return { tecido: m.querySelector('.combo-tecido textarea').value,
+    cor: m.querySelector('.combo-cor textarea').value,
+    tabela: m.querySelector('.lay-tabela-mini tbody .c-qtd').textContent.trim(),
+    visivel: getComputedStyle(m.querySelector('.lay-ficha > :nth-child(1)')).display !== 'none' };
+});
+console.log('     ' + JSON.stringify(r));
+checa('desmarcar devolve tudo a vista, sem perder um caractere',
+  [r.tecido, r.cor, r.tabela, r.visivel], ['DRY FIT', 'PRETO', '12', true]);
+
+/* daqui para baixo o ultimo modulo volta a ser um anexo limpo */
+const zera = () => p.evaluate(px => {
+  const m = [...document.querySelectorAll('.lay-modulo')].pop();
+  m.querySelectorAll('.combo-ref textarea,.combo-tecido textarea,.combo-cor textarea')
+    .forEach(t => { t.value = ''; t.dispatchEvent(new Event('input', { bubbles: true })); });
+  m.querySelectorAll('.lay-tabela-mini tbody .c-qtd,.lay-tabela-mini tbody .c-uni')
+    .forEach(c => { c.textContent = ''; c.dispatchEvent(new Event('input', { bubbles: true })); });
+  aplicaImagem(m.querySelector('.lay-img'), px);
+  if (!m.classList.contains('info')) m.querySelector('.lay-info-btn').click();
+}, PX);
 
 console.log('\n=== 5. ESCREVER NA FRENTE DE INFORMACOES (v3.329) ===');
 /* O anexo precisa dizer O QUE ele e ("INFORMACOES  ETIQUETA DE GOLA"), e
    esse texto so tem um lugar razoavel para morar: a referencia, que e o
    unico campo de titulo que sobrou a vista.
 
-   Isso obrigou a separar ENTRAR de FICAR. Entrar continua exigindo a
-   referencia vazia, senao um layout de producao em que alguem ja digitou
-   a referencia viraria anexo ao colar a imagem. Ficar nao exige: a
-   referencia nao some, entao escrever nela nao esconde nada. */
+   Na v3.329 isso obrigou a separar ENTRAR de FICAR, porque entrar era
+   automatico e escrever na referencia expulsava o modulo. Com o botao da
+   v3.331 a distincao deixou de existir: nao ha mais "entrar sozinho", e
+   nenhum campo digitado mexe no estado. O que continua valendo, e e o
+   que esta secao cobra, e o selo aparecer como prefixo e o texto poder
+   ser escrito na frente dele. */
 await zera(); await esperaCalmo();
 r = await p.evaluate(() => {
   const m = document.querySelector('.lay-modulo.info');
@@ -220,10 +332,15 @@ r = await p.evaluate(() => {
 console.log('     ' + JSON.stringify(r));
 checa('escrever na referencia NAO tira o anexo do modo', r.info, true);
 checa('  e o texto fica', r.texto, 'ETIQUETA DE GOLA');
-/* mas preencher o que SOME continua tirando, que e a propriedade de
-   seguranca da secao 4 */
+/* e preencher o que some tambem nao tira mais: guarda, esconde e avisa */
 await noAnexo('.combo-tecido textarea', 'PV'); await esperaCalmo();
-checa('  preencher tecido continua tirando', await quantosInfo(), 0);
+checa('  preencher tecido tambem nao tira', await quantosInfo(), 1);
+checa('  e o tecido fica guardado, fora da vista',
+  await p.evaluate(() => {
+    const m = document.querySelector('.lay-modulo.info');
+    return [m.querySelector('.combo-tecido textarea').value,
+      getComputedStyle(m.querySelector('.lay-ficha > :nth-child(1)')).display];
+  }), ['PV', 'none']);
 
 console.log('\n=== 5b. O MODO SOBREVIVE A SALVAR E REABRIR ===');
 /* O modo deixou de ser deduzivel a partir dos campos no instante em que a
@@ -279,13 +396,18 @@ r = await p.evaluate(async px => {
   document.getElementById('btnNovoLayout').click();
   await new Promise(s => setTimeout(s, 200));
   const M = [...document.querySelectorAll('.lay-modulo')];
-  /* o 1o e o 3o viram anexo; o 2o e o 4o continuam layout */
+  /* o 1o e o 3o viram anexo pelo BOTAO; o 2o e o 4o continuam layout */
+  const poe = (m, quer) => {
+    if (m.classList.contains('info') !== quer) m.querySelector('.lay-info-btn').click();
+  };
   [0, 2].forEach(i => {
     M[i].querySelectorAll('.combo-ref textarea,.combo-tecido textarea,.combo-cor textarea')
       .forEach(t => { t.value = ''; t.dispatchEvent(new Event('input', { bubbles: true })); });
     aplicaImagem(M[i].querySelector('.lay-img'), px);
+    poe(M[i], true);
   });
   [1, 3].forEach(i => {
+    poe(M[i], false);
     const t = M[i].querySelector('.combo-ref textarea');
     t.value = 'FT-REAL-' + i; t.dispatchEvent(new Event('input', { bubbles: true }));
   });
@@ -344,6 +466,7 @@ r = await p.evaluate(() => {
   try { html = String(gerarHTML() || ''); } catch (e) { return { erro: String(e.message).slice(0, 120) }; }
   return { pulou: false,
     temSelo: html.indexOf('lay-info-selo') >= 0,
+    temBotao: /<button[^>]*lay-info-btn/.test(html),
     temPalavra: html.indexOf('INFORMAÇÕES') >= 0,
     temCss: html.indexOf('.lay-modulo.info') >= 0,
     temClasse: /class="[^"]*\blay-modulo\b[^"]*\binfo\b/.test(html)
@@ -354,10 +477,67 @@ if (r.pulou) {
   console.log('     (a exportacao do Trello nao esta exposta nesta pagina; conferida na suite propria)');
 } else {
   checa('o arquivo do Trello leva o selo', r.temSelo, true);
+  checa('  e NAO leva o botao, que e coisa do editor', r.temBotao, false);
   checa('  com a palavra escrita', r.temPalavra, true);
   checa('  o CSS que o desenha', r.temCss, true);
   checa('  e a marca de anexo no modulo', r.temClasse, true);
 }
+
+console.log('\n=== 6c. O BOTAO E DO EDITOR, E SO DELE ===');
+const displayDoBotao = () => p.evaluate(() => {
+  const m = document.querySelector('.lay-modulo.info') || document.querySelector('.lay-modulo');
+  return getComputedStyle(m.querySelector('.lay-info-btn')).display;
+});
+/* o `@media print` de verdade, e nao uma classe que imita impressao */
+const tela = await displayDoBotao();
+await p.emulateMedia({ media: 'print' });
+await esperaCalmo();
+const papel = await displayDoBotao();
+await p.emulateMedia({ media: 'screen' });
+await esperaCalmo();
+r = { tela, papel };
+console.log('     ' + JSON.stringify(r));
+checa('no editor o botao existe', r.tela !== 'none', true);
+checa('  e no papel ele some', r.papel, 'none');
+
+console.log('\n=== 6d. ARQUIVO ANTIGO NAO PERDE OS ANEXOS ===');
+/* Um .ft salvo antes da v3.329 nao tem a marca `info`, porque ela nao
+   existia. Se a marca ausente fosse lida como "nao e anexo", todo anexo
+   de todo orcamento ja arquivado voltaria a abrir como layout de
+   producao, com a ficha vazia atras. A deducao antiga roda uma vez, so
+   nesse caso, e so quando NADA alem da imagem esta preenchido. */
+r = await p.evaluate(async px => {
+  const doc = { _formato: 'FOURTIME_ORCAMENTO', _versao: 2, header: {}, anotacoes: [],
+    layouts: [
+      /* anexo de arquivo velho: imagem e mais nada */
+      { img: px, tecidos: [''], design: [], tamanhos: {} },
+      /* layout de verdade de arquivo velho: imagem e tecido */
+      { img: px, tecidos: ['PV'], cor: '', design: [], tamanhos: {} },
+      /* arquivo novo manda a marca, e ela ganha de qualquer deducao:
+         um anexo com a ficha preenchida continua anexo */
+      { img: px, tecidos: ['DRY FIT'], cor: 'PRETO', design: [], tamanhos: {}, info: true },
+      /* e um layout com so imagem, marcado como layout, CONTINUA layout */
+      { img: px, tecidos: [''], design: [], tamanhos: {}, info: false },
+    ] };
+  aplicaEstado(JSON.parse(JSON.stringify(doc)), 'velho.ft', '');
+  await new Promise(s => setTimeout(s, 800));
+  /* a ordem impressa se decide na repaginacao, que e por onde passa
+     qualquer mexida no documento */
+  repagina();
+  await new Promise(s => setTimeout(s, 300));
+  return [...document.querySelectorAll('.lay-modulo')].map(m => ({
+    info: m.classList.contains('info'),
+    aceso: ((m.querySelector('.lay-info-btn')||{getAttribute:()=>'sem botão'}).getAttribute('aria-pressed')),
+    tecido: m.querySelector('.combo-tecido textarea').value }));
+}, PX);
+console.log('     ' + JSON.stringify(r));
+/* a ordem na tela ja e a de impressao: os layouts primeiro, anexos no fim */
+checa('o anexo velho continua anexo, e os layouts continuam layouts',
+  r.map(x => x.info), [false, false, true, true]);
+checa('  o botao de cada um conta a mesma historia',
+  r.map(x => x.aceso), ['false', 'false', 'true', 'true']);
+checa('  e o anexo com ficha preenchida guardou o tecido',
+  r.filter(x => x.info).map(x => x.tecido).sort(), ['', 'DRY FIT']);
 
 console.log('\n=== 7. A BUSCA DE CLIENTE ACHA POR TRES CAMINHOS ===');
 r = await p.evaluate(() => {
@@ -423,4 +603,4 @@ checa('nenhum erro de pagina', err.length, 0);
 if (err.length) err.slice(0, 5).forEach(e => console.log('     ! ' + e));
 await nav.close();
 if (falhas.length) { console.log(`FALHARAM ${falhas.length}:\n  - ${falhas.join('\n  - ')}`); process.exit(1); }
-console.log('INFO E BUSCA: o anexo se reconhece sozinho, e o cliente atende por tres nomes');
+console.log('INFO E BUSCA: o anexo e uma escolha no botao, e o cliente atende por tres nomes');

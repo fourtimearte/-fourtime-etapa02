@@ -1532,8 +1532,8 @@
      "faltou preencher" — tecido, cor e a grade de tamanhos — e ficam a
      imagem, o design, a observação, a referência e o botão do layout.
 
-     O que some é EXATAMENTE o que o reconhecimento olha (ver layEhInfo):
-     é isso que garante que virar informação nunca esconde dado nenhum.
+     Quem decide é o botão ao lado da referência (v3.331), e não mais a
+     adivinhação a partir dos campos: ver o comentário de `layEhInfo`.
      ================================================================ */
   /* O SELO É UM PREFIXO NA LINHA (v3.329).
 
@@ -1713,7 +1713,7 @@
     padding:0 2.2mm;min-height:7.78mm;user-select:none;white-space:nowrap;
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
-  .lay-btn,.lay-del{
+  .lay-btn,.lay-del,.lay-info-btn{
     flex:0 0 auto;align-self:center;
     width:6.3mm;height:6.3mm;padding:0;
     display:inline-flex;align-items:center;justify-content:center;
@@ -1722,8 +1722,8 @@
     transition:border-color var(--mov-rapido) var(--mov-suave),
                color var(--mov-rapido) var(--mov-suave);
   }
-  .lay-btn:hover,.lay-del:hover{border-color:var(--mod-medio);color:var(--mod-texto);}
-  .lay-btn svg,.lay-del svg{width:10.5px;height:10.5px;stroke:currentColor;fill:none;
+  .lay-btn:hover,.lay-del:hover,.lay-info-btn:hover{border-color:var(--mod-medio);color:var(--mod-texto);}
+  .lay-btn svg,.lay-del svg,.lay-info-btn svg{width:10.5px;height:10.5px;stroke:currentColor;fill:none;
     stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
   .lay-selo .lay-btn-txt{display:block;line-height:1;}
   .lay-btn-ic{display:none;align-items:center;justify-content:center;line-height:0;}
@@ -1734,6 +1734,29 @@
   body.tem-layout-copiado .layout-copiado .lay-btn .ic-cancelar{display:flex;}
   .layout-copiado .lay-btn{border-color:var(--ft-vermelho);color:var(--ft-vermelho);
     box-shadow:0 0 0 2px rgba(198,22,27,.18);}
+
+  /* ================================================================
+     O BOTÃO QUE TRANSFORMA EM INFORMAÇÕES (v3.331)
+
+     Ele fica à direita da referência, junto do copiar e do excluir,
+     porque é da mesma família: uma coisa que se faz COM o módulo, e não
+     um campo que se preenche DENTRO dele.
+
+     Desligado ele é discreto, como os vizinhos. Ligado ele fica vermelho
+     e preenchido: quem bate o olho na folha precisa saber, sem passar o
+     mouse, por que aquele módulo não tem tecido nem tabela.
+
+     Só existe no editor. Na impressão e no arquivo do cliente ele some,
+     como o excluir e o copiar. */
+  .lay-info-btn[aria-pressed="true"]{
+    border-color:var(--ft-vermelho);
+    background:var(--ft-vermelho);
+    color:#fff;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  }
+  .lay-info-btn[aria-pressed="true"]:hover{
+    border-color:var(--ft-vermelho);color:#fff;
+  }
 
   /* ---- o cartão: o `control` do Combo do CRM ---- */
   .lay-modulo .ft-combo-caixa{
@@ -3119,7 +3142,7 @@
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
     .hd-seta{display:none;}
-    .ft-combo-abrir,.hd-abrir,.pick-menu,.lay-img-limpar,.ft-ctx-cores-menu,.ft-add,.design-add,#ctxTags,.ft-selbar,.lay-btn,.lay-del,#ctxCustom,#ccPrev,#ctxConfig,#cfgFundo,.tec-btn,#viewer{display:none !important;}
+    .ft-combo-abrir,.hd-abrir,.pick-menu,.lay-img-limpar,.ft-ctx-cores-menu,.ft-add,.design-add,#ctxTags,.ft-selbar,.lay-btn,.lay-del,.lay-info-btn,#ctxCustom,#ccPrev,#ctxConfig,#cfgFundo,.tec-btn,#viewer{display:none !important;}
     .dtf-chip{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .lay-img,.lay-img.com-img{
       border:1px solid var(--doc-linha,var(--ft-borda)) !important;
@@ -6777,6 +6800,7 @@
                 </div>
                 
               </div>
+              <button class="lay-info-btn" type="button" aria-pressed="false" title="Transformar em módulo de informações"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></button>
               <button class="lay-btn" type="button" title="Copiar este layout"><span class="lay-btn-ic ic-copiar"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></span><span class="lay-btn-ic ic-colar"><svg viewBox="0 0 24 24"><path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/></svg></span><span class="lay-btn-ic ic-cancelar"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></button>
               <button class="lay-del" title="Excluir este layout"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
             </div>
@@ -7399,7 +7423,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.330';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.331';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -9417,6 +9441,9 @@ function initLayout(mod){
   tab.querySelector('.tam-modo').innerHTML=ICONE_ADULTO;
   calcTabela();
   if(typeof tituloLay==='function')tituloLay(mod);   /* o L-NN já nasce no estágio certo */
+  /* o botão de informações nasce coerente com o módulo: apagado num
+     layout novo, aceso num que já veio marcado do arquivo */
+  if(typeof layAtualizaInfo==='function')layAtualizaInfo(mod);
 }
 
 /* seleção MÚLTIPLA: cada clique marca/desmarca; aplica tudo ao clicar fora */
@@ -9696,6 +9723,7 @@ function moduloHTML(n){
                 </div>
                 
               </div>
+              <button class="lay-info-btn" type="button" aria-pressed="false" title="Transformar em módulo de informações"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></button>
               <button class="lay-btn" type="button" title="Copiar este layout"><span class="lay-btn-ic ic-copiar"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></span><span class="lay-btn-ic ic-colar"><svg viewBox="0 0 24 24"><path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/></svg></span><span class="lay-btn-ic ic-cancelar"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></button>
               <button class="lay-del" title="Excluir este layout"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
             </div>
@@ -9760,38 +9788,42 @@ function moduloHTML(n){
 }
 
 /* ==================================================================
-   O MÓDULO DE INFORMAÇÕES (v3.328)
+   O MÓDULO DE INFORMAÇÕES (v3.328, entregue ao botão na v3.331)
 
    Nem toda imagem num orçamento é um layout de produção. Etiqueta de
    cliente, tabela de medidas, foto de referência, croqui de embalagem:
    coisas que precisam ir junto do pedido e que não têm tecido, nem cor,
-   nem grade de tamanhos. Até agora elas entravam como layout normal e
-   levavam junto uma ficha inteira em branco, que a fábrica lia como
-   "alguém esqueceu de preencher".
+   nem grade de tamanhos. Como layout normal elas levavam junto uma ficha
+   inteira em branco, que a fábrica lia como "alguém esqueceu de
+   preencher".
 
-   COMO ELE É RECONHECIDO, e por que assim.
+   COMO ELE É RECONHECIDO, e por que MUDOU.
 
-   A regra podia ser um botão ("marcar como informação"), e não é. Um
-   layout com imagem e mais nada JÁ É uma informação; pedir que alguém
-   diga isso de novo num botão é pedir duas vezes a mesma coisa, e um dos
-   dois vai ficar desatualizado.
+   Da v3.328 à v3.330 o reconhecimento era automático: imagem, e nada do
+   que some preenchido, virava informação sozinho. A ideia era boa e a
+   prática era ruim, por um motivo que só aparece vendo alguém usar. A
+   ordem natural de montar um layout é COLAR A IMAGEM PRIMEIRO e preencher
+   a ficha olhando para ela. Nesse instante o módulo tinha imagem e mais
+   nada, então virava informação na hora: tecido, cor e tabela sumiam da
+   frente de quem estava justamente indo preenchê-los, e o módulo ainda
+   descia para o fim do pedido. Para voltar era preciso descobrir sozinho
+   que digitar num campo invisível traria os campos de volta.
 
-   O critério é: tem imagem, e NADA DO QUE SOME está preenchido. Note que
-   a lista de "o que some" é a mesma lista que o critério olha, e isso não
-   é coincidência: é a garantia de que virar módulo de informações nunca
-   esconde dado nenhum. Design e observação continuam à vista, então
-   podem estar preenchidos sem atrapalhar.
+   Um automatismo que acerta o caso raro e atrapalha o caso comum está
+   invertido. Agora é um botão, ao lado da referência: marcado, é
+   informação; desmarcado, é layout de produção, com imagem ou sem. O
+   estado é uma decisão da pessoa, gravada no arquivo, e nada muda de
+   forma sozinho enquanto ela monta o pedido.
 
-   A SAÍDA É A REFERÊNCIA. O campo continua ali, por baixo do selo: quem
-   digitar qualquer referência devolve o módulo ao normal na hora. Sem
-   essa porta, um layout de verdade em que a imagem foi posta antes do
-   resto viraria informação e ficaria preso assim.
+   O QUE FICOU DA REGRA VELHA. Ela ainda roda uma vez, na leitura de
+   arquivos salvos antes desta versão, que não trazem a marca: ali ela é
+   a única pista de quem era anexo. Ver `layInfoHerdado`.
    ================================================================== */
 function layTemImagem(mod){
   return !!(mod&&mod.querySelector('.lay-img img'));
 }
 /* o que DESAPARECE num módulo de informações. Uma lista só, usada para
-   decidir e para esconder. */
+   esconder e para avisar. */
 function layCamposQueSomem(mod){
   const txt=sel=>[...mod.querySelectorAll(sel)]
     .map(t=>String(t.value||'').trim()).filter(Boolean);
@@ -9805,53 +9837,71 @@ function layCamposQueSomem(mod){
   };
 }
 
-/* ENTRAR E FICAR SÃO DUAS PERGUNTAS DIFERENTES (v3.329).
-
-   Elas eram a mesma, e por isso a referência tinha de ficar vazia para
-   sempre. Só que a referência é justamente onde se escreve O QUE a
-   informação é ("INFORMAÇÕES  ETIQUETA DE GOLA"), e escrever ali expulsava
-   o módulo do modo na mesma tecla.
-
-   ENTRAR é conservador de propósito: imagem, e mais NADA preenchido, nem
-   a referência. Assim um layout de produção em que alguém já digitou a
-   referência e depois colou a imagem não vira anexo pelas costas — que
-   seria a versão irritante desta feature.
-
-   FICAR é mais folgado: continua enquanto houver imagem e nada do que
-   SOME estiver preenchido. A referência não some, então pode ser escrita.
-
-   SAIR, portanto, é preencher tecido, cor ou a tabela — ou tirar a
-   imagem. Continua valendo a propriedade que importa: enquanto o módulo
-   está no modo, nada preenchido está escondido. */
+/* O MODO É O QUE O BOTÃO DIZ. Nada mais consulta os campos para decidir:
+   essa era exatamente a parte que atrapalhava quem estava montando. */
 function layEhInfo(mod){
-  if(!mod||!layTemImagem(mod))return false;
-  const c=layCamposQueSomem(mod);
-  const nadaEscondido=!c.tecido.length&&!c.cor.length&&!c.tabela.length;
-  if(!nadaEscondido)return false;
-  if(mod.classList.contains('info'))return true;   /* fica */
-  return !c.ref.length;                            /* entra */
+  return !!(mod&&mod.classList.contains('info'));
 }
 window.layEhInfo=layEhInfo;
 
-/* Aplica (ou tira) o modo. Devolve `true` quando MUDOU, porque quem
-   chama precisa saber se vale repaginar: reordenar as folhas a cada
-   tecla digitada seria caro e piscaria a tela. */
+/* A REGRA VELHA, SÓ PARA ARQUIVO ANTIGO (v3.331).
+
+   Um .ft salvo antes da v3.329 não tem a marca `info`, porque naquela
+   versão ela não existia: o modo era deduzido na tela, toda vez. Se
+   ignorássemos isso, todo anexo de todo orçamento já salvo voltaria a
+   abrir como layout de produção, com a ficha vazia de novo.
+
+   Então a dedução antiga roda uma vez, na abertura, e o resultado vira
+   marca gravada no próximo salvamento. É o mesmo critério de antes:
+   imagem, e absolutamente nada preenchido além dela. */
+function layInfoHerdado(L){
+  if(!L||!L.img)return false;
+  const vazio=v=>!String(v==null?'':v).trim();
+  if(!vazio(L.ref)||!vazio(L.cor))return false;
+  if((L.tecidos||[]).some(t=>!vazio(t)))return false;
+  const t=L.tamanhos||{};
+  if(Object.keys(t).some(k=>{
+    const v=t[k];
+    if(!v)return false;
+    if(typeof v==='object')return !vazio(v.q)||!vazio(v.u);
+    return !vazio(v);
+  }))return false;
+  return true;
+}
+window.layInfoHerdado=layInfoHerdado;
+
+/* Mantém o resto do módulo coerente com o modo: o convite do campo, o
+   botão aceso e o que o título dele promete. Não decide nada. */
 function layAtualizaInfo(mod){
   if(!mod)return false;
-  const era=mod.classList.contains('info');
-  const e=layEhInfo(mod);
-  if(era===e){ layPlaceholderRef(mod); return false; }
-  mod.classList.toggle('info',e);
   layPlaceholderRef(mod);
-  return true;
+  const b=mod.querySelector('.lay-info-btn');
+  if(b){
+    const e=mod.classList.contains('info');
+    b.setAttribute('aria-pressed',e?'true':'false');
+    b.title=e?'Voltar a ser layout de produção':'Transformar em módulo de informações';
+  }
+  return false;
 }
 window.layAtualizaInfo=layAtualizaInfo;
 
-/* Passa por todos e diz se algum mudou de lado. */
+/* LIGAR OU DESLIGAR. Devolve `true` quando MUDOU, porque quem chama
+   precisa saber se vale repaginar: um módulo que troca de lado muda de
+   lugar no pedido, e reordenar as folhas à toa piscaria a tela. */
+function layMarcaInfo(mod,ligado){
+  if(!mod)return false;
+  const era=mod.classList.contains('info');
+  if(era===!!ligado){ layAtualizaInfo(mod); return false; }
+  mod.classList.toggle('info',!!ligado);
+  layAtualizaInfo(mod);
+  return true;
+}
+window.layMarcaInfo=layMarcaInfo;
+
+/* Passa por todos e deixa a interface coerente. */
 function layAtualizaInfoTodos(){
-  let mudou=false;
-  document.querySelectorAll('.lay-modulo').forEach(m=>{ if(layAtualizaInfo(m))mudou=true; });
-  return mudou;
+  document.querySelectorAll('.lay-modulo').forEach(m=>layAtualizaInfo(m));
+  return false;
 }
 window.layAtualizaInfoTodos=layAtualizaInfoTodos;
 
@@ -9882,32 +9932,49 @@ function layPlaceholderRef(mod){
 }
 window.layPlaceholderRef=layPlaceholderRef;
 
-/* PÔR OU TIRAR IMAGEM TAMBÉM RECONFERE.
-   Imagem não é campo digitado: não há evento de teclado para escutar. */
+/* PÔR OU TIRAR IMAGEM NÃO MUDA MAIS O MODO (v3.331).
+   Era aqui que o defeito aparecia: colar a imagem transformava o layout
+   em informação antes de a pessoa preencher a ficha. A função continua
+   existindo porque o resto do editor chama por ela, e ela ainda serve
+   para manter o botão coerente. */
 function layAvisaImagem(mod){
   if(!mod)return;
-  if(!layAtualizaInfo(mod))return;
-  if(typeof repagina==='function')repagina();
-  if(typeof reajusta==='function')requestAnimationFrame(()=>requestAnimationFrame(reajusta));
+  layAtualizaInfo(mod);
 }
 window.layAvisaImagem=layAvisaImagem;
 
-/* QUANDO RECONFERIR. Um ouvinte só, na captura, para os campos que
-   decidem. Repaginar só acontece quando o lado muda de verdade. */
-(function ligaInfoAuto(){
-  const reage=e=>{
-    const mod=e.target&&e.target.closest&&e.target.closest('.lay-modulo');
+/* O CLIQUE.
+
+   Marcar com tecido, cor ou tabela preenchidos é permitido, e avisa. A
+   versão automática garantia que virar informação nunca escondia dado
+   nenhum porque o dado preenchido impedia a conversão; num botão isso
+   viraria uma recusa sem explicação ("cliquei e não aconteceu nada").
+   Então o dado não é apagado, apenas fica guardado: desmarcar devolve
+   tudo exatamente como estava. O aviso existe para que ninguém mande
+   para a fábrica uma folha sem o tecido que tinha acabado de digitar. */
+(function ligaBotaoInfo(){
+  document.addEventListener('click',e=>{
+    const b=e.target&&e.target.closest&&e.target.closest('.lay-info-btn');
+    if(!b)return;
+    e.preventDefault();
+    const mod=b.closest('.lay-modulo');
     if(!mod)return;
-    if(!layAtualizaInfo(mod))return;
+    const virandoInfo=!mod.classList.contains('info');
+    if(virandoInfo){
+      const c=layCamposQueSomem(mod);
+      const escondido=[];
+      if(c.tecido.length)escondido.push('tecido');
+      if(c.cor.length)escondido.push('cor');
+      if(c.tabela.length)escondido.push('tabela');
+      if(escondido.length&&typeof toast==='function')
+        toast('Guardado, não some: '+escondido.join(', ')+' volta se desmarcar');
+    }
+    if(!layMarcaInfo(mod,virandoInfo))return;
     /* mudou de lado: o módulo troca de lugar no pedido */
     if(typeof repagina==='function')repagina();
+    if(typeof calcDocumento==='function')calcDocumento();
     if(typeof reajusta==='function')requestAnimationFrame(()=>requestAnimationFrame(reajusta));
-  };
-  document.addEventListener('input',reage,true);
-  document.addEventListener('change',reage,true);
-  /* a tabela é contenteditable: `input` cobre, mas colar e apagar em
-     bloco às vezes chegam só como blur */
-  document.addEventListener('blur',reage,true);
+  },true);
 })();
 
 function novaFolha(){
@@ -13168,10 +13235,10 @@ function coletaLayout(m){
     tamanhos:tab._lerVals?tab._lerVals():{},
     obs:m.querySelector('.lay-area').innerHTML,
     img:(m.querySelector('.lay-img img')||{}).src||null,
-    /* O MODO PRECISA SER GRAVADO (v3.329). Ele deixou de ser dedutível a
-       partir dos campos no instante em que a referência passou a poder ser
-       escrita: um anexo com "ETIQUETA DE GOLA" na referência é igualzinho,
-       de fora, a um layout que só tem referência e imagem. */
+    /* O MODO PRECISA SER GRAVADO (v3.329, e mais ainda desde a v3.331).
+       Ele não é dedutível dos campos: um layout de produção e um anexo
+       podem ter exatamente os mesmos campos preenchidos. O que os separa
+       é o botão, e o botão só existe aqui. */
     info:m.classList.contains('info'),
     /* já passou pela conversão? evita recomprimir a cada abertura (e a perda
        de qualidade que isso traria em cascata) */
@@ -13182,13 +13249,15 @@ function coletaLayout(m){
 /* Escreve um layout dentro de um módulo JÁ montado (initLayout feito). */
 function aplicaLayout(mod,L){
   L=L||{};
-  /* O MODO ENTRA ANTES DOS CAMPOS. `layEhInfo` pergunta se o módulo já
-     está no modo para decidir se ele FICA, e a resposta precisa estar de
-     pé antes de qualquer campo ser preenchido. Arquivo salvo por versão
-     anterior não traz a marca: cai na regra automática, e um anexo antigo
-     (que tinha a referência vazia, porque era a única forma possível
-     naquela versão) é reconhecido do mesmo jeito. */
-  mod.classList.toggle('info',!!L.info);
+  /* O MODO É O QUE O ARQUIVO DIZ (v3.331). Ele não é mais deduzido dos
+     campos em tempo nenhum, então entra aqui e fica.
+
+     Arquivo salvo antes da v3.329 não traz a marca, porque ela não
+     existia: só nesse caso a dedução antiga roda, uma vez, para não
+     perder os anexos de todo orçamento já arquivado. */
+  mod.classList.toggle('info',
+    L.info===undefined ? layInfoHerdado(L) : !!L.info);
+  if(typeof layAtualizaInfo==='function')layAtualizaInfo(mod);
   const ref=mod.querySelector('.combo-ref');
   ref.querySelector('textarea').value=L.ref||'';
   if(L.genero)ref.dataset.genero=L.genero; else delete ref.dataset.genero;
@@ -16075,7 +16144,7 @@ function gerarHTML(imagens){
     /* os do Relatório de Atividade, pelo mesmo motivo: o CSS deles vive no
        #ftAtvCss, que também não viaja */
     '#atvPage,#atvMenuEtapa,#atvNotif,#atvCarga,#atvPrint,#atvMedindo,#ftAtvCss,'+
-    '.lay-del,.tec-btn,.design-add,.ft-combo-abrir,.hd-abrir,#pickMenu,.hd-cal,.cor-sw,.lay-img-limpar,script,datalist')
+    '.lay-del,.lay-info-btn,.tec-btn,.design-add,.ft-combo-abrir,.hd-abrir,#pickMenu,.hd-cal,.cor-sw,.lay-img-limpar,script,datalist')
     .forEach(el=>el.remove());
 
   /* A área de páginas carrega uma largura INLINE, posta pelo motor de escala
