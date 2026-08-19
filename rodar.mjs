@@ -57,6 +57,8 @@ const SUITES = [
   'teste_indice_mensal',
   /* v3.328 — o anexo que se reconhece sozinho e o cliente com tres nomes */
   'teste_info_e_busca',
+  /* v3.333 — renomear e apagar referencia, com a ficha de material junto */
+  'teste_ref_banco',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor

@@ -3246,12 +3246,56 @@
 
   .bd-rf{border-bottom:1px solid var(--ft-borda);}
   .bd-rf:last-child{border-bottom:none;}
+  /* ================================================================
+     RENOMEAR E APAGAR UMA REFERÊNCIA (v3.333)
+
+     Toda outra lista do Banco tinha as duas coisas: o nome é um campo e
+     ao lado há um X. A de referências não tinha nenhuma das duas, porque
+     nasceu na v3.301 já agrupada, com a linha inteira virando o botão
+     que abre a ficha. Um cadastro errado só saía de lá editando o
+     arquivo do banco à mão.
+
+     A linha continua sendo o botão de abrir a ficha, e os dois controles
+     entram FORA dele, à direita: um botão não pode conter outro botão, e
+     um campo de texto dentro de um botão engoliria o clique de abrir.
+
+     Renomear é um MODO, e não um campo sempre aberto. Aqui o nome é
+     desenhado em três pedaços (tarja de gênero, código, nome), e trocar
+     isso por um input o tempo todo custaria a leitura da lista inteira
+     para ganhar uma edição que acontece uma vez por mês.
+     ================================================================ */
+  .bd-rf-linha{display:flex;align-items:center;}
   .bd-rf-cab{
-    width:100%;display:flex;align-items:center;gap:8px;padding:7px 11px 7px 14px;
+    flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:7px 11px 7px 14px;
     border:none;background:none;cursor:pointer;font:inherit;text-align:left;
   }
   .bd-rf-cab:hover{background:var(--ft-hover);}
   .bd-rf.aberto .bd-rf-cab{background:var(--ft-vermelho-suave);}
+  .bd-rf-acoes{flex:0 0 auto;display:flex;align-items:center;gap:2px;padding-right:8px;}
+  .bd-rf-ed-bt,.bd-rf-del{
+    width:26px;height:26px;flex:0 0 auto;border:none;background:none;cursor:pointer;
+    border-radius:6px;color:var(--ft-cinza-40);
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:background .14s var(--mov-suave,ease),color .14s var(--mov-suave,ease);
+  }
+  .bd-rf-ed-bt svg,.bd-rf-del svg{width:13px;height:13px;stroke:currentColor;fill:none;
+    stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .bd-rf-ed-bt:hover{background:var(--ft-hover);color:var(--ft-preto);}
+  .bd-rf-del:hover{background:var(--ft-vermelho);color:#fff;}
+  /* o modo de renomear mostra o texto INTEIRO, do jeito que ele é
+     guardado: "FT-010-008C — CAMISETA". É o código que decide o grupo e
+     a tarja de gênero, então esconder metade dele seria esconder
+     justamente o que a edição precisa acertar. */
+  .bd-rf-ed{display:flex;align-items:center;gap:6px;padding:6px 8px 6px 14px;
+    background:var(--ft-vermelho-suave);}
+  .bd-rf-ed input{
+    flex:1;min-width:0;font:inherit;font-size:12.5px;
+    border:1px solid var(--ft-vermelho);border-radius:6px;padding:6px 9px;
+    background:var(--ft-superficie);color:var(--ft-preto);
+  }
+  .bd-rf-dica{flex:0 0 auto;font-size:10px;color:var(--ft-cinza-40);}
+  /* quem não é admin não renomeia nem apaga, igual ao resto do Banco */
+  .bd-page.sem-admin .bd-rf-acoes{display:none;}
   .bd-rf-tar{
     flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:1px solid;
     display:inline-flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:700;
@@ -5456,6 +5500,7 @@
   body.sem-banco-editar #bdPage .bd-novo-linha,
   body.sem-banco-editar #bdPage .bd-add-btn,
   body.sem-banco-editar #bdPage .bd-item-del,
+  body.sem-banco-editar #bdPage .bd-rf-acoes,
   body.sem-banco-editar #bdPage .bd-lat-arq{display:none !important;}
   body.sem-banco-editar #bdPage .bd-item-input,
   body.sem-banco-editar #bdPage .bd-cor-pick{
@@ -7423,7 +7468,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.332';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.333';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -17422,6 +17467,12 @@ const fNum=(n,c)=>Number(n||0).toFixed(c==null?3:c).replace('.',',');
 const fLe=v=>{ const n=parseFloat(String(v).replace(',','.')); return isNaN(n)?null:n; };
 
 let _bdRefAbertos=new Set(), _bdFichaAberta='';
+let _bdRefEditando='';   /* qual referência está no modo renomear (v3.333) */
+/* O QUE JÁ FOI DIGITADO precisa morar fora do DOM. A página do Banco se
+   redesenha inteira a cada 5 s quando outra máquina mexe no cadastro; se
+   o valor do campo vivesse só no elemento, ele voltaria ao texto original
+   no meio da digitação, sem ninguém encostar em nada. */
+let _bdRefEdVal='';
 function bdReferencias(termo){
   const q=String(termo||'').trim().toLowerCase();
   const lista=Array.isArray(DB.referencias)?DB.referencias:[];
@@ -17452,18 +17503,105 @@ function bdReferencias(termo){
     </div>`;
   }).join('');
 }
+const IC_LAPIS='<svg viewBox="0 0 24 24"><path d="M12 20h9"/>'
+  +'<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const IC_XIS='<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>';
 function bdRefLinha(o){
   const f=fichaDe(o.txt);
   const aberta=(_bdFichaAberta===o.txt)?' aberto':'';
+  /* NO MODO RENOMEAR a linha vira o campo, e mais nada: com o botão de
+     abrir a ficha ainda ali, um Enter desatento abriria a ficha em vez de
+     gravar o nome. */
+  if(_bdRefEditando===o.txt){
+    return `<div class="bd-rf" data-ref="${bdEsc(o.txt)}">
+      <div class="bd-rf-ed">
+        <input class="bd-rf-ed-in" id="bdRefEd" value="${bdEsc(_bdRefEdVal)}" spellcheck="false">
+        <span class="bd-rf-dica">Enter grava · Esc cancela</span>
+      </div>
+    </div>`;
+  }
   return `<div class="bd-rf${aberta}" data-ref="${bdEsc(o.txt)}">
-    <button class="bd-rf-cab" type="button">
-      <span class="bd-rf-tar ${o.gen}">${o.gen}</span>
-      ${o.curto?`<span class="bd-rf-cod">${bdEsc(o.curto)}</span>`:''}
-      <span class="bd-rf-nome">${bdEsc(o.nome)}</span>
-      <span class="bd-rf-selo ${f?'ok':'sem'}">${f?'ficha':'sem ficha'}</span>
-    </button>
+    <div class="bd-rf-linha">
+      <button class="bd-rf-cab" type="button">
+        <span class="bd-rf-tar ${o.gen}">${o.gen}</span>
+        ${o.curto?`<span class="bd-rf-cod">${bdEsc(o.curto)}</span>`:''}
+        <span class="bd-rf-nome">${bdEsc(o.nome)}</span>
+        <span class="bd-rf-selo ${f?'ok':'sem'}">${f?'ficha':'sem ficha'}</span>
+      </button>
+      <div class="bd-rf-acoes">
+        <button class="bd-rf-ed-bt" type="button" title="Renomear esta referência">${IC_LAPIS}</button>
+        <button class="bd-rf-del" type="button" title="Apagar esta referência">${IC_XIS}</button>
+      </div>
+    </div>
     ${aberta?bdFichaHTML(o):''}
   </div>`;
+}
+
+/* ================================================================
+   APAGAR E RENOMEAR, COM A FICHA JUNTO (v3.333)
+
+   A ficha de material é indexada pelo TEXTO da referência (`f.n`), que é
+   o formato que a mesclagem do servidor sabe casar. Isso tem uma
+   consequência que não dá para esquecer em nenhuma das duas operações:
+
+     apagar a referência e deixar a ficha  = lixo órfão no banco, que
+                                             volta a valer se alguém
+                                             recadastrar o mesmo texto
+     renomear a referência e deixar a ficha = a ficha continua existindo,
+                                             ligada a um nome que não
+                                             existe mais, e a referência
+                                             renomeada aparece como
+                                             "sem ficha"
+
+   Por isso as duas mexem nas DUAS listas, e as duas marcam remoção no
+   servidor: sem a marca, a mesclagem devolve o que foi apagado na
+   próxima sincronização. Foi a regra que já valia para cores e tecidos.
+   ================================================================ */
+function bdRefApaga(txt){
+  if(!bdPodeMexer('apagar'))return;
+  const i=(DB.referencias||[]).findIndex(v=>String(v)===String(txt));
+  if(i<0)return;
+  const f=fichaDe(txt);
+  const segue=()=>{
+    ftMarcaRemocao('referencias',chaveDoItem(txt));
+    DB.referencias.splice(i,1);
+    if(f){
+      ftMarcaRemocao('fichas',chaveDoItem(f.n));
+      DB.fichas=DB.fichas.filter(x=>x!==f);
+    }
+    if(_bdFichaAberta===txt)_bdFichaAberta='';
+    bdPersiste();bdRender();
+    ftToast('Apagado do banco: '+txt+(f?' (e a ficha de material)':''),'aviso');
+  };
+  if(!f){ segue(); return; }
+  /* com ficha, a pergunta é obrigatória: são dois cadastros indo embora,
+     e o segundo não está à vista de quem clicou */
+  ftStatus.pergunta('Apagar '+txt+'?',
+    'Esta referência tem ficha de material. A ficha vai junto: '
+    +(f.tec||[]).length+' tecido(s) e '+(f.avi||[]).length+' aviamento(s) cadastrados.',
+    {ok:'Apagar as duas'}).then(ok=>{ if(ok)segue(); });
+}
+function bdRefRenomeia(antigo,novo){
+  novo=String(novo||'').trim();
+  if(!novo||novo===antigo){ _bdRefEditando=''; _bdRefEdVal=''; bdRender(); return; }
+  if(!bdPodeMexer('renomear')){ _bdRefEditando=''; _bdRefEdVal=''; bdRender(); return; }
+  const i=(DB.referencias||[]).findIndex(v=>String(v)===String(antigo));
+  if(i<0){ _bdRefEditando=''; _bdRefEdVal=''; bdRender(); return; }
+  /* dois cadastros com o mesmo texto viram um só na mesclagem, e o
+     segundo some sem aviso: melhor recusar aqui, com o motivo à vista */
+  const jaTem=(DB.referencias||[]).some((v,j)=>j!==i&&chaveDoItem(v)===chaveDoItem(novo));
+  if(jaTem){
+    ftStatus.aviso('Já existe','Outra referência já se chama '+novo+'.');
+    return;
+  }
+  ftMarcaRemocao('referencias',chaveDoItem(antigo));
+  DB.referencias[i]=novo;
+  const f=fichaDe(antigo);
+  if(f){ ftMarcaRemocao('fichas',chaveDoItem(f.n)); f.n=novo; }
+  if(_bdFichaAberta===antigo)_bdFichaAberta=novo;
+  _bdRefEditando=''; _bdRefEdVal='';
+  bdPersiste();bdRender();
+  ftToast('Renomeado: '+antigo+' → '+novo+(f?' (a ficha foi junto)':''));
 }
 function bdFichaHTML(o){
   const f=fichaDe(o.txt);
@@ -19695,9 +19833,34 @@ function bdRender(){
       _bdRefAbertos.has(g)?_bdRefAbertos.delete(g):_bdRefAbertos.add(g); bdRender(); };
   });
   pg.querySelectorAll('.bd-rf-cab').forEach(b=>{
-    b.onclick=()=>{ const r=b.parentElement.dataset.ref;
+    b.onclick=()=>{ const r=b.closest('.bd-rf').dataset.ref;
       _bdFichaAberta=(_bdFichaAberta===r)?'':r; bdRender(); };
   });
+  /* renomear e apagar a referência (v3.333) */
+  pg.querySelectorAll('.bd-rf-ed-bt').forEach(b=>{
+    b.onclick=()=>{ _bdRefEditando=b.closest('.bd-rf').dataset.ref;
+      _bdRefEdVal=_bdRefEditando; bdRender(); };
+  });
+  pg.querySelectorAll('.bd-rf-del').forEach(b=>{
+    b.onclick=()=>bdRefApaga(b.closest('.bd-rf').dataset.ref);
+  });
+  const edIn=pg.querySelector('.bd-rf-ed-in');
+  if(edIn){
+    const antigo=edIn.closest('.bd-rf').dataset.ref;
+    edIn.oninput=()=>{ _bdRefEdVal=edIn.value; };
+    edIn.onkeydown=e=>{
+      if(e.key==='Enter'){ e.preventDefault(); bdRefRenomeia(antigo,edIn.value); }
+      else if(e.key==='Escape'){ e.preventDefault(); _bdRefEditando=''; _bdRefEdVal=''; bdRender(); }
+    };
+    /* sair do campo grava, como em toda outra lista do Banco */
+    edIn.onblur=()=>{ if(_bdRefEditando===antigo)bdRefRenomeia(antigo,edIn.value); };
+    if(document.activeElement!==edIn){
+      /* o cursor vai para o fim: o começo do texto é o código, e quem abre
+         para renomear quase sempre quer mexer no nome, que fica no fim */
+      edIn.focus();
+      edIn.setSelectionRange(edIn.value.length,edIn.value.length);
+    }
+  }
   /* dentro da ficha aberta, tudo mexe no MESMO objeto */
   const fAtual=()=>_bdFichaAberta?fichaDe(_bdFichaAberta):null;
   const grava=(msg)=>{ bdPersiste(); bdRender(); if(msg)ftToast(msg); };
