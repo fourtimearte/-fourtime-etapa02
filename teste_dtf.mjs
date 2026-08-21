@@ -450,6 +450,45 @@ const ids = await pt.evaluate(() => {
 console.log('     procurados: ' + JSON.stringify(ids.procurados));
 diz('nenhum elemento procurado pelos runtimes está faltando', ids.faltando, []);
 
+secao('B. a logo sai no papel do arquivo do cliente');
+/* IMPRIMIR DO TRELLO SAÍA SEM LOGO NENHUMA (v3.336).
+
+   O editor carrega DUAS logos em cada caixa: a da tela, que segue o
+   tema, e a `.logo-papel`, de texto escuro, que só existe para o papel.
+   A regra de impressão do editor esconde a primeira e mostra a segunda.
+
+   O exportador apaga a `.logo-papel` do clone, com razão: o arquivo do
+   cliente já é claro e a logo que fica ali já é a certa. O que ninguém
+   ligou aos dois é que a REGRA DE IMPRESSÃO continuou viajando junto:
+   no papel ela escondia a única logo que existia e mandava mostrar uma
+   que tinha sido removida.
+
+   Imprimir do editor funcionava, imprimir do arquivo não. Por isso esta
+   conferência mede o arquivo EXPORTADO com `@media print` de verdade,
+   e conta as logos VISÍVEIS, em vez de conferir que a marcação existe:
+   ela existia o tempo todo. */
+const contaLogos = async () => pt.evaluate(() => {
+  const caixas = [...document.querySelectorAll('.folha-a4 .logo-box,.folha-a4 .folha-logo')];
+  return caixas.map(cx => {
+    const vis = [...cx.querySelectorAll('img')].filter(im => {
+      const r = im.getBoundingClientRect();
+      return getComputedStyle(im).display !== 'none' && r.width > 2 && r.height > 2;
+    });
+    return vis.length;
+  });
+});
+const logosTela = await contaLogos();
+await pt.emulateMedia({ media: 'print' });
+await pt.waitForTimeout(350);
+const logosPapel = await contaLogos();
+await pt.emulateMedia({ media: 'screen' });
+await pt.waitForTimeout(250);
+diz('o arquivo tem caixa de logo em toda folha', logosTela.length > 1, true);
+diz('  na tela, uma logo em cada', [...new Set(logosTela)], [1]);
+/* O DEFEITO: aqui vinha [0]. Uma folha sem logo é uma folha que não
+   parece nossa na mesa do cliente. */
+diz('  e no papel também uma em cada', [...new Set(logosPapel)], [1]);
+
 secao('B. o arquivo COM valores não leva botão');
 const comValor = await pb.evaluate(() => {
   const b = document.body;

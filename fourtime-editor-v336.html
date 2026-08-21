@@ -7514,7 +7514,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.335';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.336';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -16685,7 +16685,39 @@ function gerarHTML(imagens){
     CSS_BARRA_FIXA+
     CSS_FILTROS+      /* os filtros de layout — idem */
     CSS_DTF+          /* os botões de cópia para o Affinity — idem */
-    CSS_BRILHO_OBS;   /* o brilho da observação — só existe no arquivo exportado */
+    CSS_BRILHO_OBS+   /* o brilho da observação — só existe no arquivo exportado */
+    /* ================================================================
+       A LOGO NO PAPEL DO ARQUIVO DO CLIENTE (corrigido na v3.336)
+
+       Imprimir um pedido direto do Trello saía SEM logo nenhuma. No
+       editor saía certo, e essa diferença é a pista inteira.
+
+       O editor carrega DUAS logos em cada caixa: a da tela, que segue o
+       tema, e a `.logo-papel`, de texto escuro, que só existe para o
+       papel. A regra de impressão do editor esconde a primeira e mostra
+       a segunda, e assim nem o tema escuro nem um evento tardio podem
+       mandar a logo errada para a impressora.
+
+       Só que o exportador APAGA a `.logo-papel` do clone, e com razão: o
+       arquivo do cliente já é claro, e a logo que fica ali já é a de
+       texto escuro. O que ninguém ligou aos dois é que a regra de
+       impressão continuou viajando junto. No papel ela escondia a única
+       logo que existia e mandava mostrar uma que tinha sido removida.
+       Resultado: nada.
+
+       Aqui a regra é desfeita para o arquivo exportado, onde ela não faz
+       sentido: no papel aparece a logo que está lá. A `.logo-h` continua
+       escondida porque é a cópia horizontal do layout de celular, e o
+       papel nunca é celular.
+       ================================================================ */
+    '@media print{'
+      +'.folha-a4 .logo-box img:not(.logo-h),'
+      +'.folha-a4 .folha-logo img:not(.logo-h),'
+      +'.folha-a4 .folha-topo img:not(.logo-h){display:block !important;}'
+      +'.folha-a4 .logo-box img.logo-h,'
+      +'.folha-a4 .folha-logo img.logo-h,'
+      +'.folha-a4 .folha-topo img.logo-h{display:none !important;}'
+    +'}';
   const cab=raiz.querySelector('head');
   if(cab)cab.appendChild(trava);
 
