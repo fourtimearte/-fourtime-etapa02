@@ -59,6 +59,8 @@ const SUITES = [
   'teste_info_e_busca',
   /* v3.333 — renomear e apagar referencia, com a ficha de material junto */
   'teste_ref_banco',
+  /* v3.334 — o catalogo de tecidos por tipo, a conversao e as duas telas */
+  'teste_tecidos_tipos',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor

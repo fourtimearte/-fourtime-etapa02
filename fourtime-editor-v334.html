@@ -1210,6 +1210,20 @@
     flex-shrink:0;
   }
   .pick-vazio{padding:12px;text-align:center;font-size:12px;color:var(--ft-cinza-40);}
+  /* ---- ARRASTAR TECIDO DE TIPO, DENTRO DO MENU (v3.334) ----
+     A alça só aparece no hover e só existe para admin. Quem está no
+     orçamento veio ESCOLHER um tecido; um arrasto acidental mudaria o
+     cadastro de todas as máquinas. */
+  .pick-alca{
+    flex:0 0 auto;width:12px;height:14px;color:#b9bec6;cursor:grab;opacity:0;
+    display:inline-flex;align-items:center;justify-content:center;margin-left:-2px;
+    transition:opacity .12s var(--mov-suave,ease);
+  }
+  .pick-alca svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;}
+  .pick-item:hover .pick-alca{opacity:1;}
+  .pick-alca:active{cursor:grabbing;}
+  .pick-item.arrastando{opacity:.35;}
+  .pick-grp.alvo-ok{box-shadow:inset 0 0 0 1px var(--ft-vermelho);background:var(--ft-vermelho-suave);}
   /* botão que abre a lista (substitui a seta decorativa) */
   .hd-abrir,.ft-combo-abrir{
     flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
@@ -3427,6 +3441,38 @@
     padding:0 6px;cursor:pointer;flex:0 0 auto;max-width:150px;
   }
   .bd-cor-grupo:focus{outline:none;border-color:var(--ft-vermelho);}
+  /* ---- OS TECIDOS POR TIPO NA PÁGINA DO BANCO (v3.334) ----
+     A casca é a do catálogo de cores. O que muda: a pastilha do tipo no
+     lugar das bolinhas (tecido não tem cor), a alça de arrastar na linha
+     e o cartão do tipo vazio, que continua desenhado para haver onde
+     soltar o primeiro tecido. */
+  .bd-tec-grupo{
+    height:30px;border:1px solid var(--ft-borda-campo);border-radius:6px;
+    background:var(--ft-superficie);color:var(--ft-cinza-70);font:inherit;font-size:11px;
+    padding:0 6px;cursor:pointer;flex:0 0 auto;max-width:168px;
+  }
+  .bd-tec-grupo:focus{outline:none;border-color:var(--ft-vermelho);}
+  .bd-tg-cod{
+    flex:0 0 auto;min-width:40px;text-align:center;font-family:var(--ft-fonte-mono);
+    font-size:10px;font-weight:700;letter-spacing:.04em;border-radius:5px;
+    padding:3px 7px;border:1px solid;
+  }
+  .bd-tg-vazio{font-size:11.5px;color:var(--ft-cinza-40);font-style:italic;padding:7px 4px;}
+  .bd-tec-linha{align-items:center;}
+  .bd-tec-alca{
+    flex:0 0 auto;width:14px;height:18px;color:#b9bec6;cursor:grab;opacity:0;
+    display:inline-flex;align-items:center;justify-content:center;
+    transition:opacity .12s var(--mov-suave,ease);
+  }
+  .bd-tec-alca svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;}
+  .bd-tec-linha:hover .bd-tec-alca{opacity:1;}
+  .bd-tec-alca:active{cursor:grabbing;}
+  .bd-tec-linha.arrastando{opacity:.35;}
+  .bd-cg.bd-tg.alvo-ok{box-shadow:0 0 0 2px var(--ft-vermelho);}
+  .bd-cg.bd-tg.alvo-ok .bd-cg-cab{background:var(--ft-vermelho-suave);}
+  /* quem não é admin não arrasta nem troca o tipo */
+  .bd-page.sem-admin .bd-tec-alca,
+  .bd-page.sem-admin .bd-tec-grupo{display:none;}
   /* a linha da SUBLIMAÇÃO não é uma cor: não se apaga nem muda de grupo */
   .bd-cor-subli{
     display:flex;align-items:center;gap:11px;border:1.5px solid var(--ft-vermelho);
@@ -7468,7 +7514,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.333';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.334';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -7481,7 +7527,7 @@ const DB_PADRAO={
   entregas:["AEREO","CORREIOS","FABRICA","MOTOBOY","TRANSPORTADORA"],
   pagamentos:["ENTRADA + SAIDA","LINK","ENTRADA + BOLETO","PIX TOTAL","DINHEIRO","BOLETO","ENTREGA","CARTAO DE CREDITO","PATROCINIO"],
   referencias:["FT-010-000M — CAMISETA MASC TRAD","FT-010-001M — CAMISETA MASC TRAD GOLA V","FT-010-002M — CAMISETA MASC TRAD ML","FT-010-003M — CAMISETA MASC TRAD ML GOLA V","FT-010-004F — BABY LOOK","FT-010-006F — BABY LOOK ML","FT-010-005F — BABY LOOK GOLA V","FT-010-007F — BABY LOOK  ML GOLA V","FT-010-008C — CAMISETA INFANTIL UNISSEX","FT-010-009C — CAMISETA INFANTIL UNISSEX ML","FT-010-010M — CAMISETA OVERSIZE MASC","FT-010-011M — CAMISETA POLO MASC SEM PUNHO","FT-010-012M — CAMISETA POLO MASC COM PUNHO","FT-010-013F — CAMISETA POLO FEM SEM PUNHO","FT-010-014F — CAMISETA POLO FEM COM PUNHO","FT-010-015M — CAMISETA COM CAPUZ MASC ML","FT-010-016F — BABY LOOK COM CAPUZ ML","FT-020-000M — RAGLAN MASC SEM PUNHO","FT-020-001M — RAGLAN MASC COM PUNHO","FT-020-002M — RAGLAN MASC SEM PUNHO GOLA V","FT-020-003M — RAGLAN MASC COM PUNHO GOLA V","FT-020-004M — RAGLAN MASC SEM PUNHO GOLA PADRE","FT-020-005M — RAGLAN MASC COM PUNHO GOLA PADRE","FT-020-006M — RAGLAN MASC ML","FT-020-007M — RAGLAN MASC ML GOLA V","FT-020-008M — RAGLAN MASC FORTIME","FT-020-009F — RAGLAN FEM SEM PUNHO","FT-020-010F — RAGLAN FEM C0M PUNHO","FT-020-011F — RAGLAN FEM ML","FT-020-012M — RAGLAN RASH GUARD MASC","FT-020-013M — RAGLAN RASH GUARD MASC ML","FT-020-014C — RAGLAN INFANTIL UNISSEX","FT-030-000M — REGATA MASC TRAD","FT-030-001M — REGATÃO MASC MACHÃO","FT-030-002M — REGATA MASC OVERSIZED","FT-030-003M — BASQUETEIRO GOLA REDONDA","FT-030-004M — BASQUETEIRO GOLA V","FT-030-005F — REGATA FEM TRAD","FT-030-006F — REGATÃO FEM","FT-030-007F — REGATÃO FEM RANI","FT-030-008F — REGATÃO FEM FUTEVOLEY","FT-040-000M — BLUSA MOLETOM MASC SEM ZIPER","FT-040-001M — BLUSA MOLETOM MASC COM ZIPER","FT-040-002F — BLUSA MOLETOM FEM SEM ZIPER","FT-040-003F — BLUSA MOLETOM FEM COM ZIPER","FT-040-004M — BLUSA MOLETON MASC SEM CAPUZ","FT-040-005F — BLUSA MOLETON FEM SEM CAPUZ","FT-050-000F — CROPPED FEM OVERSIZE","FT-050-001F — CROPPED FEM SEM MANGA","FT-060-000F — TOP FEM TRAD","FT-060-001F — TOP FEM 4 TIRAS","FT-060-002F — TOP FEM NADADOR","FT-060-003F — TOP FEM MARCELA","FT-060-004F — TOP FEM DANI","FT-060-005F — TOP FEM ALCINHA","FT-060-006M — TOP MASC FUTEBOL","FT-070-000M — CALÇA COMPRESSÃO MASC","FT-070-001U — CALÇA MOLETOM UNISSEX COM PUNHO","FT-070-002F — CALÇA LEGGINGS FEM","FT-070-003C — CALÇA INFANTIL FEM","FT-070-004M — CALÇA NO GI MASC","FT-070-005U — CALÇA INDUSTRIAL UNISSEX SEM BOLSO","FT-080-000M — BERMUDA DRY FOURTIME COM BOLSO","FT-080-001M — BERMUDA DRY FOURTIME SEM BOLSO","FT-080-002M — BERMUDA NO GI MASC COM BOLSO","FT-080-003M — BERMUDA NO GI MASC SEM BOLSO","FT-080-004U — BERMUDA DRY INFANTIL UNISSEX SEM BOLSO","FT-080-005U — BERMUDA DRY INFANTIL UNISSEX COM BOLSO","FT-080-006U — BERMUDA TACTEL INFANTIL UNISSEX SEM BOLSO","FT-080-007U — BERMUDA TACTEL INFANTIL UNISSEX COM BOLSO","FT-090-000M — CALÇAO MASC SEM BOLSO","FT-090-001M — CALÇÃO MASC COM BOLSO","FT-100-000F — SHORT FEM RECORTADO","FT-100-001F — SHORT FEM DANI","FT-100-002F — SHORT FEM FERNANDA","FT-100-003F — SHORT FEM FUTEVOLEI","FT-100-004F — SHORT FEM SAIA FEM","FT-100-005C — SHORT INFANTIL SUPLEX","FT-100-006M — SHORT NO GI MASC SEM BOLSO","FT-100-007M — SHORT NO GI MASC COM BOLSO","FT-100-008M — SHORT TACTEL MASC FOURTIME CURTO","FT-100-009M — SHORT TACTEL MASC FOURTIME MEDIA","FT-110-000U — JALECO E CALÇA COM BOTÃO","FT-110-001U — JALECO E CALÇA COM BOTÃO ML","FT-110-002U — JALECO E CALÇA SEM BOTÃO","FT-110-003U — JALECO E CALÇA SEM BOTÃO ML","FT-120-000U — COLETE COM VIES UNISSEX","FT-120-001U — COLETE DUPLA FACE","FT-120-002U — AVENTAL UNISSEX","FT-120-003U — BALACLAVA UNISSEX","FT-120-004U — BONE","FT-120-005U — BANDEIRA","FT-010-017M — CAMISETA MASC LONG LINE","FT-010-018M — CAMISETA MASC LONG LINE GOLA V","FT-010-019F — BABY LOOK LONG LINE","FT-010-020F — BABY LOOK LONG LINE GOLA V","FT-120-007U — MEIAO FUTEBOL","FT-030-009F — REGATAO FEM DANI","FT-090-002U — CALÇÃO INF SEM BOLSO","FT-090-003U — CALÇÃO INF COM BOLSO","FT-040-006C — BLUSA MOLETOM INF COM ZIPER","FT-040-007C — BLUSA MOLETOM INF SEM  ZIPER","FT-110-004M — CAMISA MASCULINA SOCIAL","FT-110-006F — CAMISETE FEMININA MANGA 3/4","FT-110-005F — CAMISETE FEMININA MANGA LONGA","FT-110-008U — CALÇA INDUSTRIAL UNISSEX 4 BOLSOS","FT-110-002U — JALECO GOLA V SEM BOTAO M.C","FT-110-003U — JALECO GOLA V SEM BOTAO M.L","FT-100-010F — SHORT FEM CORRIDA","FT-100-007F — TOP FEM LADO","FT-100-011M — SHORT VOLEIBOL MASCULINO","FT-KIT-020-000M-090-000M — KIT RAGLAN S/ PUNHO E CALÇAO S/ BOLSO","CALÇA MOLETOM MASC TRAD CORTE RETO SEM PUNHO","CALÇA MOLETOM FEMININA COM PUNHO"],
-  tecidos:["ALGODAO 100%","ALGODAO COM ELASTANO","ALGODAO FLAME","ALGODAO MESCLA COM ELASTANO","ALGODAO MESCLA SEM ELASTANO","ALGODAO STRONG","BRIM LEVE","BRIM PESADO","CONFORT MIX MESCLA","CREPE DE POLIESTER 100%","DRYFIT COM ELASTANO PROTEÇÃO UV50","DRYFIT FURADINHO COM ELASTANO","DRYFIT FURADINHO SEM ELASTANO","DRYFIT POLIESTER 100%","MOLETINHO COM ELASTANO","MOLETOM","NATURALINHO","NEOPRENE","PIQUET 100%","PIQUET COM ELASTANO","PIQUET MISTO","POLIAMIDA 96% ELASTANO 4%","POLIAMIDA FLOW","POLIAMIDA FRESH","POLIAMIDA FURADINHA COM ELASTANO","PV ANTIPILING","SUPLEX 84% POLIESTER 16% ELASTANO","SUPLEX POLIAMIDA","TACTEL COM ELASTANO","TERBRIM 65% POLIESTER 35%ALGODAO","VIS UP LIGTH","PROFIT","SG PARIS"],
+  tecidos:[{n:"ALGODAO 100%",g:"ALG"},{n:"ALGODAO COM ELASTANO",g:"ALG"},{n:"ALGODÃO CONFORT MIX",g:"ALG"},{n:"ALGODAO FLAME",g:"ALG"},{n:"ALGODAO MESCLA COM ELASTANO",g:"ALG"},{n:"ALGODAO MESCLA SEM ELASTANO",g:"ALG"},{n:"ALGODÃO NATURALINHO",g:"ALG"},{n:"ALGODÃO PIMA",g:"ALG"},{n:"ALGODAO STRONG",g:"ALG"},{n:"POLIAMIDA 100%",g:"POL"},{n:"POLIAMIDA COM ELASTANO",g:"POL"},{n:"POLIAMIDA FLOW COM ELASTANO",g:"POL"},{n:"POLIAMIDA FRESH",g:"POL"},{n:"POLIAMIDA FURADINHA COM ELASTANO",g:"POL"},{n:"POLIAMIDA MICRO PERFURADA",g:"POL"},{n:"DRY FIT CREPE 100%",g:"DRY"},{n:"DRYFIT COM ELASTANO PROTEÇÃO UV50",g:"DRY"},{n:"DRYFIT FURADINHO COM ELASTANO",g:"DRY"},{n:"DRYFIT FURADINHO SEM ELASTANO",g:"DRY"},{n:"DRYFIT JAKAR 100%",g:"DRY"},{n:"DRYFIT POLIESTER 100%",g:"DRY"},{n:"PIQUET 100%",g:"PIQ"},{n:"PIQUET COM ELASTANO",g:"PIQ"},{n:"PIQUET MISTO",g:"PIQ"},{n:"MOLETINHO COM ELASTANO",g:"MOL"},{n:"MOLETOM",g:"MOL"},{n:"MOLETOM FELPUDO",g:"MOL"},{n:"MOLETOM SUBLIMAVEL",g:"MOL"},{n:"SUPLEX POLIAMIDA",g:"SPX"},{n:"SUPLEX POLIESTER",g:"SPX"},{n:"VISCOSE PV ANTIPILING",g:"VIS"},{n:"VISCOSE VIS UP LIGTH",g:"VIS"},{n:"POLIESTER PP ANTIPILING",g:"PP"},{n:"BRIM LEVE",g:"TPA"},{n:"BRIM PESADO",g:"TPA"},{n:"TACTEL POLIAMIDA COM ELASTANO",g:"TPA"},{n:"TACTEL POLIESTE COM ELASTANO",g:"TPA"},{n:"TERBRIM POLIESTER",g:"TPA"},{n:"NEOPRENE",g:"ESP"}],
   cores:[{"n":"SUBLIMAÇÃO","c":"#C6161B","g":"SUB"},{"n":"Branco","c":"#FFFFFF","g":"BR"},{"n":"Branco Gelo","c":"#F7F9FA","g":"BR"},{"n":"Off White","c":"#F2EFE9","g":"BR"},{"n":"Creme","c":"#F3E9D2","g":"BR"},{"n":"Marfim","c":"#EFE7D2","g":"BR"},{"n":"Pérola","c":"#EDE9E3","g":"BR"},{"n":"Areia Clara","c":"#EAE0CE","g":"BR"},{"n":"Palha","c":"#E8DFC0","g":"BR"},{"n":"Champagne","c":"#E4D9C3","g":"BR"},{"n":"Cru","c":"#DED3BC","g":"BR"},{"n":"Preto","c":"#111111","g":"PC"},{"n":"Preto Ônix","c":"#1B1B1F","g":"PC"},{"n":"Grafite","c":"#3A3F47","g":"PC"},{"n":"Cinza Chumbo","c":"#4A4E52","g":"PC"},{"n":"Cinza Escuro","c":"#5F646A","g":"PC"},{"n":"Cinza Mescla Escuro","c":"#6E7378","g":"PC"},{"n":"Cinza Médio","c":"#8A8F95","g":"PC"},{"n":"Cinza Mescla","c":"#A8A9AD","g":"PC"},{"n":"Cinza Claro","c":"#D3D5D8","g":"PC"},{"n":"Cinza Pérola","c":"#E5E7EA","g":"PC"},{"n":"Vermelho","c":"#D0021B","g":"VM"},{"n":"Vermelho Fourtime","c":"#C6161B","g":"VM"},{"n":"Vermelho Tomate","c":"#E23B2E","g":"VM"},{"n":"Vermelho Escarlate","c":"#B3161C","g":"VM"},{"n":"Vermelho Neon","c":"#FF1E1E","g":"VM"},{"n":"Vermelho Escuro","c":"#8E1218","g":"VM"},{"n":"Cereja","c":"#A81232","g":"VM"},{"n":"Marsala","c":"#7B3540","g":"VM"},{"n":"Vinho","c":"#6B1F2B","g":"VM"},{"n":"Bordô","c":"#5C1A2B","g":"VM"},{"n":"Rosa Bebê","c":"#F7C6D9","g":"RS"},{"n":"Rosé","c":"#E8A0A0","g":"RS"},{"n":"Rosa","c":"#F48FB1","g":"RS"},{"n":"Salmão","c":"#FA8072","g":"RS"},{"n":"Coral","c":"#FF6F5E","g":"RS"},{"n":"Rosa Chiclete","c":"#FF6FB5","g":"RS"},{"n":"Rosa Neon","c":"#FF2D95","g":"RS"},{"n":"Rosa Pink","c":"#E91E8C","g":"RS"},{"n":"Fúcsia","c":"#D4157E","g":"RS"},{"n":"Magenta","c":"#C2007B","g":"RS"},{"n":"Pêssego","c":"#FFCBA4","g":"LR"},{"n":"Damasco","c":"#F0A868","g":"LR"},{"n":"Laranja Claro","c":"#FFA24D","g":"LR"},{"n":"Laranja","c":"#F57C00","g":"LR"},{"n":"Laranja Neon","c":"#FF6D00","g":"LR"},{"n":"Tangerina","c":"#F2670A","g":"LR"},{"n":"Cenoura","c":"#ED7014","g":"LR"},{"n":"Abóbora","c":"#D97D1E","g":"LR"},{"n":"Terracota","c":"#B4543A","g":"LR"},{"n":"Ferrugem","c":"#8E4B2E","g":"LR"},{"n":"Amarelo Bebê","c":"#FBEFA0","g":"AM"},{"n":"Amarelo Limão","c":"#F4F062","g":"AM"},{"n":"Amarelo Neon","c":"#EFFF00","g":"AM"},{"n":"Amarelo Canário","c":"#FFE000","g":"AM"},{"n":"Milho","c":"#F5CE3E","g":"AM"},{"n":"Girassol","c":"#F2C200","g":"AM"},{"n":"Amarelo Ouro","c":"#E7B400","g":"AM"},{"n":"Âmbar","c":"#D99A00","g":"AM"},{"n":"Dourado","c":"#C9A227","g":"AM"},{"n":"Mostarda","c":"#C99700","g":"AM"},{"n":"Verde Menta","c":"#B7E4C7","g":"VD"},{"n":"Verde Água","c":"#8FD3C4","g":"VD"},{"n":"Verde Neon","c":"#39FF14","g":"VD"},{"n":"Verde Limão","c":"#9BD200","g":"VD"},{"n":"Verde Bandeira","c":"#00963F","g":"VD"},{"n":"Verde Esmeralda","c":"#068A5B","g":"VD"},{"n":"Verde Oliva","c":"#7C864A","g":"VD"},{"n":"Verde Militar","c":"#5A6650","g":"VD"},{"n":"Verde Musgo","c":"#4A5D23","g":"VD"},{"n":"Verde Floresta","c":"#1E4D2B","g":"VD"},{"n":"Azul Bebê","c":"#BBDDFB","g":"AZ"},{"n":"Azul Celeste","c":"#7EC8E3","g":"AZ"},{"n":"Ciano","c":"#00BFFF","g":"AZ"},{"n":"Azul Piscina","c":"#29A8C9","g":"AZ"},{"n":"Azul Turquesa","c":"#00B2A9","g":"AZ"},{"n":"Azul Cobalto","c":"#1A4FBF","g":"AZ"},{"n":"Azul Royal","c":"#12489E","g":"AZ"},{"n":"Azul Jeans","c":"#4A6D8C","g":"AZ"},{"n":"Azul Petróleo","c":"#12556B","g":"AZ"},{"n":"Azul Marinho","c":"#12213F","g":"AZ"},{"n":"Lavanda","c":"#C9B6E4","g":"RX"},{"n":"Lilás","c":"#B491C8","g":"RX"},{"n":"Roxo Neon","c":"#B026FF","g":"RX"},{"n":"Orquídea","c":"#A45EE5","g":"RX"},{"n":"Ametista","c":"#8A5FBF","g":"RX"},{"n":"Violeta","c":"#7A4FBF","g":"RX"},{"n":"Púrpura","c":"#6A0D5B","g":"RX"},{"n":"Roxo","c":"#5E2A84","g":"RX"},{"n":"Uva","c":"#4B2354","g":"RX"},{"n":"Berinjela","c":"#3F2140","g":"RX"},{"n":"Areia Escura","c":"#C2A878","g":"MR"},{"n":"Caqui","c":"#B5A16B","g":"MR"},{"n":"Canela","c":"#A9703F","g":"MR"},{"n":"Caramelo","c":"#9A5B22","g":"MR"},{"n":"Tabaco","c":"#7A5230","g":"MR"},{"n":"Marrom","c":"#6B4423","g":"MR"},{"n":"Chocolate","c":"#5C3317","g":"MR"},{"n":"Castanho","c":"#5A3A22","g":"MR"},{"n":"Café","c":"#4B3621","g":"MR"},{"n":"Cacau","c":"#3E2A1E","g":"MR"},{"n":"Linho","c":"#E6DCC8","g":"BG"},{"n":"Nude Rosado","c":"#E7C9BC","g":"BG"},{"n":"Nude","c":"#E3C4A8","g":"BG"},{"n":"Trigo","c":"#E0CBA4","g":"BG"},{"n":"Amêndoa","c":"#DCC3A5","g":"BG"},{"n":"Bege","c":"#D9C7A7","g":"BG"},{"n":"Café com Leite","c":"#C8A784","g":"BG"},{"n":"Bege Escuro","c":"#C3AE8A","g":"BG"},{"n":"Argila","c":"#C08F72","g":"BG"},{"n":"Camurça","c":"#BFA37C","g":"BG"},{"n":"Perolado","c":"#E8E6E1","g":"MT"},{"n":"Champanhe Metálico","c":"#CBB78F","g":"MT"},{"n":"Holográfico","c":"#C9D6E8","g":"MT"},{"n":"Dourado Metálico","c":"#C6A140","g":"MT"},{"n":"Prata","c":"#C0C4C8","g":"MT"},{"n":"Refletivo","c":"#B8C0C6","g":"MT"},{"n":"Cobre","c":"#B06C3B","g":"MT"},{"n":"Bronze","c":"#A9773F","g":"MT"},{"n":"Chumbo Metálico","c":"#7E858B","g":"MT"},{"n":"Grafite Metálico","c":"#6E7276","g":"MT"}]
 };
 
@@ -7670,7 +7716,12 @@ function corDesmarcaApagada(nome){
 function ftSementeDeclarada(){
   const nomes=[COR_SUBLIMACAO];
   CORES_GRUPOS.forEach(g=>g.cores.forEach(c=>nomes.push(c[0])));
-  return {cores:nomes};
+  /* o catálogo de tecidos da v3.334 entra pelo mesmo caminho: sem
+     declarar, plantar 39 tecidos de uma vez é indistinguível de
+     duplicação e o freio do servidor recusa a gravação inteira */
+  const tec=[];
+  if(typeof TEC_GRUPOS!=='undefined')TEC_GRUPOS.forEach(g=>g.tecidos.forEach(t=>tec.push(t)));
+  return {cores:nomes,tecidos:tec};
 }
 window.ftSementeDeclarada=ftSementeDeclarada;
 function ftSemeiaCores(){
@@ -7709,8 +7760,188 @@ function sincCores(){
   DB.cores.forEach(o=>{ CORES_NOMES.push(o.n); CORES_HEX[o.n.trim().toUpperCase()]=o.c; });
 }
 sincCores();
+
+/* ================================================================
+   OS TECIDOS POR TIPO (v3.334)
+
+   Até aqui `DB.tecidos` era uma lista de textos em ordem alfabética.
+   Trinta e três nomes corridos, onde DRYFIT FURADINHO SEM ELASTANO
+   ficava a catorze linhas de DRYFIT POLIESTER 100% porque tem uma
+   letra diferente no meio. Quem escolhe não pensa assim: pensa "vai
+   ser dry fit" e só depois na variação.
+
+   A mudança é a MESMA do catálogo de cores da v3.288 e das
+   referências da v3.301, e de propósito: cada tecido vira
+   `{n, g}` (nome e grupo), o grupo é só EXIBIÇÃO, e o `.ft`
+   continua guardando o tecido como TEXTO. Nada do que já foi salvo
+   muda, e um pedido de dois anos atrás continua abrindo igual.
+
+   OS TIPOS SÃO DELE. A lista abaixo é exatamente a que o Henrique
+   montou no editor de categorias e mandou em JSON, com os nomes que
+   ele escolheu. Eu só dei código curto ao SUPLEX, que veio sem, para
+   a pastilha do menu ter o que mostrar.
+   ================================================================ */
+const TEC_GRUPOS=[
+  {cod:'ALG',nome:'ALGODÃO',tinta:'#C6161B',tecidos:[
+    'ALGODAO 100%','ALGODAO COM ELASTANO','ALGODÃO CONFORT MIX','ALGODAO FLAME',
+    'ALGODAO MESCLA COM ELASTANO','ALGODAO MESCLA SEM ELASTANO','ALGODÃO NATURALINHO',
+    'ALGODÃO PIMA','ALGODAO STRONG']},
+  {cod:'POL',nome:'POLIAMIDA',tinta:'#DB2777',tecidos:[
+    'POLIAMIDA 100%','POLIAMIDA COM ELASTANO','POLIAMIDA FLOW COM ELASTANO',
+    'POLIAMIDA FRESH','POLIAMIDA FURADINHA COM ELASTANO','POLIAMIDA MICRO PERFURADA']},
+  {cod:'DRY',nome:'DRY FIT',tinta:'#0E7490',tecidos:[
+    'DRY FIT CREPE 100%','DRYFIT COM ELASTANO PROTEÇÃO UV50','DRYFIT FURADINHO COM ELASTANO',
+    'DRYFIT FURADINHO SEM ELASTANO','DRYFIT JAKAR 100%','DRYFIT POLIESTER 100%']},
+  {cod:'PIQ',nome:'PIQUE',tinta:'#15803D',tecidos:[
+    'PIQUET 100%','PIQUET COM ELASTANO','PIQUET MISTO']},
+  {cod:'MOL',nome:'MOLETOM',tinta:'#7C3AED',tecidos:[
+    'MOLETINHO COM ELASTANO','MOLETOM','MOLETOM FELPUDO','MOLETOM SUBLIMAVEL']},
+  {cod:'SPX',nome:'SUPLEX',tinta:'#0E7490',tecidos:[
+    'SUPLEX POLIAMIDA','SUPLEX POLIESTER']},
+  {cod:'VIS',nome:'VISCOSE',tinta:'#0E7490',tecidos:[
+    'VISCOSE PV ANTIPILING','VISCOSE VIS UP LIGTH']},
+  {cod:'PP',nome:'POLIESTER',tinta:'#B45309',tecidos:[
+    'POLIESTER PP ANTIPILING']},
+  {cod:'TPA',nome:'TECIDO PLANO',tinta:'#3F3F46',tecidos:[
+    'BRIM LEVE','BRIM PESADO','TACTEL POLIAMIDA COM ELASTANO',
+    'TACTEL POLIESTE COM ELASTANO','TERBRIM POLIESTER']},
+  {cod:'ESP',nome:'MATERIAIS',tinta:'#0F766E',tecidos:[
+    'NEOPRENE']},
+];
+const TEC_GRUPO_NOME={'':'Sem tipo'};
+const TEC_GRUPO_TINTA={'':'#9AA0A6'};
+TEC_GRUPOS.forEach(g=>{ TEC_GRUPO_NOME[g.cod]=g.nome; TEC_GRUPO_TINTA[g.cod]=g.tinta; });
+/* nome (em CAIXA) -> código do grupo, para descobrir o tipo de um banco
+   antigo, que só tem o texto */
+const TEC_GRUPO_DE={};
+TEC_GRUPOS.forEach(g=>g.tecidos.forEach(t=>TEC_GRUPO_DE[t.trim().toUpperCase()]=g.cod));
+const TEC_GRUPO_ORDEM=TEC_GRUPOS.map(g=>g.cod);
+function tecGrupoIndice(cod){
+  const i=TEC_GRUPO_ORDEM.indexOf(cod);
+  return i<0?999:i;                       /* o que não se conhece vai para o fim */
+}
+function tecOpcoesGrupo(atual){
+  const ops=TEC_GRUPOS.map(g=>[g.cod,g.nome]).concat([['','Sem tipo']]);
+  return ops.map(([cod,nome])=>
+    '<option value="'+cod+'"'+(cod===(atual||'')?' selected':'')+'>'+ftEsc(nome)+'</option>').join('');
+}
+
+/* ----------------------------------------------------------------
+   OS NOMES QUE MUDARAM
+
+   Ele não só agrupou: renomeou. "CONFORT MIX MESCLA" virou "ALGODÃO
+   CONFORT MIX", "PV ANTIPILING" virou "VISCOSE PV ANTIPILING", e por
+   aí. Sem esta tabela o banco ficaria com os dois: o velho, que o
+   servidor devolve na mesclagem, e o novo, que o plantio acrescenta.
+
+   Renomear aqui é apagar um nome e criar outro, então cada troca
+   também vira LÁPIDE — senão a mesclagem ressuscita o nome velho na
+   sincronização seguinte. É a mesma regra que vale para renomear
+   qualquer item do Banco.
+
+   O QUE NÃO ESTÁ AQUI, e por quê. TACTEL COM ELASTANO virou dois
+   tecidos na lista nova (poliamida e poliéster) e não há como saber
+   qual dos dois é o antigo; PROFIT e SG PARIS simplesmente saíram da
+   lista. Adivinhar o destino de um tecido que vira ordem de compra é
+   pior que deixar visível: os três ficam em "sem tipo", à vista, e
+   ele apaga com um clique quando decidir.
+   ---------------------------------------------------------------- */
+const TEC_RENOMES={
+  'CONFORT MIX MESCLA':'ALGODÃO CONFORT MIX',
+  'NATURALINHO':'ALGODÃO NATURALINHO',
+  'PV ANTIPILING':'VISCOSE PV ANTIPILING',
+  'VIS UP LIGTH':'VISCOSE VIS UP LIGTH',
+  'POLIAMIDA 96% ELASTANO 4%':'POLIAMIDA COM ELASTANO',
+  'POLIAMIDA FLOW':'POLIAMIDA FLOW COM ELASTANO',
+  'SUPLEX 84% POLIESTER 16% ELASTANO':'SUPLEX POLIESTER',
+  'TERBRIM 65% POLIESTER 35%ALGODAO':'TERBRIM POLIESTER',
+  'CREPE DE POLIESTER 100%':'DRY FIT CREPE 100%',
+};
+function ftRenomeiaTecidos(){
+  if(!Array.isArray(DB.tecidos))return 0;
+  let n=0;
+  const tem=nome=>DB.tecidos.some(o=>String(o&&o.n||o).trim().toUpperCase()===nome);
+  Object.keys(TEC_RENOMES).forEach(velhoK=>{
+    const novo=TEC_RENOMES[velhoK];
+    const i=DB.tecidos.findIndex(o=>String(o&&o.n||o).trim().toUpperCase()===velhoK);
+    if(i<0)return;
+    if(typeof ftMarcaRemocao==='function')ftMarcaRemocao('tecidos',velhoK);
+    if(tem(novo.trim().toUpperCase())){
+      DB.tecidos.splice(i,1);            /* o novo já existe: o velho só sai */
+    }else{
+      const o=DB.tecidos[i];
+      if(o&&typeof o==='object')o.n=novo; else DB.tecidos[i]=novo;
+    }
+    n++;
+  });
+  return n;
+}
+
+/* ----------------------------------------------------------------
+   O CATÁLOGO DE FÁBRICA SE PLANTA SOZINHO
+
+   Mesma mecânica das cores (v3.288), pelo mesmo motivo: a mescla do
+   servidor REFAZ DB.tecidos com o que veio de lá. Sem replantar
+   depois de cada mescla, a lista nova apareceria no primeiro
+   carregamento e sumiria no primeiro sincronismo.
+
+   É idempotente: acrescenta só o que falta, pelo nome. E respeita a
+   lista de apagados de propósito, guardada neste navegador, para não
+   ressuscitar o que alguém tirou.
+   ---------------------------------------------------------------- */
+const TEC_APAGADOS_KEY='fourtime_tecidos_apagados';
+function tecApagados(){
+  try{ const r=localStorage.getItem(TEC_APAGADOS_KEY); return new Set(r?JSON.parse(r):[]); }
+  catch(e){ return new Set(); }
+}
+function tecMarcaApagado(nome){
+  const n=String(nome||'').trim().toUpperCase();
+  if(!n)return;
+  const s=tecApagados(); s.add(n);
+  try{ localStorage.setItem(TEC_APAGADOS_KEY,JSON.stringify([...s])); }catch(e){}
+}
+function tecDesmarcaApagado(nome){
+  const n=String(nome||'').trim().toUpperCase();
+  const s=tecApagados();
+  if(s.delete(n)){ try{ localStorage.setItem(TEC_APAGADOS_KEY,JSON.stringify([...s])); }catch(e){} }
+}
+function ftSemeiaTecidos(){
+  if(!Array.isArray(DB.tecidos))DB.tecidos=[];
+  const fora=tecApagados();
+  const tem=new Set(DB.tecidos.map(o=>String(o&&o.n||o).trim().toUpperCase()));
+  let novos=0;
+  TEC_GRUPOS.forEach(g=>g.tecidos.forEach(t=>{
+    const k=t.trim().toUpperCase();
+    if(tem.has(k)||fora.has(k))return;
+    DB.tecidos.push({n:t,g:g.cod}); tem.add(k); novos++;
+  }));
+  return novos;
+}
+function normalizaTecidos(){
+  DB.tecidos=(DB.tecidos||[])
+    .map(x=>(x&&typeof x==='object')
+      ? {n:String(x.n||''),g:String(x.g||'')}
+      : {n:String(x),g:''})
+    .filter(x=>x.n);
+  /* banco antigo não tem `g`: descobre pelo nome. O que não estiver na
+     tabela fica sem tipo — visível, editável, nunca perdido. */
+  DB.tecidos.forEach(o=>{ if(!o.g)o.g=TEC_GRUPO_DE[o.n.trim().toUpperCase()]||''; });
+}
+normalizaTecidos();
+ftRenomeiaTecidos();             /* os nomes novos entram no lugar dos velhos */
+ftSemeiaTecidos();               /* e o catálogo de fábrica completa o que falta */
+normalizaTecidos();
+/* nomes para os combos. Eles guardam a REFERÊNCIA deste array, então ele
+   é mutado no lugar e nunca trocado. */
+const TEC_NOMES=[];
+function sincTecidos(){
+  TEC_NOMES.length=0;
+  DB.tecidos.forEach(o=>TEC_NOMES.push(o.n));
+}
+sincTecidos();
+
 /* os combos leem estes MESMOS arrays (mutados in-place pela página BD) */
-const DBS={refs:DB.referencias,tecidos:DB.tecidos,cores:CORES_NOMES};
+const DBS={refs:DB.referencias,tecidos:TEC_NOMES,cores:CORES_NOMES};
 /* datalists do cabeçalho alimentados pelo banco */
 const DL_MAP={"dl-cliente":"clientes","dl-departamento":"departamentos","dl-embalagem":"embalagens","dl-vendedor":"vendedores","dl-entrega":"entregas","dl-pagamento":"pagamentos"};
 function syncDatalists(){
@@ -7825,6 +8056,7 @@ function aplicarDBExterno(o){
   /* o catálogo de fábrica se replanta: o servidor pode ainda estar com a
      lista antiga, e sem isto o grupo novo sumiria no primeiro sincronismo */
   try{normalizaCores();ftSemeiaCores();normalizaCores();sincCores();syncDatalists();}catch(e){}
+  try{normalizaTecidos();ftRenomeiaTecidos();ftSemeiaTecidos();normalizaTecidos();sincTecidos();}catch(e){}
   try{const pg=document.getElementById('bdPage'); if(pg&&!pg.hidden&&typeof bdRender==='function')bdRender();}catch(e){}
 }
 async function ftSyncPull(silencioso){
@@ -8299,7 +8531,7 @@ const pickLimpar=pickMenu.querySelector('.pick-limpar');
 const pickLista=pickMenu.querySelector('.pick-lista');
 const pickAtualizaX=()=>pickLimpar.classList.toggle('on',pickBusca.value!=='');
 let pickCampo=null, pickFonte=null, pickDepois=null, pickGeneroAlvo=null, pickOriginal=null;
-let pickEhRef=false;
+let pickEhRef=false, pickEhTec=false;
 const pickGenero=document.getElementById('pickGenero');
 /* escape HTML — fonte única (v164). pickEsc/gdEsc/bdEsc eram idênticas. */
 const ftEsc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -8389,6 +8621,123 @@ function pickRenderRefs(filtro){
   }).join('');
   return true;
 }
+/* ================================================================
+   O MENU DE TECIDO, AGRUPADO POR TIPO (v3.334)
+
+   Mesmo popover das referências, mesma casca, mesmo comportamento de
+   busca: um menu novo seria uma segunda gramática para a mesma
+   escolha. O que muda é só o desenho da lista.
+
+   O ARRASTAR MORA AQUI TAMBÉM, e só para admin. Ele pediu nos dois
+   lugares, e o motivo é bom: é escolhendo tecido que se percebe que
+   um está no tipo errado. A alça aparece no hover, e o clique de
+   escolher continua sendo o clique na linha — quem arrasta a alça
+   nunca escolhe sem querer.
+   ================================================================ */
+let pickTecAbertos=new Set();
+function pickEhListaDeTecido(fonte){
+  return typeof TEC_NOMES!=='undefined' && fonte===TEC_NOMES;
+}
+function tecGrupoDe(nome){
+  const o=(DB.tecidos||[]).find(x=>String(x&&x.n||'').trim().toUpperCase()===String(nome).trim().toUpperCase());
+  return o?String(o.g||''):'';
+}
+function pickRenderTecidos(filtro){
+  const q=(filtro||'').trim().toLowerCase();
+  const mapa={};
+  (pickFonte||[]).forEach(v=>{
+    const nome=String(v);
+    const g=tecGrupoDe(nome);
+    if(q && !nome.toLowerCase().includes(q)
+         && !String(TEC_GRUPO_NOME[g]||'').toLowerCase().includes(q)
+         && !String(g).toLowerCase().includes(q))return;
+    (mapa[g]=mapa[g]||[]).push(nome);
+  });
+  const grupos=Object.keys(mapa).sort((a,b)=>tecGrupoIndice(a)-tecGrupoIndice(b));
+  if(!grupos.length)return false;
+  const podeArrastar=!FT_SYNC.on||FT_SYNC.ehAdmin;
+  const forcaAberto=!!q;
+  pickLista.innerHTML=grupos.map(g=>{
+    const itens=mapa[g];
+    const aberto=(forcaAberto||pickTecAbertos.has(g))?' aberto':'';
+    const tinta=TEC_GRUPO_TINTA[g]||'#9AA0A6';
+    return `<div class="pick-grp pick-tec${aberto}" data-g="${pickEsc(g)}">
+      <button class="pick-grp-bt" type="button">
+        <span class="pick-grp-cod" style="color:${tinta};border-color:${tinta}55;background:${tinta}14">${g?pickEsc(g):'—'}</span>
+        <span class="pick-grp-nome">${pickEsc(TEC_GRUPO_NOME[g]||'Sem tipo')}</span>
+        <span class="pick-grp-qtd">${itens.length}</span>
+        <svg class="pick-grp-seta" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div class="pick-grp-lista">${itens.map(nome=>
+        `<button class="pick-item" data-v="${pickEsc(nome)}">
+           ${podeArrastar?`<span class="pick-alca" draggable="true" title="Arrastar para outro tipo">${IC_ALCA_PONTOS}</span>`:''}
+           <span class="nm">${pickEsc(nome)}</span>
+         </button>`).join('')}</div>
+    </div>`;
+  }).join('');
+  if(podeArrastar)pickLigaArrasto();
+  return true;
+}
+const IC_ALCA_PONTOS='<svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/>'
+  +'<circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/>'
+  +'<circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>';
+
+/* MOVER UM TECIDO DE TIPO, DE ONDE QUER QUE SEJA.
+   Uma função só serve o menu do orçamento e a página do Banco: são duas
+   telas do mesmo cadastro, e duas cópias desta regra virariam duas
+   regras diferentes no primeiro conserto. */
+function tecMoveParaGrupo(nome,g){
+  const o=(DB.tecidos||[]).find(x=>String(x&&x.n||'')===String(nome));
+  if(!o||String(o.g||'')===String(g||''))return false;
+  if(typeof bdPodeMexer==='function'&&!bdPodeMexer('mudar de tipo'))return false;
+  o.g=String(g||'');
+  if(typeof bdPersiste==='function')bdPersiste(); else if(typeof salvarDB==='function')salvarDB();
+  if(typeof ftToast==='function')
+    ftToast(nome+' agora é '+(TEC_GRUPO_NOME[o.g]||'Sem tipo'));
+  return true;
+}
+window.tecMoveParaGrupo=tecMoveParaGrupo;
+
+let _pickArr=null;
+function pickLigaArrasto(){
+  pickLista.querySelectorAll('.pick-alca').forEach(al=>{
+    const item=al.closest('.pick-item');
+    al.addEventListener('mousedown',e=>e.stopPropagation());   /* não fecha o menu */
+    al.ondragstart=ev=>{
+      _pickArr={n:item.dataset.v,de:item.closest('.pick-grp').dataset.g};
+      item.classList.add('arrastando');
+      ev.dataTransfer.effectAllowed='move';
+      ev.dataTransfer.setData('text/plain',item.dataset.v);
+      try{ev.dataTransfer.setDragImage(item,20,12);}catch(e){}
+      ev.stopPropagation();
+    };
+    al.ondragend=()=>{
+      item.classList.remove('arrastando');
+      pickLista.querySelectorAll('.alvo-ok').forEach(x=>x.classList.remove('alvo-ok'));
+      _pickArr=null;
+    };
+  });
+  pickLista.querySelectorAll('.pick-grp').forEach(gr=>{
+    gr.ondragover=ev=>{
+      if(!_pickArr||gr.dataset.g===_pickArr.de)return;
+      ev.preventDefault(); ev.dataTransfer.dropEffect='move';
+      gr.classList.add('alvo-ok');
+    };
+    gr.ondragleave=ev=>{ if(!gr.contains(ev.relatedTarget))gr.classList.remove('alvo-ok'); };
+    gr.ondrop=ev=>{
+      if(!_pickArr)return;
+      ev.preventDefault();
+      const alvo=gr.dataset.g, nome=_pickArr.n;
+      _pickArr=null;
+      if(tecMoveParaGrupo(nome,alvo)){
+        pickTecAbertos.add(alvo);
+        pickRender(pickBusca.value);
+        pickBusca.focus();
+      }
+    };
+  });
+}
+
 /* PROCURAR POR MAIS DO QUE O QUE APARECE (v3.328).
 
    O campo Cliente mostra o nome, e era só por ele que dava para procurar.
@@ -8412,6 +8761,15 @@ function pickTexto(v){
 function pickRender(filtro){
   const q=(filtro||'').trim().toLowerCase();
   const itens=(pickFonte||[]).filter(v=>pickTexto(v).toLowerCase().includes(q));
+  if(pickEhTec && pickRenderTecidos(filtro)){
+    /* o "usar assim mesmo" vale igual: tecido fora do catálogo acontece,
+       e o orçamento não pode parar por causa de um cadastro que falta */
+    const bt=(filtro||'').trim();
+    const jaTem=(pickFonte||[]).some(v=>String(v).toLowerCase()===bt.toLowerCase());
+    if(bt && !jaTem)pickLista.insertAdjacentHTML('beforeend',
+      `<button class="pick-item pick-novo" data-v="${pickEsc(bt)}">Usar \u201c${pickEsc(bt)}\u201d</button>`);
+    return;
+  }
   if(pickEhRef && pickRenderRefs(filtro)){
     /* o "usar assim mesmo" continua valendo: referência fora do catálogo é
        caso real, e some se a lista agrupada engolir a opção */
@@ -8471,6 +8829,7 @@ function pickAbre(campo,fonte,depois,comboGenero,extra){
   pickOriginal=String(campo.value||'');             /* para o Esc poder desfazer */
   pickGeneroAlvo=comboGenero||null;                 /* só a Referência traz a barra de gênero */
   pickEhRef=refEhListaDeReferencia(fonte);
+  pickEhTec=(typeof pickEhListaDeTecido==='function')&&pickEhListaDeTecido(fonte);
   pickGenero.hidden=!pickGeneroAlvo;
   if(pickGeneroAlvo){
     const g=pickGeneroAlvo.dataset.genero||'';
@@ -8517,7 +8876,8 @@ pickLista.addEventListener('mousedown',e=>{
   if(!bt)return;
   e.preventDefault(); e.stopPropagation();
   const g=bt.parentElement.dataset.g;
-  pickGrpAbertos.has(g)?pickGrpAbertos.delete(g):pickGrpAbertos.add(g);
+  const conj=bt.parentElement.classList.contains('pick-tec')?pickTecAbertos:pickGrpAbertos;
+  conj.has(g)?conj.delete(g):conj.add(g);
   pickRender(pickBusca.value);
   pickBusca.focus();
 });
@@ -17402,6 +17762,7 @@ let bdCat=(typeof DB_META!=='undefined'&&DB_META.length)?DB_META[0][0]:'referenc
 /* lembra entre uma cor e a próxima: cadastrar cor é cadastrar várias do
    mesmo tom, e reescolher o grupo toda vez seria trabalho à toa */
 let _bdUltimoGrupo='';
+let _bdUltimoTipo='';   /* mesma ideia, para os tecidos (v3.334) */
 let _bdAbreGrupo=null;      /* grupo que deve nascer aberto no próximo desenho */
 function bdCatValido(){
   if(typeof DB_META==='undefined')return bdCat;
@@ -17615,8 +17976,10 @@ function bdFichaHTML(o){
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Criar ficha de material</button>
     </div></div>`;
   const esc=(f.esc==null?FICHA_ESC_PADRAO:f.esc);
-  const opTec=(sel)=>(DB.tecidos||[]).map(t=>
-    `<option${String(t)===String(sel)?' selected':''}>${bdEsc(t)}</option>`).join('');
+  const opTec=(sel)=>(DB.tecidos||[]).map(o=>{
+    const t=(o&&typeof o==='object')?o.n:o;
+    return `<option${String(t)===String(sel)?' selected':''}>${bdEsc(t)}</option>`;
+  }).join('');
   const tecidos=(f.tec||[]).map((t,ti)=>`
     <div style="margin-bottom:12px">
       <div class="bd-mat" style="grid-template-columns:1fr 210px 30px">
@@ -17752,6 +18115,123 @@ function bdCoresTecido(termo){
     +(grupos?'<div class="bd-cor-grupos">'+grupos+'</div>'
             :'<div class="bd-empty">Nenhuma cor encontrada.</div>');
 }
+
+/* ================================================================
+   OS TECIDOS NA PÁGINA DO BANCO, POR TIPO (v3.334)
+
+   Mesma casca do catálogo de cores: um cartão por tipo, recolhido,
+   com a lista dentro. A diferença é que aqui o tipo se muda de duas
+   maneiras, e as duas existem por um motivo:
+
+     · ARRASTANDO pela alça, que é o gesto natural quando os dois
+       tipos estão à vista
+     · pelo SELETOR na linha, que é o único jeito quando o destino
+       está recolhido, fora da tela ou em outro cartão distante
+
+   O `data-idx` continua sendo o índice em DB.tecidos, para os
+   tratadores de renomear e apagar que já existiam continuarem
+   valendo sem uma segunda via de gravação.
+   ================================================================ */
+function bdTecidos(termo){
+  /* rede de segurança: se alguma coisa pôs texto solto em DB.tecidos (um
+     banco importado de versão anterior, por exemplo), ele entra aqui já
+     com forma canônica em vez de desenhar linhas sem nome */
+  normalizaTecidos();
+  const q=corSemAcento(termo).trim();
+  const idxDe=new Map(); (DB.tecidos||[]).forEach((o,i)=>idxDe.set(o,i));
+  const casa=o=>!q || corSemAcento(o.n).includes(q)
+                   || corSemAcento(TEC_GRUPO_NOME[o.g]||'').includes(q)
+                   || corSemAcento(o.g||'').includes(q);
+  const mapa={};
+  (DB.tecidos||[]).forEach(o=>{ (mapa[o.g||'']=mapa[o.g||'']||[]).push(o); });
+  /* o tipo vazio continua desenhado: sem cartão não há para onde
+     arrastar o primeiro tecido, e o tipo só voltaria a existir depois
+     de já ter alguém dentro */
+  TEC_GRUPO_ORDEM.forEach(cod=>{ if(!mapa[cod])mapa[cod]=[]; });
+  const codigos=Object.keys(mapa).sort((a,b)=>tecGrupoIndice(a)-tecGrupoIndice(b));
+  let visiveis=0;
+  const linha=o=>{
+    const i=idxDe.get(o);
+    return '<div class="bd-item bd-tec-linha" data-tec="'+corEsc(o.n)+'">'
+      +'<span class="bd-tec-alca" draggable="true" title="Arrastar para outro tipo">'+IC_ALCA_PONTOS+'</span>'
+      +'<input class="bd-item-input" data-idx="'+i+'" value="'+corEsc(o.n)+'">'
+      +'<select class="bd-tec-grupo" data-idx="'+i+'" title="Tipo deste tecido">'+tecOpcoesGrupo(o.g)+'</select>'
+      +'<button class="bd-item-del" data-idx="'+i+'" title="Remover"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
+      +'</div>';
+  };
+  const grupos=codigos.map(cod=>{
+    const todos=mapa[cod], dentro=todos.filter(casa);
+    if(q&&!dentro.length)return '';
+    visiveis+=dentro.length;
+    const tinta=TEC_GRUPO_TINTA[cod]||'#9AA0A6';
+    const nome=TEC_GRUPO_NOME[cod]||'Sem tipo';
+    return '<div class="bd-cg bd-tg'+(q?' aberto':'')+'" data-g="'+corEsc(cod)+'">'
+      +'<button type="button" class="bd-cg-cab">'
+      +'<span class="bd-tg-cod" style="color:'+tinta+';border-color:'+tinta+'55;background:'+tinta+'14">'
+      +(cod?corEsc(cod):'—')+'</span>'
+      +'<span class="nm">'+corEsc(nome)+'</span>'
+      +'<span class="qt">'+dentro.length+(dentro.length!==todos.length?' de '+todos.length:'')+'</span>'
+      +COR_SETA+'</button>'
+      +'<div class="bd-cg-corpo">'
+      +(dentro.length?dentro.map(linha).join('')
+        :'<div class="bd-tg-vazio">nenhum tecido neste tipo ainda</div>')
+      +'</div></div>';
+  }).join('');
+  return '<div class="bd-count-line">'+visiveis+' de '+(DB.tecidos||[]).length+' tecidos'
+    +(q?' · filtrando por "'+corEsc(termo)+'"':'')+'</div>'
+    +(grupos?'<div class="bd-cor-grupos">'+grupos+'</div>'
+            :'<div class="bd-empty">Nenhum tecido encontrado.</div>');
+}
+
+/* os tratadores da página: seletor de tipo e arrastar */
+function bdLigaTecidos(pg){
+  pg.querySelectorAll('.bd-tec-grupo[data-idx]').forEach(sel=>{
+    sel.onchange=e=>{
+      const o=DB.tecidos[+e.target.dataset.idx];
+      if(!o)return;
+      if(!bdPodeMexer('mudar de tipo')){ bdRender(); return; }
+      o.g=e.target.value;
+      _bdAbreGrupoTec=o.g;
+      bdPersiste(); bdRender();
+      ftToast(o.n+' agora é '+(TEC_GRUPO_NOME[o.g]||'Sem tipo'));
+    };
+  });
+  let arr=null;
+  pg.querySelectorAll('.bd-tec-alca').forEach(al=>{
+    const linha=al.closest('.bd-tec-linha');
+    al.ondragstart=ev=>{
+      arr={n:linha.dataset.tec,de:linha.closest('.bd-tg').dataset.g};
+      linha.classList.add('arrastando');
+      ev.dataTransfer.effectAllowed='move';
+      ev.dataTransfer.setData('text/plain',linha.dataset.tec);
+      try{ev.dataTransfer.setDragImage(linha,20,14);}catch(e){}
+    };
+    al.ondragend=()=>{
+      linha.classList.remove('arrastando');
+      pg.querySelectorAll('.alvo-ok').forEach(x=>x.classList.remove('alvo-ok'));
+      arr=null;
+    };
+  });
+  pg.querySelectorAll('.bd-tg').forEach(gr=>{
+    gr.ondragover=ev=>{
+      if(!arr||gr.dataset.g===arr.de)return;
+      ev.preventDefault(); ev.dataTransfer.dropEffect='move';
+      gr.classList.add('alvo-ok');
+    };
+    gr.ondragleave=ev=>{ if(!gr.contains(ev.relatedTarget))gr.classList.remove('alvo-ok'); };
+    gr.ondrop=ev=>{
+      if(!arr)return;
+      ev.preventDefault();
+      const alvo=gr.dataset.g, nome=arr.n;
+      arr=null;
+      /* o cartão de destino já nasce aberto: o gesto termina no vazio se
+         o tecido cair dentro de uma gaveta fechada */
+      _bdAbreGrupoTec=alvo;
+      if(tecMoveParaGrupo(nome,alvo))bdRender();
+    };
+  });
+}
+let _bdAbreGrupoTec=null;
 
 function bdRenderCores(termo,paleta){
   const arr=paleta==='sb'?SB_CORES:DTF_CORES;
@@ -19699,13 +20179,14 @@ function bdRender(){
           <div class="bd-search">${IC_LUPA}<input id="bdSearch" type="text" placeholder="Buscar..." value="${bdEsc(bdBusca)}"></div>
           <div class="bd-add">
             ${cat==='cores'?`<input type="color" class="bd-cor-pick" id="bdNovaCor" value="#CCCCCC" title="Cor do tecido">`:''}
-            <input id="bdNovo" type="text" placeholder="${cat==='cores'?'Nome da cor...':(cat==='clientes'?'Nome do cliente...':'Adicionar novo item...')}">
+            <input id="bdNovo" type="text" placeholder="${cat==='cores'?'Nome da cor...':(cat==='tecidos'?'Nome do tecido...':(cat==='clientes'?'Nome do cliente...':'Adicionar novo item...'))}">
             ${cat==='clientes'?`<input id="bdNovoDoc" type="text" class="bd-novo-doc" placeholder="CPF / CNPJ (opcional)">`:''}
             ${cat==='cores'?`<select class="bd-cor-grupo" id="bdNovoGrupo" title="Grupo da cor nova">${bdOpcoesGrupo(_bdUltimoGrupo)}</select>`:''}
+            ${cat==='tecidos'?`<select class="bd-cor-grupo" id="bdNovoTipo" title="Tipo do tecido novo">${tecOpcoesGrupo(_bdUltimoTipo)}</select>`:''}
             <button class="bd-add-btn" id="bdAddBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Adicionar</button>
           </div>
         </div>
-        ${cat==='referencias' ? bdReferencias(bdBusca) : cat==='cores' ? bdCoresTecido(bdBusca) : `
+        ${cat==='referencias' ? bdReferencias(bdBusca) : cat==='cores' ? bdCoresTecido(bdBusca) : cat==='tecidos' ? bdTecidos(bdBusca) : `
         <div class="bd-count-line">${filtrada.length} de ${lista.length} ${filtrada.length===1?'item':'itens'}${termo?` · filtrando por "${bdEsc(bdBusca)}"`:''}</div>
         <div class="bd-list">
           ${filtrada.length===0
@@ -19765,6 +20246,12 @@ function bdRender(){
         corDesmarcaApagada(v);
         DB.cores.push({n:v,c:(p&&p.value)||'#CCCCCC',g:_bdUltimoGrupo});
         _bdAbreGrupo=_bdUltimoGrupo;            /* o grupo dela já abre para a cor aparecer */
+      }else if(cat==='tecidos'){
+        const tsel=pg.querySelector('#bdNovoTipo');
+        _bdUltimoTipo=tsel?tsel.value:'';   /* cadastrar tecido é cadastrar vários do mesmo tipo */
+        tecDesmarcaApagado(v);
+        DB.tecidos.push({n:v,g:_bdUltimoTipo});
+        _bdAbreGrupoTec=_bdUltimoTipo;      /* o tipo dele já abre para o tecido aparecer */
       }else if(cat==='clientes'){
         const dd=pg.querySelector('#bdNovoDoc');
         const novoCli={n:v,doc:((dd&&dd.value)||'').trim()};
@@ -19805,11 +20292,21 @@ function bdRender(){
         if(!bdPodeMexer(v?'renomear':'apagar')){ bdRender(); return; }
         ftMarcaRemocao(cat,antigo);
       }
-      if(!v){ if(cat==='cores')corMarcaApagada(DB.cores[i].n); DB[cat].splice(i,1); }
+      if(!v){
+        if(cat==='cores')corMarcaApagada(DB.cores[i].n);
+        if(cat==='tecidos')tecMarcaApagado(DB.tecidos[i].n);
+        DB[cat].splice(i,1);
+      }
       else if(cat==='cores'){
         /* renomear é apagar um nome e criar outro: a decisão vale para os dois */
         corMarcaApagada(DB.cores[i].n); corDesmarcaApagada(v);
         DB.cores[i].n=v;
+      }
+      else if(cat==='tecidos'){
+        /* o tecido virou objeto na v3.334: sem este ramo, renomear
+           substituiria o objeto por uma string e o tipo iria junto */
+        tecMarcaApagado(DB.tecidos[i].n); tecDesmarcaApagado(v);
+        DB.tecidos[i].n=v;
       }
       else if(cat==='clientes')DB.clientes[i].n=v;
       else DB[cat][i]=v;
@@ -19820,6 +20317,14 @@ function bdRender(){
   });
   /* Os campos de cliente saíram daqui na v4.3: clientes ganhou seção
      própria, com ficha completa. Restava código sem tela. */
+  if(cat==='tecidos'){
+    bdLigaTecidos(pg);
+    if(_bdAbreGrupoTec!==null){
+      const alvo=pg.querySelector('.bd-tg[data-g="'+CSS.escape(_bdAbreGrupoTec)+'"]');
+      if(alvo)alvo.classList.add('aberto');
+      _bdAbreGrupoTec=null;
+    }
+  }
   pg.querySelectorAll('.bd-cor-pick[data-idx]').forEach(p=>{
     p.oninput=e=>{
       const c=DB.cores[+e.target.dataset.idx];
@@ -19869,7 +20374,7 @@ function bdRender(){
     const f=fichaCria(r);
     /* uma ficha vazia é um formulário em branco: nasce com uma linha de
        cada tipo, senão a primeira coisa que a pessoa vê é o nada */
-    f.tec.push({nome:(DB.tecidos||[])[0]||'',parte:'Corpo',base:1,aj:{}});
+    f.tec.push({nome:((DB.tecidos||[])[0]||{}).n||'',parte:'Corpo',base:1,aj:{}});
     f.avi.push({nome:'Linha de costura',qtd:100,uni:'m'});
     grava('Ficha criada para '+refParse(r).nome); };
   pg.querySelectorAll('[data-fesc]').forEach(i=>{
@@ -19905,7 +20410,7 @@ function bdRender(){
   });
   const btn2=pg.querySelector('[data-ftnovo]');
   if(btn2)btn2.onclick=()=>{ const f=fAtual(); if(!f)return;
-    f.tec.push({nome:(DB.tecidos||[])[0]||'',parte:'',base:1,aj:{}}); grava(); };
+    f.tec.push({nome:((DB.tecidos||[])[0]||{}).n||'',parte:'',base:1,aj:{}}); grava(); };
   pg.querySelectorAll('[data-fan]').forEach(i=>{
     i.onchange=()=>{ const f=fAtual(); if(!f)return;
       f.avi[+i.dataset.fan].nome=i.value.trim(); grava(); };
@@ -19979,6 +20484,8 @@ function bdRender(){
       ftMarcaRemocao(cat,qual);
       /* cor de fábrica apagada de propósito não volta no próximo plantio */
       if(cat==='cores')corMarcaApagada(DB.cores[i].n);
+      /* tecido de fábrica apagado de propósito não volta no próximo plantio */
+      if(cat==='tecidos')tecMarcaApagado(DB.tecidos[i].n);
       DB[cat].splice(i,1);
       bdPersiste();bdRender();
       ftToast('Apagado do banco: '+qual,'aviso');
@@ -20156,6 +20663,8 @@ function bdPersiste(){
   normalizaClientes();
   normalizaCores();
   sincCores();                              /* dropdown e swatches leem daqui */
+  normalizaTecidos();
+  sincTecidos();                            /* o combo de tecido lê daqui */
   sincClientes();
   salvarDB();
   syncDatalists();
@@ -20697,7 +21206,7 @@ const FT_TESTE_IMG_ALTA='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD
     return {
       ref:R(DB.referencias||['FT-020-000M — RAGLAN MASC SEM PUNHO']),
       genero:R(['masculino','feminino','']),
-      tecidos:embaralha(DB.tecidos||['DRYFIT POLIESTER 100%']).slice(0,RI(1,3)),
+      tecidos:embaralha(TEC_NOMES.length?TEC_NOMES:['DRYFIT POLIESTER 100%']).slice(0,RI(1,3)),
       cor:(R(DB.cores||[{n:'Preto'}])||{}).n||'Preto',
       design:designRandom(),
       grade:'adulto',
