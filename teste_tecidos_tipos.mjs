@@ -310,6 +310,60 @@ console.log('     ' + JSON.stringify(r));
 checa('a ficha lista todos os tecidos', r.quantas > 30, true);
 checa('  pelo nome, e não pelo objeto', r.temObjeto, false);
 
+console.log('\n=== 9. UMA MAQUINA COM BANCO ANTIGO ABRE INTEIRA ===');
+/* O DEFEITO DA v3.334, e o motivo de esta seção existir.
+
+   Este catálogo é montado no TOPO do script, junto com a leitura do
+   banco, muito antes de o resto do editor existir. A conversão dos
+   nomes velhos chamava `ftMarcaRemocao`, que toca em `FT_SYNC` — uma
+   `const` que só nasce centenas de linhas abaixo. Tocar numa const na
+   zona morta não devolve undefined: estoura um ReferenceError, e ele
+   MATOU o resto do arquivo inteiro.
+
+   O que se via: a folha fora de lugar (o motor de escala nunca subiu) e
+   nenhum botão respondendo (nenhum ouvinte foi ligado).
+
+   Passou pela bateria pelo pior motivo possível: no banco de fábrica da
+   v3.334 já não existe nome velho nenhum, então o laço da conversão não
+   entrava no corpo e a linha ruim nunca era executada. Máquina limpa
+   passava, máquina de verdade quebrava.
+
+   Por isso esta conferência põe um banco ANTIGO no localStorage, recarrega
+   e cobra o editor de pé: com zoom calculado, com a folha desenhada e sem
+   um único erro de página. */
+const errosDepois = [];
+p.removeAllListeners('pageerror');
+p.on('pageerror', e => errosDepois.push(String(e).slice(0, 200)));
+await p.evaluate(A => {
+  const bd = JSON.parse(localStorage.getItem('fourtime_bd_v1') || '{}');
+  bd.tecidos = A.slice();          /* textos soltos, com os nomes velhos */
+  localStorage.setItem('fourtime_bd_v1', JSON.stringify(bd));
+}, ANTIGA);
+await p.reload({ waitUntil: 'domcontentloaded' });
+await esperaPronto(p);
+r = await p.evaluate(() => ({
+  zoom: window.ZOOM > 0,
+  folha: !!document.querySelector('.folha-a4'),
+  /* o motor de escala pôs a largura na área: é o sinal de que o script
+     chegou até o fim */
+  temLargura: !!(document.querySelector('.area-paginas') || {}).style.width,
+  botoes: typeof window.gerarHTML === 'function' && !!document.getElementById('btnNovoLayout'),
+  tecidos: DB.tecidos.length,
+  objetos: DB.tecidos.every(t => t && typeof t === 'object' && t.n),
+  /* e a conversão aconteceu de verdade, não só "não quebrou" */
+  converteu: DB.tecidos.some(t => t.n === 'VISCOSE PV ANTIPILING'),
+  velhoSumiu: !DB.tecidos.some(t => t.n === 'PV ANTIPILING'),
+  /* a lápide da troca saiu da fila assim que FT_SYNC passou a existir */
+  lapide: (FT_SYNC.remocoes.tecidos || []).includes('PV ANTIPILING'),
+}));
+console.log('     ' + JSON.stringify(r));
+checa('o editor sobe inteiro com banco antigo',
+  [r.zoom, r.folha, r.temLargura, r.botoes], [true, true, true, true]);
+checa('  sem um único erro de página', errosDepois, []);
+checa('  o banco velho virou objeto', r.objetos, true);
+checa('  a conversão rodou', [r.converteu, r.velhoSumiu], [true, true]);
+checa('  e a lápide saiu da fila quando deu', r.lapide, true);
+
 console.log('\n' + '='.repeat(76));
 checa('nenhum erro de página', erros.length, 0);
 if (erros.length) erros.slice(0, 5).forEach(e => console.log('     ! ' + e));

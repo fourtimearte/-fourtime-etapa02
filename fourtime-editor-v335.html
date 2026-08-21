@@ -7514,7 +7514,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.334';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.335';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -7857,6 +7857,50 @@ const TEC_RENOMES={
   'TERBRIM 65% POLIESTER 35%ALGODAO':'TERBRIM POLIESTER',
   'CREPE DE POLIESTER 100%':'DRY FIT CREPE 100%',
 };
+/* ----------------------------------------------------------------
+   A LÁPIDE PRECISA ESPERAR (corrigido na v3.335)
+
+   Este bloco roda no TOPO do script, junto com a leitura do banco, e
+   `FT_SYNC` só nasce muitas linhas abaixo. Chamar `ftMarcaRemocao` daqui
+   toca numa `const` que ainda está na zona morta, e isso não é um valor
+   indefinido: é um ReferenceError que MATA o resto do script inteiro.
+
+   O que aconteceu na v3.334: quem tinha banco antigo, com os nomes
+   velhos de tecido, abria o editor e o primeiro rename estourava. O
+   resto do arquivo nunca executava. O motor de escala não subia (folha
+   fora de lugar, "o orçamento para o lado") e nenhum botão respondia,
+   porque nenhum ouvinte tinha sido ligado.
+
+   Passou despercebido pelo pior motivo possível: no banco de fábrica da
+   v3.334 já não existe nome velho nenhum, então o laço não entrava no
+   corpo e nada era chamado. Máquina limpa passava, máquina de verdade
+   quebrava.
+
+   As lápides agora ficam numa fila e são despejadas quando o resto do
+   arquivo já existe.
+   ---------------------------------------------------------------- */
+let _tecLapides=[];
+function tecLapide(nome){
+  try{
+    if(typeof ftMarcaRemocao==='function' && FT_SYNC && FT_SYNC.remocoes){
+      ftMarcaRemocao('tecidos',nome);
+      return;
+    }
+  }catch(e){}          /* FT_SYNC ainda na zona morta: entra na fila */
+  _tecLapides.push(nome);
+}
+function tecLapidesDespeja(){
+  if(!_tecLapides.length)return 0;
+  let n=0;
+  try{
+    if(typeof ftMarcaRemocao!=='function')return 0;
+    _tecLapides.forEach(x=>{ ftMarcaRemocao('tecidos',x); n++; });
+    _tecLapides=[];
+  }catch(e){}
+  return n;
+}
+window.tecLapidesDespeja=tecLapidesDespeja;
+
 function ftRenomeiaTecidos(){
   if(!Array.isArray(DB.tecidos))return 0;
   let n=0;
@@ -7865,7 +7909,7 @@ function ftRenomeiaTecidos(){
     const novo=TEC_RENOMES[velhoK];
     const i=DB.tecidos.findIndex(o=>String(o&&o.n||o).trim().toUpperCase()===velhoK);
     if(i<0)return;
-    if(typeof ftMarcaRemocao==='function')ftMarcaRemocao('tecidos',velhoK);
+    tecLapide(velhoK);
     if(tem(novo.trim().toUpperCase())){
       DB.tecidos.splice(i,1);            /* o novo já existe: o velho só sai */
     }else{
@@ -7927,10 +7971,16 @@ function normalizaTecidos(){
      tabela fica sem tipo — visível, editável, nunca perdido. */
   DB.tecidos.forEach(o=>{ if(!o.g)o.g=TEC_GRUPO_DE[o.n.trim().toUpperCase()]||''; });
 }
-normalizaTecidos();
-ftRenomeiaTecidos();             /* os nomes novos entram no lugar dos velhos */
-ftSemeiaTecidos();               /* e o catálogo de fábrica completa o que falta */
-normalizaTecidos();
+/* CADA PASSO NO SEU PRÓPRIO try. Este código roda antes de o editor
+   existir; um erro aqui não pode levar o arquivo inteiro junto, e a
+   conversão do banco também não pode parar no primeiro tropeço. */
+try{ normalizaTecidos(); }catch(e){}
+try{ ftRenomeiaTecidos(); }catch(e){}   /* os nomes novos entram no lugar dos velhos */
+try{ ftSemeiaTecidos(); }catch(e){}     /* e o catálogo de fábrica completa o que falta */
+try{ normalizaTecidos(); }catch(e){}
+/* as lápides da conversão saem da fila assim que o arquivo terminar de
+   carregar, que é quando FT_SYNC já existe */
+setTimeout(()=>{ try{ tecLapidesDespeja(); }catch(e){} },0);
 /* nomes para os combos. Eles guardam a REFERÊNCIA deste array, então ele
    é mutado no lugar e nunca trocado. */
 const TEC_NOMES=[];
@@ -8056,7 +8106,7 @@ function aplicarDBExterno(o){
   /* o catálogo de fábrica se replanta: o servidor pode ainda estar com a
      lista antiga, e sem isto o grupo novo sumiria no primeiro sincronismo */
   try{normalizaCores();ftSemeiaCores();normalizaCores();sincCores();syncDatalists();}catch(e){}
-  try{normalizaTecidos();ftRenomeiaTecidos();ftSemeiaTecidos();normalizaTecidos();sincTecidos();}catch(e){}
+  try{normalizaTecidos();ftRenomeiaTecidos();tecLapidesDespeja();ftSemeiaTecidos();normalizaTecidos();sincTecidos();}catch(e){}
   try{const pg=document.getElementById('bdPage'); if(pg&&!pg.hidden&&typeof bdRender==='function')bdRender();}catch(e){}
 }
 async function ftSyncPull(silencioso){
