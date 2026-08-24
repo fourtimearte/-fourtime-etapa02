@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 FT_TOKEN = os.environ.get("FT_TOKEN", "fourtime2026")
 # Token do ADMIN: só quem tem este pode APAGAR ou RENOMEAR itens do banco.
@@ -118,6 +119,23 @@ FT_EDITOR_MINIMO = os.environ.get("FT_EDITOR_MINIMO", FT_EDITOR_PISO).strip() or
 DB_PATH  = os.environ.get("FT_DB_PATH", os.path.join(os.path.dirname(__file__), "fourtime.db"))
 
 app = FastAPI(title="Fourtime Etapa 02", docs_url=None, redoc_url=None)
+
+# ================================================================
+# BANDA (v3.337)
+#
+# O Render suspendeu o serviço por banda. A conta é simples e estava à
+# vista: o editor tem 1,49 MB e saía CRU, sem compressão, em toda
+# abertura e todo F5. Comprimido ele são 533 KB, e revalidado ele são
+# 300 bytes (ver a rota "/").
+#
+# gzip é o mesmo mecanismo que qualquer site usa: o navegador diz que
+# aceita, o servidor manda comprimido, o navegador descomprime. Não
+# muda uma linha do que chega ao editor.
+#
+# minimum_size=1024 deixa passar as respostas curtas (rev, carimbo,
+# versão), onde comprimir custaria mais CPU do que economiza byte.
+# ================================================================
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],           # o editor pode abrir de file:// ou de qualquer host
@@ -5070,12 +5088,39 @@ def raiz(request: Request):
                         headers={"Cache-Control": "no-store"})
     p = _editor_path()
     if p:
-        # SEM CACHE: o navegador não pode servir uma versão velha do editor.
-        # Isso NÃO recarrega ninguém no meio do trabalho — só garante que,
-        # ao ABRIR o editor da próxima vez, venha a versão publicada.
-        return FileResponse(p, media_type="text/html", headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        })
+        # ================================================================
+        # REVALIDAR EM VEZ DE REBAIXAR (v3.337)
+        #
+        # Antes: "no-store". O navegador era proibido até de GUARDAR o
+        # arquivo, então cada F5 baixava 1,49 MB de novo. Multiplicado por
+        # todo mundo, todos os dias, foi o que estourou a banda do Render.
+        #
+        # O medo por trás do no-store era legítimo e continua atendido: o
+        # editor NUNCA pode abrir numa versão velha. Só que "não guarde"
+        # e "confira se mudou" são coisas diferentes. Com "no-cache" o
+        # navegador guarda mas é OBRIGADO a perguntar ao servidor antes de
+        # usar; se o arquivo não mudou, a resposta é um 304 de algumas
+        # centenas de bytes e ele usa o que já tem.
+        #
+        # Fica idêntico para quem usa, e a conta muda de ordem:
+        #     abrir depois de um deploy   1,49 MB  ->  533 KB (gzip)
+        #     todo F5 entre dois deploys  1,49 MB  ->  ~0,3 KB
+        #
+        # A etiqueta é o mtime mais o tamanho do arquivo: publicar uma
+        # versão nova troca os dois, e o 304 deixa de valer na hora.
+        # ================================================================
+        try:
+            _st = os.stat(p)
+            etiqueta = '"ft-%d-%d"' % (int(_st.st_mtime), _st.st_size)
+        except OSError:
+            etiqueta = ""
+        # o Vary: Accept-Encoding quem põe é o gzip do middleware
+        cabec = {"Cache-Control": "no-cache, must-revalidate, max-age=0"}
+        if etiqueta:
+            cabec["ETag"] = etiqueta
+            recebida = request.headers.get("if-none-match", "")
+            if etiqueta in [t.strip() for t in recebida.split(",") if t.strip()]:
+                # o navegador já tem esta versão inteira
+                return Response(status_code=304, headers=cabec)
+        return FileResponse(p, media_type="text/html", headers=cabec)
     return {"servidor": "Fourtime Etapa 02", "editor": "nenhum editor*.html na pasta"}
