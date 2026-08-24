@@ -5114,8 +5114,15 @@ def raiz(request: Request):
             etiqueta = '"ft-%d-%d"' % (int(_st.st_mtime), _st.st_size)
         except OSError:
             etiqueta = ""
-        # o Vary: Accept-Encoding quem põe é o gzip do middleware
-        cabec = {"Cache-Control": "no-cache, must-revalidate, max-age=0"}
+        # PRIVATE, e não só no-cache. O editor só sai daqui para quem tem
+        # sessão (a porta da v3.307): sem o `private`, um cache
+        # compartilhado no caminho (a borda do Render, um proxy de
+        # empresa) teria permissão para GUARDAR o arquivo do editor. Ele
+        # ainda revalidaria antes de servir, e sem o cookie a origem
+        # devolveria a tela de login em vez de um 304 — mas guardar o que
+        # é de sessão não é coisa que se deixe por conta da sorte.
+        # O Vary: Accept-Encoding quem põe é o gzip do middleware.
+        cabec = {"Cache-Control": "private, no-cache, must-revalidate, max-age=0"}
         if etiqueta:
             cabec["ETag"] = etiqueta
             recebida = request.headers.get("if-none-match", "")
