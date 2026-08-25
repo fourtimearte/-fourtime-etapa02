@@ -184,7 +184,9 @@ export async function roda(F) {
   F.diz('  a de cima vem ANTES da primeira folha', r1.cimaAntesDaFolha, true);
   F.diz('  e a de baixo mora na barra fixa', r1.baixoDentroDaBarraFixa, true);
   F.diz('os tres grupos de filtro', r1.grupos, ['design', 'obs', 'inf']);
-  F.diz('o contador comeca sem filtro', r1.conta, r1.mods + ' layouts');
+  /* a palavra "layout" saiu do contador na v3.337: ela aparecia nos
+     dois estados e era a maior fonte de variacao de largura da barra */
+  F.diz('o contador comeca sem filtro', r1.conta, String(r1.mods));
 
   /* toda opcao precisa contar o que existe mesmo no documento */
   const bate = await pc.p.evaluate(() => {
@@ -275,7 +277,7 @@ export async function roda(F) {
   F.diz('  os outros ficam a 20%', um.opacidade, '0.2');
   F.diz('  mas continuam ocupando o lugar', um.aindaVisivel, true);
   F.diz('a outra barra acompanha', um.espelho, [um.alvo]);
-  F.diz('  e mostra a mesma conta', um.conta, um.acesos + ' de ' + r1.mods + ' layouts');
+  F.diz('  e mostra a mesma conta', um.conta, um.acesos + ' de ' + r1.mods);
 
   F.secao('4. CADA CAMPO E ESCOLHA UNICA; ENTRE CAMPOS RESTRINGE');
   const dois = await pc.p.evaluate(async () => {
@@ -316,7 +318,7 @@ export async function roda(F) {
   F.diz('o "limpar" so aparece filtrando', [lim.limparAparece, lim.escondeDeNovo], ['visible', 'hidden']);
   F.diz('limpar pela barra fixa apaga tudo', [lim.apagados, lim.marcados], [0, 0]);
   F.diz('  e todos os campos voltam a "Todos"', lim.valores, '|||||');
-  F.diz('  e o contador volta ao total', lim.conta, r1.mods + ' layouts');
+  F.diz('  e o contador volta ao total', lim.conta, String(r1.mods));
 
   F.secao('6. O PAPEL NAO TEM FILTRO NEM LAYOUT APAGADO');
   await pc.p.evaluate(() => {

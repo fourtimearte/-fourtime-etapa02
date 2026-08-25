@@ -502,13 +502,123 @@ const comValor = await pb.evaluate(() => {
 });
 diz('a trava do sem-dinheiro está no arquivo', comValor, true);
 
+secao('B. a barra de filtros nunca quebra de linha');
+/* O DEFEITO QUE ELE VIU: a barra crescia de altura sozinha quando o
+   ESTADO mudava. Aparecia o limpar, o contador passava de "14 layouts"
+   para "3 de 14 layouts", o botão de DTF virava "copiado": cada uma
+   dessas mudanças alarga um pedaço, o meio recebe menos espaço, e com
+   flex-wrap:wrap os campos caíam para uma segunda linha.
+
+   Conferir "a barra existe" nunca pegaria isso. O que se mede aqui é a
+   ALTURA, estado por estado: ela tem de ser a mesma em todos. Uma barra
+   que muda de altura no meio do trabalho é a definição do defeito. */
+const alturaBarras = () => pt.evaluate(() => {
+  const r = {};
+  document.querySelectorAll('.ft-filtros').forEach(b => {
+    const int = b.querySelector('.ft-fint');
+    r[b.id || 'solta'] = {
+      alt: Math.round(b.getBoundingClientRect().height),
+      /* UMA LINHA SÓ, medida na própria grade: o número de fileiras que
+         o navegador calculou. Contar posições dos filhos não serviria,
+         porque com align-items:center eles têm alturas diferentes e
+         topos diferentes de propósito. */
+      fileiras: (getComputedStyle(int).gridTemplateRows || '').split(' ').filter(Boolean).length,
+      /* e os campos do meio não podem ter quebrado entre si */
+      campos: (() => {
+        const cp = int.querySelector('.ft-fcampos');
+        if (!cp) return 1;
+        const topos = new Set([...cp.children].map(x => Math.round(x.getBoundingClientRect().top)));
+        return topos.size;
+      })(),
+      /* e nada pode transbordar para fora da caixa */
+      vaza: int.scrollWidth > int.clientWidth + 1,
+    };
+  });
+  return r;
+});
+const estados = {};
+estados.limpo = await alturaBarras();
+await pt.selectOption('#ftFiltros .ft-fsel[data-g="inf"]', 'com');
+await pt.waitForTimeout(260);
+estados.umFiltro = await alturaBarras();
+/* o pior caso é TODO campo escolhido ao mesmo tempo: escolhe a primeira
+   opção de verdade de cada um, seja ela qual for neste pedido */
+await pt.evaluate(() => {
+  document.querySelectorAll('#ftFiltros .ft-fsel,#ftFiltrosFixo .ft-fsel').forEach(sel => {
+    const op = [...sel.options].find(o => o.value);
+    if (op) { sel.value = op.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+});
+await pt.waitForTimeout(300);
+estados.tresFiltros = await alturaBarras();
+/* e o botão de DTF em estado de "copiado", que era o outro que mexia na largura */
+await pt.evaluate(() => {
+  document.querySelectorAll('.ft-filtros .dtf-btn').forEach(b => b.classList.add('ok'));
+});
+await pt.waitForTimeout(200);
+estados.copiado = await alturaBarras();
+await pt.evaluate(() => {
+  document.querySelectorAll('.ft-filtros .dtf-btn').forEach(b => b.classList.remove('ok'));
+  const x = document.querySelector('#ftFiltros [data-limpa]'); if (x) x.click();
+});
+await pt.waitForTimeout(260);
+estados.depoisDeLimpar = await alturaBarras();
+
+const nomes = Object.keys(estados);
+const idsBarra = Object.keys(estados.limpo);
+console.log('     ' + JSON.stringify(estados));
+diz('as duas barras existem no arquivo', idsBarra.length, 2);
+idsBarra.forEach(id => {
+  const alturas = [...new Set(nomes.map(n => estados[n][id].alt))];
+  diz('a altura da barra ' + id + ' não muda com o estado', alturas.length, 1);
+  diz('  a grade tem sempre uma fileira só',
+    [...new Set(nomes.map(n => estados[n][id].fileiras))], [1]);
+  diz('  e os campos não quebram entre si',
+    [...new Set(nomes.map(n => estados[n][id].campos))], [1]);
+  diz('  e nada transborda',
+    [...new Set(nomes.map(n => estados[n][id].vaza))], [false]);
+});
+
+secao('B. o desenho novo da barra');
+const rDes = await pt.evaluate(() => {
+  const b = document.getElementById('ftFiltros');
+  const lim = b.querySelector('[data-limpa]');
+  const dtf = b.querySelector('.dtf-btn');
+  const cx = b.querySelector('.ft-fconta');
+  return {
+    /* o limpar é só um X: nenhum texto dentro */
+    limpaTexto: (lim.textContent || '').trim(),
+    limpaTitulo: lim.getAttribute('title') || '',
+    limpaQuadrado: Math.round(lim.getBoundingClientRect().width) === Math.round(lim.getBoundingClientRect().height),
+    /* o botão do pedido é ícone mais DTF */
+    dtfTexto: (dtf.querySelector('span') || {}).textContent || '',
+    dtfTemIcone: !!dtf.querySelector('svg'),
+    dtfTitulo: dtf.getAttribute('title') || '',
+    /* o contador perdeu a palavra layout nos dois estados */
+    contaLimpo: cx.textContent,
+  };
+});
+console.log('     ' + JSON.stringify(rDes));
+diz('o limpar não tem texto, só o X', rDes.limpaTexto, '');
+diz('  mas continua dizendo o que faz', rDes.limpaTitulo, 'Limpar filtros');
+diz('  e é quadrado', rDes.limpaQuadrado, true);
+diz('o botão do pedido é ícone mais DTF', [rDes.dtfTexto, rDes.dtfTemIcone], ['DTF', true]);
+diz('  e o title explica o que ele copia', /pedido inteiro/.test(rDes.dtfTitulo), true);
+diz('sem filtro, o contador é só o número', rDes.contaLimpo, '14');
+await pt.selectOption('#ftFiltros .ft-fsel[data-g="inf"]', 'com');
+await pt.waitForTimeout(250);
+diz('  com filtro, dois números e nada mais', await pt.evaluate(() =>
+  document.querySelector('#ftFiltros .ft-fconta').textContent), '1 de 14');
+await pt.selectOption('#ftFiltros .ft-fsel[data-g="inf"]', '');
+await pt.waitForTimeout(200);
+
 secao('B. os filtros continuaram funcionando ao lado do botão novo');
 await pt.selectOption('#ftFiltros .ft-fsel[data-g="inf"]', 'com');
 await pt.waitForTimeout(250);
 diz('só o infantil fica aceso', await pt.evaluate(() =>
   document.querySelectorAll('.lay-modulo:not(.ft-apagado)').length), 1);
 diz('o contador acompanha', await pt.evaluate(() =>
-  document.querySelector('#ftFiltros .ft-fconta').textContent), '1 de 14 layouts');
+  document.querySelector('#ftFiltros .ft-fconta').textContent), '1 de 14');
 await pt.selectOption('#ftFiltros .ft-fsel[data-g="inf"]', '');
 await pt.waitForTimeout(200);
 diz('e volta ao normal', await pt.evaluate(() =>

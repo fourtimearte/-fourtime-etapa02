@@ -71,7 +71,9 @@ checa('duas barras', r1.barras, 2);
 checa('  a de cima vem ANTES da primeira folha', r1.cimaAntesDaFolha, true);
 checa('  e a de baixo mora na barra fixa', r1.baixoDentroDaBarraFixa, true);
 checa('os três grupos de filtro', r1.grupos, ['design','obs','inf']);
-checa('o contador começa sem filtro', r1.conta, r1.mods+' layouts');
+/* a palavra "layout" saiu do contador na v3.337: ela aparecia nos dois
+   estados e era a maior fonte de variação de largura da barra */
+checa('o contador começa sem filtro', r1.conta, String(r1.mods));
 
 /* toda opção precisa contar o que existe mesmo no documento */
 const bate=await q.evaluate(()=>{
@@ -130,7 +132,7 @@ checa('acende exatamente o que o chip prometia', um.acesos, um.esperado);
 checa('  os outros ficam a 20%', um.opacidade, '0.2');
 checa('  mas continuam ocupando o lugar', um.aindaVisivel, true);
 checa('a outra barra acompanha', um.espelho, [um.alvo]);
-checa('  e mostra a mesma conta', um.conta, um.acesos+' de '+r1.mods+' layouts');
+checa('  e mostra a mesma conta', um.conta, um.acesos+' de '+r1.mods);
 
 console.log('\n=== 4. CADA CAMPO É ESCOLHA ÚNICA; ENTRE CAMPOS RESTRINGE ===');
 const dois=await q.evaluate(async()=>{
@@ -169,7 +171,7 @@ console.log('     '+JSON.stringify(lim));
 checa('o "limpar" só aparece filtrando', [lim.limparAparece,lim.escondeDeNovo], ['visible','hidden']);
 checa('limpar pela barra fixa apaga tudo', [lim.apagados,lim.marcados], [0,0]);
 checa('  e todos os campos voltam a "Todos"', lim.valores, '|||||');
-checa('  e o contador volta ao total', lim.conta, r1.mods+' layouts');
+checa('  e o contador volta ao total', lim.conta, String(r1.mods));
 
 console.log('\n=== 6. O PAPEL NÃO TEM FILTRO NEM LAYOUT APAGADO ===');
 await q.evaluate(()=>{ const s=document.querySelector('#ftFiltros .ft-fsel[data-g="design"]');

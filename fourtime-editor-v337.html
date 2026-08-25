@@ -7514,7 +7514,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.336';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.337';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -15876,11 +15876,34 @@ const CSS_FILTROS=`
      sobra e a colisão deixa de ser possível. */
   display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;
 }
-.ft-fcampos{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;}
+/* ================================================================
+   A BARRA NÃO QUEBRA MAIS DE LINHA (v3.337)
+
+   Ela quebrava quando o ESTADO mudava: aparecia o limpar, o contador
+   passava de "14 layouts" para "3 de 14 layouts", o botão de DTF virava
+   "copiado". Cada uma dessas mudanças alarga um pedaço, o meio recebe
+   menos espaço, e com flex-wrap:wrap os campos caíam para uma segunda
+   linha. A barra crescia de altura sozinha, no meio do trabalho.
+
+   Três travas, e cada uma fecha um caminho:
+
+     1. nowrap nos campos. Faltando espaço, eles ENCOLHEM. Uma barra
+        apertada é legível; uma barra que muda de altura sozinha, não.
+     2. min-width:0 na corrente inteira. Sem isso o flex se recusa a
+        encolher abaixo do conteúdo e o nowrap vira transbordo.
+     3. Largura de piso no contador e teto no select. O select se
+        dimensiona pela opção MAIS LONGA, então uma tag de design com
+        nome comprido sozinha estourava a linha.
+
+   O resto vem do desenho novo, que ele pediu junto e que ajuda pelo
+   mesmo motivo: quanto menos texto variável, menos largura variável.
+   ================================================================ */
+.ft-fcampos{display:flex;align-items:center;justify-content:center;gap:10px;
+  flex-wrap:nowrap;min-width:0;}
 /* CAMPOS DE VERDADE, não pastilhas (v3.303, a pedido). Um <select> nativo:
    diz sozinho que é escolha única, abre a lista inteira num toque e o
    teclado funciona sem nada de nosso. */
-.ft-fcampo{display:flex;align-items:center;gap:5px;}
+.ft-fcampo{display:flex;align-items:center;gap:5px;min-width:0;}
 /* O RÓTULO AO LADO DO CAMPO SAIU (v3.309): a opção vazia do select agora
    diz "Design", "Observação", "Infantil". Manter os dois seria repetir a
    mesma palavra duas vezes, uma ao lado da outra. A regra fica porque
@@ -15892,7 +15915,10 @@ const CSS_FILTROS=`
 .ft-fsel{
   font:inherit;font-size:13px;font-weight:500;color:var(--k-text);
   background:var(--k-campo);border:1px solid var(--k-border);border-radius:8px;
-  padding:6px 26px 6px 10px;cursor:pointer;outline:none;min-width:104px;
+  padding:6px 26px 6px 10px;cursor:pointer;outline:none;
+  /* piso ZERO e teto: o select se mede pela opção mais longa, e um nome
+     de design comprido sozinho empurrava a barra para duas linhas */
+  min-width:0;max-width:170px;text-overflow:ellipsis;
   appearance:none;-webkit-appearance:none;
   background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2368727E' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat:no-repeat;background-position:right 9px center;background-size:13px;
@@ -15908,15 +15934,21 @@ const CSS_FILTROS=`
    pulariam de lugar no instante em que se escolhe o primeiro filtro. */
 .ft-flimpa{
   border:1px solid var(--k-border);border-radius:8px;background:var(--k-surface);
-  font:inherit;font-size:12px;font-weight:600;color:var(--k-subtle);
-  padding:6px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
-  white-space:nowrap;visibility:hidden;
+  color:var(--k-subtle);cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  /* SÓ O X (v3.337). O botão é quadrado e de largura fixa: com texto, ele
+     mudava de tamanho ao aparecer e empurrava o resto da linha. */
+  width:28px;height:28px;padding:0;flex:0 0 auto;
+  visibility:hidden;
 }
 .ft-filtros.filtrando .ft-flimpa{visibility:visible;}
 .ft-flimpa:hover{border-color:var(--k-primary);color:var(--k-primary);}
 .ft-flimpa svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;}
 .ft-fconta{
   font-size:11.5px;color:var(--k-subtle);white-space:nowrap;font-variant-numeric:tabular-nums;
+  /* piso de largura: "14" e "3 de 14" têm tamanhos diferentes, e sem um
+     piso o meio da barra dançava a cada filtro escolhido */
+  min-width:7ch;flex:0 0 auto;
 }
 
 /* O APAGADO. 20% a pedido, e sem transição de posição: a folha não se
@@ -15942,7 +15974,7 @@ const CSS_FILTROS=`
 .ft-barra .ft-filtros .ft-fconta{font-size:10.5px;}
 .ft-barra .ft-filtros .ft-fcampo{gap:4px;}
 .ft-barra .ft-filtros .ft-fsel{font-size:12.5px;padding-top:5px;padding-bottom:5px;}
-.ft-barra .ft-filtros .ft-flimpa{font-size:11.5px;padding:5px 10px;}
+.ft-barra .ft-filtros .ft-flimpa{width:26px;height:26px;padding:0;}
 
 /* ================================================================
    OS FILTROS EM UMA LINHA SÓ, COM CARROSSEL  (v3.309)
@@ -15999,7 +16031,9 @@ const CSS_FILTROS=`
   .ft-filtros{border-radius:0;border-left:0;border-right:0;}
   .ft-fint{padding:9px 12px;grid-template-columns:1fr auto;}
   #ftFiltros{margin-top:0;}
-  .ft-fcampos{grid-column:1 / -1;order:-1;justify-content:flex-start;}
+  /* na barra SOLTA do celular os campos ficam numa fileira própria, em
+     duas colunas: aqui quebrar linha é o desenho, e não o defeito */
+  .ft-fcampos{grid-column:1 / -1;order:-1;justify-content:flex-start;flex-wrap:wrap;}
   .ft-fsel{min-width:0;flex:1 1 auto;}
   .ft-fcampo{flex:1 1 44%;}
 }
@@ -16075,8 +16109,12 @@ const FILTROS_RUNTIME=`
   var corpo='<div class="ft-fint">'
     +'<span class="ft-fconta"></span>'
     +'<div class="ft-fcampos">'+cDesign+cObs+cInf+'</div>'
-    +'<button class="ft-flimpa" data-limpa="1" type="button">'
-    +'<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>limpar filtros</button>'
+    /* SÓ O X (v3.337): botão quadrado, largura fixa. O título e o
+       aria-label continuam dizendo o que ele faz, para quem passa o mouse
+       e para leitor de tela. */
+    +'<button class="ft-flimpa" data-limpa="1" type="button"'
+    +' title="Limpar filtros" aria-label="Limpar filtros">'
+    +'<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>'
     +'</div>';
 
   var cima=document.createElement('div');
@@ -16108,9 +16146,11 @@ const FILTROS_RUNTIME=`
         sel.classList.toggle('on',!!estado[sel.dataset.g]);
       });
       var cx=b.querySelector('.ft-fconta');
-      if(cx)cx.textContent=ativo
-        ? (n+' de '+dados.length+(dados.length===1?' layout':' layouts'))
-        : (dados.length+' layouts');
+      /* SEM A PALAVRA "LAYOUT" (v3.337). Ela aparecia nos dois estados e
+         era a maior fonte de variação de largura da linha: "14 layouts"
+         contra "3 de 14 layouts". O número sozinho diz a mesma coisa numa
+         barra que é só sobre layouts. */
+      if(cx)cx.textContent=ativo ? (n+' de '+dados.length) : String(dados.length);
     });
   }
   document.addEventListener('change',function(e){
@@ -16374,7 +16414,17 @@ const CSS_DTF=`
 /* na barra de filtros o botão é uma quarta coluna da grade; sem isto ele
    cairia por cima do "limpar filtros", que já ocupa a última */
 .ft-filtros.tem-dtf .ft-fint{grid-template-columns:auto 1fr auto auto;}
-.ft-filtros .dtf-btn{width:auto;margin-top:0;padding:6px 12px;background:#FFFFFF;}
+.ft-filtros .dtf-btn{
+  width:auto;margin-top:0;padding:6px 11px;background:#FFFFFF;flex:0 0 auto;
+  letter-spacing:.04em;
+}
+/* ÍCONE MAIS "DTF" (v3.337). Era "Copiar DTF do pedido", e ao copiar
+   virava "copiado": duas larguras diferentes no mesmo botão, e a linha
+   inteira se remexia a cada cópia. Agora o rótulo é fixo e quem avisa é
+   a cor mais a troca do ícone por um certo. */
+.ft-filtros .dtf-btn .dtf-ok{display:none;}
+.ft-filtros .dtf-btn.ok .dtf-ic{display:none;}
+.ft-filtros .dtf-btn.ok .dtf-ok{display:block;}
 /* a barra que existe SÓ para o botão, quando o pedido não tem filtros */
 .ft-filtros.dtf-so .ft-fint{display:flex;justify-content:flex-end;}
 /* NÃO NO CELULAR e NÃO NO PAPEL, como foi pedido: o botão é ferramenta de
@@ -16397,15 +16447,32 @@ const DTF_RUNTIME=`
      aparece: aquele arquivo vai para o cliente, e não para a mesa. */
   if(!document.body.classList.contains('sem-dinheiro'))return;
 
-  var IC='<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/>'
+  var IC='<svg class="dtf-ic" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/>'
         +'<path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
+  /* o certo que substitui o ícone de copiar por um instante */
+  var IC_OK='<svg class="dtf-ok" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
 
+  /* AVISAR SEM MUDAR DE TAMANHO (v3.337).
+
+     O botão da barra de filtros não pode trocar de texto: ele é uma
+     coluna da grade, e mudar de largura no meio da linha era um dos
+     motivos de a barra quebrar. Nele o aviso é só a cor e a troca do
+     ícone, que o CSS faz sozinho pela classe ok.
+
+     O botão de dentro do layout continua trocando o texto: ele ocupa a
+     largura inteira do módulo, então crescer ou encolher não move nada. */
   function avisa(b,txt,classe){
-    var s=b.querySelector('span'); if(!s)return;
     if(b._voltar)clearTimeout(b._voltar);
-    if(b._rot===undefined)b._rot=s.textContent;
-    s.textContent=txt; b.classList.add(classe);
-    b._voltar=setTimeout(function(){ s.textContent=b._rot; b.classList.remove(classe); },1800);
+    b.classList.add(classe);
+    var s=b._fixo?null:b.querySelector('span');
+    if(s){
+      if(b._rot===undefined)b._rot=s.textContent;
+      s.textContent=txt;
+    }
+    b._voltar=setTimeout(function(){
+      if(s&&b._rot!==undefined)s.textContent=b._rot;
+      b.classList.remove(classe);
+    },1800);
   }
   function copia(txt,b){
     function ok(){ avisa(b,'copiado','ok'); }
@@ -16423,10 +16490,11 @@ const DTF_RUNTIME=`
       navigator.clipboard.writeText(txt).then(ok,velho);
     else velho();
   }
-  function botao(rotulo,titulo,pega){
+  function botao(rotulo,titulo,pega,fixo){
     var b=document.createElement('button');
     b.type='button'; b.className='dtf-btn'; b.title=titulo;
-    b.innerHTML=IC+'<span>'+rotulo+'</span>';
+    b._fixo=!!fixo;
+    b.innerHTML=IC+(fixo?IC_OK:'')+'<span>'+rotulo+'</span>';
     b.addEventListener('click',function(e){
       e.preventDefault(); e.stopPropagation();
       copia(JSON.stringify(pega()),b);
@@ -16446,7 +16514,9 @@ const DTF_RUNTIME=`
 
   /* ---- um do pedido inteiro, na barra de filtros ---- */
   if(!D.tudo.layouts.length)return;
-  var rot='Copiar DTF do pedido';
+  /* ÍCONE DE COPIAR MAIS "DTF" (v3.337): o rótulo mais curto que ainda
+     diz o que sai dali. O que ele copia está no title. */
+  var rot='DTF';
   var barras=[].slice.call(document.querySelectorAll('.ft-filtros'));
   if(!barras.length){
     /* pedido sem filtros (um layout só, ou nada a filtrar): a barra nasce
@@ -16464,8 +16534,9 @@ const DTF_RUNTIME=`
     var dentro=bar.querySelector('.ft-fint')||bar;
     bar.classList.add('tem-dtf');
     dentro.appendChild(botao(rot,
-      D.tudo.total.layouts+' layout(s) de DTF, '+D.tudo.total.pecas+' peças',
-      function(){ return D.tudo; }));
+      'Copiar o DTF do pedido inteiro: '+D.tudo.total.layouts
+        +' layout(s), '+D.tudo.total.pecas+' peças',
+      function(){ return D.tudo; }, true));
   });
 })();
 `;
