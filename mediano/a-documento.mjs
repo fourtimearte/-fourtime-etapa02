@@ -873,7 +873,9 @@ export async function roda(F) {
   F.diz('SUBLIMACAO existe e fica fora dos grupos', r.temSubli, true);
 
   r = await p.evaluate(async () => {
-    const sw = document.querySelector('.combo-cor .cor-sw');
+    /* v3.340: o quadrado saiu de DENTRO do .combo-cor e virou irmao dele
+       dentro da .tec-linha, para poder ocupar as duas fileiras da linha. */
+    const sw = document.querySelector('.tec-linha .cor-sw');
     sw.click(); await new Promise(s => setTimeout(s, 250));
     const m = document.getElementById('corMenu');
     const o = { abriu:m.style.display === 'block',
@@ -913,10 +915,10 @@ export async function roda(F) {
     await new Promise(s => setTimeout(s, 200));
     const combo = document.querySelector('.combo-cor');
     o.escolha = { campo:combo.querySelector('textarea').value,
-                  sw:getComputedStyle(combo.querySelector('.cor-sw')).getPropertyValue('--cor-sw').trim(),
+                  sw:getComputedStyle(sw).getPropertyValue('--cor-sw').trim(),
                   fechou:m.style.display === 'none' };
     /* reabrindo, o grupo da cor escolhida ja vem aberto e marcado */
-    combo.querySelector('.cor-sw').click();
+    sw.click();
     await new Promise(s => setTimeout(s, 250));
     o.reabre = { abertos:[...m.querySelectorAll('.cor-grupo.aberto')].map(x => x.dataset.g),
                  marcados:[...m.querySelectorAll('.cor-grupo.tem-escolhida')].map(x => x.dataset.g),
@@ -925,12 +927,12 @@ export async function roda(F) {
     m.querySelector('.cor-subli').click();
     await new Promise(s => setTimeout(s, 200));
     o.subli = { campo:combo.querySelector('textarea').value,
-                arco:/conic-gradient/.test(getComputedStyle(combo.querySelector('.cor-sw')).getPropertyValue('--cor-sw')) };
+                arco:/conic-gradient/.test(getComputedStyle(sw).getPropertyValue('--cor-sw')) };
     /* limpar cor */
-    combo.querySelector('.cor-sw').click(); await new Promise(s => setTimeout(s, 200));
+    sw.click(); await new Promise(s => setTimeout(s, 200));
     m.querySelector('.cor-limpar').click(); await new Promise(s => setTimeout(s, 200));
     o.limpou = { campo:combo.querySelector('textarea').value,
-                 vazio:combo.querySelector('.cor-sw').classList.contains('vazio') };
+                 vazio:sw.classList.contains('vazio') };
     return o;
   });
   /* aqui o "12 grupos recolhidos" do original nao cabe mais: o documento de
@@ -1027,7 +1029,8 @@ export async function roda(F) {
     const combo = document.querySelector('.combo-cor');
     combo.querySelector('textarea').value = 'Verde Musgo';
     pintaSwatch(combo);
-    o.pedidoAntigo = getComputedStyle(combo.querySelector('.cor-sw')).getPropertyValue('--cor-sw').trim();
+    o.pedidoAntigo = getComputedStyle(combo.closest('.tec-linha')
+      .querySelector('.cor-sw')).getPropertyValue('--cor-sw').trim();
     return o;
   });
   F.diz('mescla do servidor nao leva o catalogo embora', r.catalogoInteiro, true);
@@ -1084,7 +1087,7 @@ export async function roda(F) {
   F.diz('clique de verdade no campo ABRE o menu', abriuNoClique, 'block');
   F.diz('  e ele NAO some no mesmo gesto', seguiuAberto, 'block');
   F.diz('  um clique fora fecha', fechouFora, 'none');
-  pt = await centro('.lay-modulo .combo-cor .cor-sw');
+  pt = await centro('.lay-modulo .tec-linha .cor-sw');
   await p.mouse.click(pt.x, pt.y);
   /* ESPERA O MENU APARECER, e nao 350ms.
      O menu abre com transicao, e sob a carga da bateria os 350ms nao
@@ -1110,10 +1113,19 @@ export async function roda(F) {
     ta.dispatchEvent(new MouseEvent('mousedown', { bubbles:true }));
     await new Promise(s => setTimeout(s, 250));
     o.campo = { cor:cm.style.display, pick:pm.style.display, grupos:cm.querySelectorAll('.cor-grupo').length };
-    const rc = combo.querySelector('.ft-combo-caixa').getBoundingClientRect();
+    /* v3.340: o campo de cor perdeu a .ft-combo-caixa (ele virou o nome
+       solto embaixo do tecido, dentro do cartao). O que o menu tem de
+       acompanhar agora e o proprio campo. */
+    const cx = combo.querySelector('.ft-combo-caixa') || combo;
+    const rc = cx.getBoundingClientRect();
     const rm = cm.getBoundingClientRect();
     o.alinhado = Math.abs(rm.left - rc.left) < 2 || Math.round(rm.left) === 12;
     document.body.click(); await new Promise(s => setTimeout(s, 150));
+    /* v3.340: o campo de cor perdeu a seta. Dentro do cartao unico quem
+       abre a lista e o QUADRADO, ja conferido com mouse de verdade logo
+       acima. A seta continua aqui no `if` porque, se algum dia voltar,
+       ela nao pode levar a outra lista. */
+    o.temSeta = !!seta;
     if (seta) { seta.dispatchEvent(new MouseEvent('mousedown', { bubbles:true }));
       await new Promise(s => setTimeout(s, 250));
       o.seta = { cor:cm.style.display, pick:pm.style.display };
@@ -1121,7 +1133,7 @@ export async function roda(F) {
     /* CORTE: aqui havia mais uma abertura pelo quadradinho, com .click().
        O quadradinho ja foi conferido logo acima com mouse de verdade, que
        e o gesto que pegou o defeito. Ficou so aquela. */
-    combo.querySelector('.cor-sw').click();
+    combo.closest('.tec-linha').querySelector('.cor-sw').click();
     await new Promise(s => setTimeout(s, 250));
     /* texto que nao esta no banco continua podendo ser usado */
     const bu = cm.querySelector('.cor-busca');
@@ -1142,7 +1154,9 @@ export async function roda(F) {
   F.diz('clicar no CAMPO abre o menu de grupos', [r.campo.cor, r.campo.grupos], ['block', 12]);
   F.diz('  e nao o dropdown generico', r.campo.pick !== 'block', true);
   F.diz('  alinhado com a caixa do campo', r.alinhado, true);
-  F.diz('a seta leva ao mesmo menu', [r.seta.cor, r.seta.pick !== 'block'], ['block', true]);
+  F.diz('o campo de cor nao tem mais seta: quem abre e o quadrado', r.temSeta, false);
+  if (r.seta) F.diz('  e se a seta voltar, leva ao mesmo menu',
+    [r.seta.cor, r.seta.pick !== 'block'], ['block', true]);
   F.diz('cor fora do banco ainda pode ser usada', r.livre.temBotao, true);
   F.diz('  e o nome digitado entra no campo', r.usou, 'AZUL DA CASA');
   F.diz('TECIDO continua com o dropdown de sempre', [r.tecido.pick, r.tecido.cor], ['block', 'none']);

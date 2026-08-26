@@ -107,7 +107,11 @@ await imagem(1, PX);
 await esperaCalmo();
 r = await p.evaluate(() => {
   const m = document.querySelectorAll('.lay-modulo')[1];
-  const vis = n => getComputedStyle(m.querySelector('.lay-ficha > :nth-child(' + n + ')')).display;
+  /* POR NOME, e nao por posicao. A v3.340 juntou tecido e cor num
+     bloco so, e a ficha passou de cinco blocos para quatro: todo
+     `nth-child` daqui passou a apontar para outra coisa. */
+  const CL = { 1: '.lf-tec', 2: '.lf-tec', 3: '.lf-design', 4: '.lf-tabela', 5: '.lf-obs' };
+  const vis = n => getComputedStyle(m.querySelector('.lay-ficha > ' + CL[n])).display;
   return { info: m.classList.contains('info'),
     tecido: vis(1), cor: vis(2), tabela: vis(4),
     aceso: ((m.querySelector('.lay-info-btn')||{getAttribute:()=>'sem botão'}).getAttribute('aria-pressed')),
@@ -147,7 +151,11 @@ checa('  com o numero do layout acompanhando', r.map(x => x.num), ['1', '2', '3'
 
 r = await p.evaluate(() => {
   const m = document.querySelector('.lay-modulo.info');
-  const vis = n => getComputedStyle(m.querySelector('.lay-ficha > :nth-child(' + n + ')')).display;
+  /* POR NOME, e nao por posicao. A v3.340 juntou tecido e cor num
+     bloco so, e a ficha passou de cinco blocos para quatro: todo
+     `nth-child` daqui passou a apontar para outra coisa. */
+  const CL = { 1: '.lf-tec', 2: '.lf-tec', 3: '.lf-design', 4: '.lf-tabela', 5: '.lf-obs' };
+  const vis = n => getComputedStyle(m.querySelector('.lay-ficha > ' + CL[n])).display;
   return {
     selo: getComputedStyle(m.querySelector('.lay-info-selo')).display,
     seloTxt: m.querySelector('.lay-info-selo').textContent,
@@ -177,7 +185,11 @@ await marcaNoInfo();
 await esperaCalmo();
 r = await p.evaluate(() => {
   const m = [...document.querySelectorAll('.lay-modulo')].pop();
-  const vis = n => getComputedStyle(m.querySelector('.lay-ficha > :nth-child(' + n + ')')).display;
+  /* POR NOME, e nao por posicao. A v3.340 juntou tecido e cor num
+     bloco so, e a ficha passou de cinco blocos para quatro: todo
+     `nth-child` daqui passou a apontar para outra coisa. */
+  const CL = { 1: '.lf-tec', 2: '.lf-tec', 3: '.lf-design', 4: '.lf-tabela', 5: '.lf-obs' };
+  const vis = n => getComputedStyle(m.querySelector('.lay-ficha > ' + CL[n])).display;
   return { quantosInfo: document.querySelectorAll('.lay-modulo.info').length,
     tecido: vis(1), cor: vis(2), tabela: vis(4),
     aceso: ((m.querySelector('.lay-info-btn')||{getAttribute:()=>'sem botão'}).getAttribute('aria-pressed')),
@@ -242,9 +254,10 @@ r = await p.evaluate(async () => {
   const m = document.querySelector('.lay-modulo.info');
   /* ele esta marcado e com tecido, cor e tabela preenchidos pela secao 3 */
   const escondido = {
-    tecido: getComputedStyle(m.querySelector('.lay-ficha > :nth-child(1)')).display,
-    cor: getComputedStyle(m.querySelector('.lay-ficha > :nth-child(2)')).display,
-    tabela: getComputedStyle(m.querySelector('.lay-ficha > :nth-child(4)')).display };
+    /* tecido e cor sao o MESMO bloco desde a v3.340 */
+    tecido: getComputedStyle(m.querySelector('.lay-ficha > .lf-tec')).display,
+    cor: getComputedStyle(m.querySelector('.lay-ficha > .lf-tec')).display,
+    tabela: getComputedStyle(m.querySelector('.lay-ficha > .lf-tabela')).display };
   const guardado = {
     tecido: m.querySelector('.combo-tecido textarea').value,
     cor: m.querySelector('.combo-cor textarea').value,
@@ -269,7 +282,7 @@ r = await p.evaluate(() => {
   return { tecido: m.querySelector('.combo-tecido textarea').value,
     cor: m.querySelector('.combo-cor textarea').value,
     tabela: m.querySelector('.lay-tabela-mini tbody .c-qtd').textContent.trim(),
-    visivel: getComputedStyle(m.querySelector('.lay-ficha > :nth-child(1)')).display !== 'none' };
+    visivel: getComputedStyle(m.querySelector('.lay-ficha > .lf-tec')).display !== 'none' };
 });
 console.log('     ' + JSON.stringify(r));
 checa('desmarcar devolve tudo a vista, sem perder um caractere',
@@ -339,7 +352,7 @@ checa('  e o tecido fica guardado, fora da vista',
   await p.evaluate(() => {
     const m = document.querySelector('.lay-modulo.info');
     return [m.querySelector('.combo-tecido textarea').value,
-      getComputedStyle(m.querySelector('.lay-ficha > :nth-child(1)')).display];
+      getComputedStyle(m.querySelector('.lay-ficha > .lf-tec')).display];
   }), ['PV', 'none']);
 
 console.log('\n=== 5b. O MODO SOBREVIVE A SALVAR E REABRIR ===');

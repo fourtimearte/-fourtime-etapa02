@@ -369,6 +369,53 @@ diz('no arquivo só existem a barra fixa, o documento e o visualizador',
 diz('  e o documento começa no alto da página', solto.topoDoDocumento, 0);
 diz('  nenhuma tela do editor viajou junto', solto.sobrouDoEditor, []);
 
+secao('A2. o cartao de tecido e cor chega inteiro no arquivo do cliente');
+/* O QUE ESTA EM JOGO (v3.340).
+
+   Tecido e cor viraram um cartao so, e nele a cor se le em DOIS lugares
+   ao mesmo tempo: o nome, embaixo do nome do tecido, e o quadrado
+   pintado na ponta da linha. Ate a v3.339 o quadrado era um controle
+   (so servia para abrir o menu) e o exportador o APAGAVA junto com os
+   outros botoes. Se ele continuasse na lista de remocao, o arquivo que
+   vai para o Trello sairia com metade da linha.
+
+   E o contrario tambem conta: o que era botao de verdade — o "+", o
+   "x" de remover e a seta da lista — nao pode viajar, porque ali nao
+   existe JavaScript nenhum para atende-los. */
+const cartao = await pt.evaluate(() => {
+  const linhas = [...document.querySelectorAll('.tec-linha')];
+  return {
+    linhas: linhas.length,
+    todasComQuadrado: linhas.every(l => !!l.querySelector('.cor-sw')),
+    pares: linhas.map(l => ({
+      tec: (l.querySelector('.combo-tecido textarea') || {}).value || '',
+      cor: (l.querySelector('.combo-cor textarea') || {}).value || '',
+      /* sem quadrado nao ha o que medir: devolve `false` e deixa a
+         conferencia reprovar, em vez de derrubar a suite inteira */
+      pintado: !!(l.querySelector('.cor-sw') && getComputedStyle(l.querySelector('.cor-sw'))
+        .getPropertyValue('--cor-sw').trim()) })),
+    /* um rotulo Tecido por cartao, e nenhum por linha */
+    rotulosNoTopo: document.querySelectorAll('.tec-cab-rot').length,
+    cartoes: document.querySelectorAll('.tec-card').length,
+    rotulosNaLinha: document.querySelectorAll('.tec-linha .ft-combo-rotulo').length,
+    /* e nenhum controle sobrou */
+    controles: document.querySelectorAll('.tec-btn,.tec-card .ft-combo-abrir').length,
+    /* o quadrado nao responde a clique nenhum no arquivo do cliente */
+    inerte: (linhas.length && linhas[0].querySelector('.cor-sw'))
+      ? getComputedStyle(linhas[0].querySelector('.cor-sw')).pointerEvents
+      : 'sem quadrado',
+  };
+});
+diz('toda linha de tecido levou o seu quadrado', cartao.todasComQuadrado, true);
+diz('  e o quadrado esta pintado onde ha cor',
+  cartao.pares.filter(x => x.cor).every(x => x.pintado), true);
+diz('  o nome da cor veio junto do nome do tecido',
+  cartao.pares.every(x => x.tec !== ''), true);
+diz('um rotulo Tecido por cartao', cartao.rotulosNoTopo, cartao.cartoes);
+diz('  e nenhum rotulo por linha', cartao.rotulosNaLinha, 0);
+diz('nenhum botao do cartao viajou', cartao.controles, 0);
+diz('  e o quadrado viajou inerte', cartao.inerte, 'none');
+
 secao('B. o visualizador de imagem ABRE dentro do arquivo do cliente');
 /* A OUTRA METADE DA MESMA MOEDA (v3.332).
 

@@ -138,28 +138,51 @@ export async function roda(F) {
   F.diz('  nem a regra antiga do editor', r.regraAntiga, false);
 
   /* ---------------------------------------------------------------- */
-  F.secao('4. QUADRADO DA COR = BOTAO + DO TECIDO');
+  F.secao('4. O QUADRADO DA COR NA LINHA DO TECIDO');
+  /* ATE A v3.339 esta secao comparava o quadradinho da cor com o botao +
+     do tecido: os dois moravam dentro da MESMA caixa de campo, e tinham
+     de ter o mesmo tamanho, o mesmo raio e o mesmo recuo.
+
+     Na v3.340 essa premissa deixou de existir. Tecido e cor viraram um
+     cartao so: o + subiu para o cabecalho do cartao e o quadrado desceu
+     para a linha do tecido, cobrindo as DUAS alturas do par (nome do
+     tecido em cima, nome da cor embaixo).
+
+     Entao o que se cobra mudou junto, e passa a ser o que o desenho novo
+     promete: um quadrado por linha, todos do mesmo tamanho, cada um
+     centrado na sua propria linha, e o + uma vez so, no cabecalho. */
   r = await p.evaluate(() => {
-    const mod = [...document.querySelectorAll('.lay-modulo')]
-      .find(m => m.querySelector('.cor-sw') && m.querySelector('.tec-btn'));
-    const sw = mod.querySelector('.cor-sw'), bt = mod.querySelector('.tec-add') || mod.querySelector('.tec-btn');
-    const a = sw.getBoundingClientRect(), b = bt.getBoundingClientRect();
-    const cx = el => el.closest('.ft-combo-caixa').getBoundingClientRect();
-    const meio = el => { const c = cx(el), e = el.getBoundingClientRect();
-      return +((e.top + e.height / 2) - (c.top + c.height / 2)).toFixed(1); };
-    const s = getComputedStyle(sw), t = getComputedStyle(bt);
-    return { larg: [+a.width.toFixed(1), +b.width.toFixed(1)],
-      alt: [+a.height.toFixed(1), +b.height.toFixed(1)],
-      raio: [s.borderRadius, t.borderRadius],
-      /* distancia da borda direita da caixa: os dois tem de recuar igual */
-      recuo: [+(cx(sw).right - a.right).toFixed(1), +(cx(bt).right - b.right).toFixed(1)],
-      centro: [meio(sw), meio(bt)] };
+    const mod = [...document.querySelectorAll('.lay-modulo')].find(m => m.querySelector('.tec-card'));
+    const linhas = [...mod.querySelectorAll('.tec-linha')];
+    const sws = linhas.map(l => l.querySelector('.cor-sw'));
+    const mede = el => { const r = el.getBoundingClientRect();
+      return { l: +r.width.toFixed(1), a: +r.height.toFixed(1) }; };
+    /* cada quadrado centrado na SUA linha, e nao numa caixa de campo */
+    const centro = (sw, linha) => {
+      const e = sw.getBoundingClientRect(), c = linha.getBoundingClientRect();
+      return +((e.top + e.height / 2) - (c.top + c.height / 2)).toFixed(1);
+    };
+    return {
+      linhas: linhas.length,
+      todosTem: sws.every(Boolean),
+      tamanhos: [...new Set(sws.filter(Boolean).map(s => JSON.stringify(mede(s))))],
+      centros: sws.map((s, i) => s ? centro(s, linhas[i]) : null),
+      /* o + existe uma vez so, e no cabecalho do cartao */
+      mais: mod.querySelectorAll('.btn-add-tecido').length,
+      maisNoCabecalho: !!mod.querySelector('.tec-cab .btn-add-tecido'),
+      /* e nao sobrou rotulo Tecido em cada linha */
+      rotulosNaLinha: mod.querySelectorAll('.tec-linha .ft-combo-rotulo').length,
+      rotuloNoTopo: (mod.querySelector('.tec-cab-rot') || {}).textContent || '',
+    };
   });
-  F.diz('mesma largura', r.larg[0], r.larg[1]);
-  F.diz('mesma altura', r.alt[0], r.alt[1]);
-  F.diz('mesmo raio', r.raio[0], r.raio[1]);
-  F.diz('mesmo recuo da borda direita', r.recuo[0], r.recuo[1]);
-  F.diz('ambos centrados na caixa', r.centro, [0, 0]);
+  F.diz('toda linha de tecido tem o seu quadrado', r.todosTem, true);
+  F.diz('  e todos do mesmo tamanho', r.tamanhos.length, 1);
+  F.diz('  cada um centrado na sua linha', r.centros.map(c => Math.abs(c) <= 1),
+    r.centros.map(() => true));
+  F.diz('o + existe uma vez so', r.mais, 1);
+  F.diz('  e mora no cabecalho do cartao', r.maisNoCabecalho, true);
+  F.diz('nenhuma linha carrega o rotulo Tecido', r.rotulosNaLinha, 0);
+  F.diz('  ele e um so, no alto', r.rotuloNoTopo, 'Tecido');
 
   /* ---------------------------------------------------------------- */
   F.secao('5. BORDA DA FILEIRA SINALIZADA SEGUE A TINTA');
@@ -455,12 +478,20 @@ export async function roda(F) {
     return { esq: s.paddingLeft, dir: s.paddingRight, gap: s.gap,
              ref: desloc(mod.querySelector('.combo-ref textarea')),
              tecido: desloc(mod.querySelector('.combo-tecido textarea')),
-             rotulo: desloc(mod.querySelector('.combo-tecido .ft-combo-rotulo')) };
+             /* o rotulo Tecido de cada linha saiu na v3.340: virou um so,
+                no cabecalho do cartao. O que sobra para medir aqui e o
+                quadrado da cor, que tem de estar centrado na LINHA. */
+             quadrado: (()=>{ const l=mod.querySelector('.tec-linha');
+               const sw=l&&l.querySelector('.cor-sw');
+               if(!sw)return null;
+               const a=sw.getBoundingClientRect(), b=l.getBoundingClientRect();
+               return +((a.top+a.height/2)-(b.top+b.height/2)).toFixed(1); })() };
   });
   F.diz('papel: pilula com recheio igual dos dois lados', r.esq, r.dir);
   F.diz('  e sem o vao do "x" que nao e impresso', r.gap, '0px');
   F.diz('papel: referencia centrada na caixa', r.ref, 0);
-  F.diz('  tecido tambem', [r.tecido, r.rotulo], [0, 0]);
+  F.diz('  tecido tambem', r.tecido, 0);
+  F.diz('  e o quadrado da cor centrado na linha', Math.abs(r.quadrado) <= 1, true);
   await p.emulateMedia({ media: 'screen' });
 
   /* ---------------------------------------------------------------- */
@@ -480,7 +511,9 @@ export async function roda(F) {
       t.value = antes;
       return { selo: w(m.querySelector('.lay-selo')), ref: w(t),
                tecido: w(m.querySelector('.combo-tecido textarea')),
-               rotulo: w(m.querySelector('.combo-tecido .ft-combo-rotulo')),
+               /* o rotulo de cada linha saiu na v3.340; o que existe agora
+                  e um so, no cabecalho do cartao */
+               rotulo: w(m.querySelector('.tec-cab-rot')),
                cabe };
     });
     F.diz(`${media}: selo L-NN em negrito`, r.selo, '700');
