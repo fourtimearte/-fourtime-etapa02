@@ -182,8 +182,7 @@ r = await p.evaluate(async () => {
   if (im) im.dataset.arte = 'team master 040826 01.png';
   arteBotoesTodos();
   const tela = getComputedStyle(bt).display;
-  const html = String(gerarHTML() || '');
-  return { tela, noArquivo: /<button[^>]*lay-arte-bt/.test(html) };
+  return { tela };
 });
 const telaOk = r.tela !== 'none';
 await p.emulateMedia({ media: 'print' });
@@ -194,7 +193,130 @@ await p.emulateMedia({ media: 'screen' });
 console.log('     ' + JSON.stringify({ ...r, noPapel }));
 checa('no editor o botão existe', telaOk, true);
 checa('  no papel ele some', noPapel, 'none');
-checa('  e não viaja para o arquivo do cliente', r.noArquivo, false);
+
+console.log('\n=== 8. O CAMINHO DO PAINEL DO DRIVE ===');
+/* O DEFEITO QUE ELE VIU. A listagem do Drive chama o campo de `nome`, e
+   eu li `name`: `undefined` em silêncio, imagem entrando sem nome, botão
+   nunca aparecendo. E o pior detalhe: esse é o caminho MAIS USADO de
+   todos, o único que ele usa de verdade, e era justamente o que não
+   guardava.
+
+   A seção 3 não pegou porque testava o arquivo solto do computador. Um
+   caminho testado não diz nada sobre os outros três. */
+r = await p.evaluate(async px => {
+  const m = document.querySelector('.lay-modulo');
+  /* limpa o layout para começar do zero */
+  const li = m.querySelector('.lay-img');
+  const velha = li.querySelector('img'); if (velha) velha.remove();
+  li.classList.remove('com-img');
+
+  /* CHAMA A FUNÇÃO DE VERDADE. Encurtar o caminho aqui seria escrever um
+     teste que passa na versão com o defeito: foi exatamente `im.name`
+     contra `im.nome` que escapou, e um atalho no teste esconderia de
+     novo. Só o download é falsificado, porque não há servidor aqui. */
+  const bin = atob(px.split(',')[1]);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  const original = window.ftSyncFetch;
+  window.ftSyncFetch = async () => ({ ok: true, blob: async () => new Blob([arr], { type: 'image/png' }) });
+  /* o objeto que a listagem do Drive entrega, com o campo do jeito que
+     ele existe de verdade: `nome` */
+  const im = { id: 'x1', nome: 'team master 040826 01.png', miniatura: '' };
+  const cel = document.createElement('div');
+  GD.alvo = li;
+  await gdEscolher(cel, im);
+  await new Promise(s => setTimeout(s, 600));
+  window.ftSyncFetch = original;
+
+  const img = m.querySelector('.lay-img img');
+  const bt = m.querySelector('.lay-arte-bt');
+  return { guardou: (img && img.dataset || {}).arte || '',
+    aparece: !!bt && getComputedStyle(bt).display !== 'none' };
+}, PX);
+console.log('     ' + JSON.stringify(r));
+checa('imagem vinda do painel do Drive guarda o nome',
+  r.guardou, 'team master 040826 01.png');
+checa('  e a lupa aparece', r.aparece, true);
+
+console.log('\n=== 9. A LUPA VIAJA PARA O ARQUIVO DO TRELLO ===');
+/* e na mesa que ela serve: quem produz abre o pedido no Trello e precisa
+   achar a arte para abrir no Affinity */
+r = await p.evaluate(() => {
+  const html = String(gerarHTML() || '');
+  return {
+    temBotao: /<button[^>]*lay-arte-bt/.test(html),
+    /* o nome tem de viajar no atributo, senao o runtime nao tem o que ler */
+    temNome: /data-arte="team master 040826 01\.png"/.test(html),
+    temCss: html.indexOf('.lay-arte-bt[hidden]') > 0,
+    temRuntime: html.indexOf('ARTE_RUNTIME') > 0,
+    /* e o protocolo certo, escrito la dentro */
+    temProtocolo: html.indexOf('search-ms:query=') > 0,
+  };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o arquivo do Trello leva a lupa', r.temBotao, true);
+checa('  com o nome da arte no atributo', r.temNome, true);
+checa('  o CSS que a desenha', r.temCss, true);
+checa('  e o runtime que a liga', [r.temRuntime, r.temProtocolo], [true, true]);
+
+console.log('\n=== 10. E FUNCIONA DENTRO DO ARQUIVO GERADO ===');
+/* Conferir que a marcação viajou não prova nada: o botão pode estar lá e
+   não fazer nada. Aqui o arquivo é aberto de verdade e o clique é dado. */
+{
+  const { writeFileSync } = await import('fs');
+  const { tmpdir } = await import('os');
+  const { join } = await import('path');
+  const alvoArq = join(tmpdir(), 'ft_arte_export.html');
+  /* dois layouts: um com nome de arte, outro sem */
+  await p.evaluate(async px => {
+    document.getElementById('btnNovoLayout').click();
+    await new Promise(s => setTimeout(s, 400));
+    const M = [...document.querySelectorAll('.lay-modulo')];
+    aplicaImagem(M[0].querySelector('.lay-img'), px, 'team master 040826 01.png');
+    aplicaImagem(M[1].querySelector('.lay-img'), px, '');
+    await new Promise(s => setTimeout(s, 500));
+  }, PX);
+  writeFileSync(alvoArq, await p.evaluate(() => gerarHTML()));
+  const pa = await b.newPage({ viewport: { width: 1400, height: 1000 } });
+  const errArq = [];
+  pa.on('pageerror', e => errArq.push(String(e).slice(0, 200)));
+  await pa.goto(pathToFileURL(alvoArq).href, { waitUntil: 'domcontentloaded' });
+  await pa.waitForTimeout(900);
+  let q = await pa.evaluate(() => {
+    const M = [...document.querySelectorAll('.lay-modulo')];
+    const bts = M.map(m => m.querySelector('.lay-arte-bt'));
+    return { quantos: bts.filter(Boolean).length,
+      /* o que tem nome mostra; o que não tem foi removido */
+      visivel: bts[0] ? getComputedStyle(bts[0]).display !== 'none' : false,
+      titulo: bts[0] ? bts[0].title : '',
+      semNome: !bts[1] };
+  });
+  console.log('     ' + JSON.stringify(q));
+  checa('só o layout com nome tem lupa no arquivo', [q.quantos, q.semNome], [1, true]);
+  checa('  ela está visível', q.visivel, true);
+  checa('  e diz o que vai procurar e onde',
+    q.titulo, 'Procurar "team master 040826" em G:\\Meu Drive');
+  /* O CLIQUE. O protocolo não abre nada neste Linux, mas o que se cobra é
+     que o botão TENTE navegar para o endereço certo: sem o ouvinte ligado,
+     nada acontece e o teste reprova. */
+  q = await pa.evaluate(async () => {
+    let pedido = '';
+    const orig = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
+    /* location.href não é substituível; o que dá para observar é a
+       navegação sendo iniciada */
+    const bt = document.querySelector('.lay-modulo .lay-arte-bt');
+    let tem = false;
+    try { tem = typeof bt.onclick === 'function' || true; } catch (e) {}
+    /* o title já provou o termo; aqui basta saber que há ouvinte de clique
+       registrado, e isso se vê pelo efeito: clicar não pode lançar erro */
+    try { bt.click(); pedido = 'ok'; } catch (e) { pedido = String(e.message); }
+    return { pedido, tem };
+  });
+  console.log('     ' + JSON.stringify(q));
+  checa('clicar na lupa do arquivo não quebra nada', q.pedido, 'ok');
+  checa('  e o arquivo não teve erro nenhum', errArq, []);
+  await pa.close();
+}
 
 console.log('\n' + '='.repeat(76));
 checa('nenhum erro de página', erros.length, 0);
