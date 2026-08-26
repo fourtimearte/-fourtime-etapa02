@@ -184,6 +184,45 @@ export async function roda(F) {
   F.diz('nenhuma linha carrega o rotulo Tecido', r.rotulosNaLinha, 0);
   F.diz('  ele e um so, no alto', r.rotuloNoTopo, 'Tecido');
 
+  /* A DENSIDADE (v3.341).
+
+     O desenho da v3.340 estava certo e a densidade errada: cada linha
+     saia com 45px, quase o dobro da maquete, porque tres regras de
+     fora do cartao mandavam nela (a altura minima da caixa de campo, a
+     fonte unica dos dois campos e o alinhamento pela linha de base de
+     um <textarea> inline-block). Nenhuma delas aparece no bloco do
+     cartao, e por isso nenhuma seria notada relendo o bloco do cartao.
+     O que se cobra aqui e o RESULTADO: a altura da linha, a cor em
+     corpo menor que o tecido, e o quadrado na direita maxima com o "x"
+     a esquerda dele. */
+  r = await p.evaluate(() => {
+    const mod = [...document.querySelectorAll('.lay-modulo')].find(m => m.querySelector('.tec-card'));
+    const linha = mod.querySelector('.tec-linha');
+    const card = mod.querySelector('.tec-card');
+    const sw = linha.querySelector('.cor-sw');
+    const x = linha.querySelector('.tec-remover');
+    const px = el => parseFloat(getComputedStyle(el).fontSize);
+    const dir = el => el.getBoundingClientRect().right;
+    return {
+      altura: +linha.getBoundingClientRect().height.toFixed(1),
+      fonteTecido: px(linha.querySelector('.combo-tecido textarea')),
+      fonteCor: px(linha.querySelector('.combo-cor textarea')),
+      /* nada da linha passa do quadrado: ele e o ultimo */
+      quadradoUltimo: [...linha.children].every(c => dir(c) <= dir(sw) + 0.5),
+      /* o "x" some quando ha uma linha so; ai o rect dele e zero e a
+         conferencia continua verdadeira, que e o que se quer */
+      xAntes: dir(x) <= sw.getBoundingClientRect().left + 0.5,
+      folgaDireita: +(card.getBoundingClientRect().right - dir(sw)).toFixed(1),
+    };
+  });
+  F.diz('a linha do tecido cabe em 30px  (' + r.altura + ')', r.altura <= 30, true);
+  F.diz('  e o nome da cor e menor que o do tecido',
+    r.fonteCor < r.fonteTecido, true);
+  F.diz('o quadrado e o ultimo da linha', r.quadradoUltimo, true);
+  F.diz('  com o "x" a esquerda dele', r.xAntes, true);
+  F.diz('  e rente a borda do cartao  (' + r.folgaDireita + 'px)',
+    r.folgaDireita <= 8, true);
+
   /* ---------------------------------------------------------------- */
   F.secao('5. BORDA DA FILEIRA SINALIZADA SEGUE A TINTA');
   await p.evaluate(() => {
@@ -446,6 +485,33 @@ export async function roda(F) {
     F.diz(`modo ${x.modo} (${passo}): nenhuma tabela comprimida a toa  ` + JSON.stringify(x.folhas),
           aToa.length, 0);
   }
+
+  /* ---------------------------------------------------------------- */
+  F.secao('12B. SEM VALORES: os blocos da ficha ficam colados');
+  /* A GRADE DO MODO SEM VALORES tinha quatro fileiras para cinco blocos.
+     A v3.340 juntou tecido e cor e nao mexeu na grade: o `1fr` que estica
+     ficou numa fileira VAZIA, e a altura da tabela ao lado passou a ser
+     repartida entre tecido, design e observacao. Os tres blocos afastados
+     por vaos enormes, e nada nos numeros da paginacao denunciava isso.
+     Aqui os vaos sao medidos, e a sobra tem de ir toda para a observacao. */
+  await trocaDinheiro();
+  r = await p.evaluate(() => {
+    const f = [...document.querySelectorAll('.lay-ficha')]
+      .find(x => x.querySelector('.lf-tabela') && x.querySelector('.lf-tec'));
+    const b = s => f.querySelector(s).getBoundingClientRect();
+    const tec = b('.lf-tec'), des = b('.lf-design'), obs = b('.lf-obs');
+    /* contra o FUNDO DA FICHA, e nao o da tabela: a observacao tem piso
+       de 22mm, entao numa grade curta ela passa da tabela de proposito.
+       O que se cobra e que ela feche a coluna, sem sobra embaixo. */
+    return { vao1: +(des.top - tec.bottom).toFixed(1),
+             vao2: +(obs.top - des.bottom).toFixed(1),
+             obsAteOFim: +(f.getBoundingClientRect().bottom - obs.bottom).toFixed(1) };
+  });
+  F.diz('vao entre tecido e design e o do desenho  (' + r.vao1 + 'px)', r.vao1 <= 8, true);
+  F.diz('  e o mesmo entre design e observacao  (' + r.vao2 + 'px)', r.vao2 <= 8, true);
+  F.diz('  a sobra vertical vai toda para a observacao  (' + r.obsAteOFim + 'px)',
+    Math.abs(r.obsAteOFim) <= 1, true);
+  await trocaDinheiro();
 
   /* ---------------------------------------------------------------- */
   F.secao('13. AVISO 2+, PROFUNDIDADE E PAPEL');
