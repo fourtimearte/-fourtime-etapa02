@@ -61,6 +61,8 @@ const SUITES = [
   'teste_ref_banco',
   /* v3.334 — o catalogo de tecidos por tipo, a conversao e as duas telas */
   'teste_tecidos_tipos',
+  /* v3.338 — a lupa que abre a busca da arte no Explorer */
+  'teste_arte_explorer',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor

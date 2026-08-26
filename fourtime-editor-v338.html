@@ -1727,7 +1727,7 @@
     padding:0 2.2mm;min-height:7.78mm;user-select:none;white-space:nowrap;
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
-  .lay-btn,.lay-del,.lay-info-btn{
+  .lay-btn,.lay-del,.lay-info-btn,.lay-arte-bt{
     flex:0 0 auto;align-self:center;
     width:6.3mm;height:6.3mm;padding:0;
     display:inline-flex;align-items:center;justify-content:center;
@@ -1736,8 +1736,15 @@
     transition:border-color var(--mov-rapido) var(--mov-suave),
                color var(--mov-rapido) var(--mov-suave);
   }
-  .lay-btn:hover,.lay-del:hover,.lay-info-btn:hover{border-color:var(--mod-medio);color:var(--mod-texto);}
-  .lay-btn svg,.lay-del svg,.lay-info-btn svg{width:10.5px;height:10.5px;stroke:currentColor;fill:none;
+  .lay-btn:hover,.lay-del:hover,.lay-info-btn:hover,.lay-arte-bt:hover{border-color:var(--mod-medio);color:var(--mod-texto);}
+  /* O `hidden` PRECISA VENCER (v3.338). A regra de cima põe display
+     inline-flex numa CLASSE, e classe ganha do [hidden] que o navegador
+     traz de fábrica: sem esta linha o botão ficava sempre visível, mesmo
+     escondido pelo atributo, e ainda comia largura da linha da
+     referência. Conferir `bt.hidden` não pegaria: a propriedade estava
+     certa o tempo todo, o que estava errado era o desenho. */
+  .lay-arte-bt[hidden]{display:none !important;}
+  .lay-btn svg,.lay-del svg,.lay-info-btn svg,.lay-arte-bt svg{width:10.5px;height:10.5px;stroke:currentColor;fill:none;
     stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
   .lay-selo .lay-btn-txt{display:block;line-height:1;}
   .lay-btn-ic{display:none;align-items:center;justify-content:center;line-height:0;}
@@ -3156,7 +3163,7 @@
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
     .hd-seta{display:none;}
-    .ft-combo-abrir,.hd-abrir,.pick-menu,.lay-img-limpar,.ft-ctx-cores-menu,.ft-add,.design-add,#ctxTags,.ft-selbar,.lay-btn,.lay-del,.lay-info-btn,#ctxCustom,#ccPrev,#ctxConfig,#cfgFundo,.tec-btn,#viewer{display:none !important;}
+    .ft-combo-abrir,.hd-abrir,.pick-menu,.lay-img-limpar,.ft-ctx-cores-menu,.ft-add,.design-add,#ctxTags,.ft-selbar,.lay-btn,.lay-del,.lay-info-btn,.lay-arte-bt,#ctxCustom,#ccPrev,#ctxConfig,#cfgFundo,.tec-btn,#viewer{display:none !important;}
     .dtf-chip{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .lay-img,.lay-img.com-img{
       border:1px solid var(--doc-linha,var(--ft-borda)) !important;
@@ -6891,6 +6898,7 @@
                 </div>
                 
               </div>
+              <button class="lay-arte-bt" type="button" hidden title="Procurar a arte no Explorer"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
               <button class="lay-info-btn" type="button" aria-pressed="false" title="Transformar em módulo de informações"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></button>
               <button class="lay-btn" type="button" title="Copiar este layout"><span class="lay-btn-ic ic-copiar"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></span><span class="lay-btn-ic ic-colar"><svg viewBox="0 0 24 24"><path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/></svg></span><span class="lay-btn-ic ic-cancelar"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></button>
               <button class="lay-del" title="Excluir este layout"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
@@ -7157,6 +7165,13 @@
           <select class="cfg-num" id="cfgCapDias"><option value="5">5 dias</option><option value="6">6 dias</option></select>
         </div>
         <div class="cfg-aviso" id="cfgCapAviso" hidden></div>
+        <div class="cfg-linha">
+          <div>
+            <div class="cfg-nome">Pasta das artes</div>
+            <div class="cfg-desc">Onde a lupa do layout procura o arquivo original. É o Drive montado no Explorer, e vale só nesta máquina</div>
+          </div>
+          <input class="cfg-num" id="cfgPastaArtes" type="text" spellcheck="false" style="width:190px;text-align:left">
+        </div>
       </div>
       <div class="cfg-pag" id="cfgPagAtalhos">
         <div class="cfg-atalhos" id="cfgAtalhosLista"></div>
@@ -7514,7 +7529,7 @@ function aplicaLogos(){
     menuLogo(document.body.classList.contains('menu-fechado'));
 }
 window.logoDoTema=logoDoTema;window.aplicaLogos=aplicaLogos;
-const FT_EDITOR='3.337';   /* versão do editor — usada no rodapé e no reporte de bug */
+const FT_EDITOR='3.338';   /* versão do editor — usada no rodapé e no reporte de bug */
 const DB_PADRAO={
   bugs:[],
   /* FICHAS DE MATERIAL (v3.301) — lista, não objeto: a mesclagem do
@@ -9329,10 +9344,123 @@ function _compProximo(){
 window.agendaCompressao=agendaCompressao;
 window.comprimeImagem=comprimeImagem;
 
-function colocaImagem(mod,layImg,btnLimpar,src,jaComprimida){
+
+/* ================================================================
+   PROCURAR A ARTE ORIGINAL NO EXPLORER (v3.338)
+
+   O pedido dele: um clique no editor que abre o Windows Explorer já
+   procurando o arquivo de trabalho daquela arte, para abrir no
+   Affinity. Em várias máquinas, sem instalar nada em nenhuma.
+
+   POR QUE ISTO FUNCIONA SEM INSTALAR NADA. Link `file://` não abre:
+   Chrome e Edge proíbem que uma página https navegue para arquivo
+   local desde 2019, e por bom motivo (o Windows tenta login automático
+   em caminho de rede e vaza usuário e hash de senha). Mas `search-ms:`
+   é OUTRA coisa: é o protocolo da busca do próprio Explorer, que o
+   Windows já registra de fábrica. O navegador pergunta uma vez se pode
+   abrir o Explorer e pronto.
+
+   O QUE ELE PROCURA. A imagem carrega o nome do arquivo original, e o
+   número no fim é a variação de layout:
+
+       team master 040826 01.png   ->   procura por "team master 040826"
+
+   Por isso a extensão sai e o último grupo de dígitos também. Um grupo
+   só: em "team master 040826 01", o 040826 é data e fica.
+
+   EXIGE UM CLIQUE DE VERDADE. O Chrome só abre programa externo com
+   gesto do usuário. Isto vive num onclick e em nenhum outro lugar:
+   chamar de um setTimeout, por exemplo, seria ignorado em silêncio.
+   ================================================================ */
+const ARTE_PASTA_KEY='fourtime_pasta_artes';
+const ARTE_PASTA_PADRAO='G:\\Meu Drive';
+function artePasta(){
+  try{ const v=localStorage.getItem(ARTE_PASTA_KEY); if(v!==null&&v.trim())return v.trim(); }catch(e){}
+  return ARTE_PASTA_PADRAO;
+}
+function artePastaGrava(v){
+  try{ localStorage.setItem(ARTE_PASTA_KEY,String(v||'').trim()); }catch(e){}
+}
+window.artePasta=artePasta;
+
+/* do nome da imagem para o termo de busca */
+function arteTermo(nome){
+  let t=String(nome||'').trim();
+  if(!t)return '';
+  t=t.replace(/\.[a-z0-9]{2,5}$/i,'');            /* fora a extensão */
+  t=t.replace(/[\s._-]+\d{1,3}$/,'');             /* fora a variação de layout */
+  return t.trim();
+}
+window.arteTermo=arteTermo;
+
+/* o endereço que abre o Explorer já buscando */
+function arteURI(termo,pasta){
+  const p=String(pasta||artePasta());
+  return 'search-ms:query='+encodeURIComponent(termo)
+    +'&crumb=location:'+encodeURIComponent(p)
+    +'&displayname='+encodeURIComponent('Arte: '+termo);
+}
+window.arteURI=arteURI;
+
+function arteNomeDoModulo(mod){
+  const im=mod&&mod.querySelector('.lay-img img');
+  return (im&&im.dataset&&im.dataset.arte)||'';
+}
+/* O BOTÃO SÓ EXISTE QUANDO HÁ NOME. Pedido salvo antes da v3.338 não
+   guardou o nome da imagem, e uma lupa que abre busca vazia é pior que
+   lupa nenhuma: ensina a não confiar no botão. */
+function arteBotaoAtualiza(mod){
+  if(!mod)return;
+  const bt=mod.querySelector('.lay-arte-bt');
+  if(!bt)return;
+  const termo=arteTermo(arteNomeDoModulo(mod));
+  bt.hidden=!termo;
+  bt.title=termo
+    ? ('Procurar "'+termo+'" em '+artePasta())
+    : 'Sem o nome do arquivo original';
+}
+window.arteBotaoAtualiza=arteBotaoAtualiza;
+function arteBotoesTodos(){
+  document.querySelectorAll('.lay-modulo').forEach(arteBotaoAtualiza);
+}
+window.arteBotoesTodos=arteBotoesTodos;
+
+document.addEventListener('click',e=>{
+  const bt=e.target&&e.target.closest&&e.target.closest('.lay-arte-bt');
+  if(!bt)return;
+  e.preventDefault(); e.stopPropagation();
+  const mod=bt.closest('.lay-modulo');
+  const termo=arteTermo(arteNomeDoModulo(mod));
+  if(!termo){ ftToast('Esta imagem não tem o nome do arquivo original','aviso'); return; }
+  /* o navegador pergunta na primeira vez; se a pessoa recusar, nada
+     acontece e nenhum erro chega até aqui. Por isso o toast diz o que
+     foi tentado: sem ele, um clique sem resposta parece defeito. */
+  location.href=arteURI(termo);
+  ftToast('Procurando "'+termo+'" no Explorer');
+});
+
+/* ================================================================
+   O NOME ORIGINAL DA IMAGEM (v3.338)
+
+   As imagens vêm do Drive com o NOME DO ARQUIVO ORIGINAL da arte, e é
+   esse nome que leva ao arquivo de trabalho no Explorer. Uma imagem
+   chamada "team master 040826 01" veio do original "team master
+   040826"; o número no fim é a variação de layout.
+
+   Até aqui o editor jogava o nome fora no instante em que lia o
+   arquivo: guardava só o base64. Sem o nome não há busca possível, e
+   nenhuma esperteza depois recupera o que não foi guardado.
+
+   Ele agora viaja em `data-arte` na própria <img> e num campo do .ft,
+   então sobrevive a salvar, reabrir e copiar layout. Pedido salvo antes
+   desta versão não tem o nome, e nesse caso o botão simplesmente não
+   aparece: melhor não existir do que abrir uma busca vazia.
+   ================================================================ */
+function colocaImagem(mod,layImg,btnLimpar,src,jaComprimida,nomeArte){
   layImg.querySelector('.lay-img-txt').style.display='none';
   const img=document.createElement('img');
   if(jaComprimida)img.dataset.ftComp='ok';      /* veio do .ft já convertida */
+  if(nomeArte)img.dataset.arte=String(nomeArte);
   img.onload=()=>{
     /* orientação define o encaixe: vertical = coluna esquerda alta; horizontal = largura total */
     const horizontal=img.naturalWidth>=img.naturalHeight;
@@ -9348,22 +9476,27 @@ function colocaImagem(mod,layImg,btnLimpar,src,jaComprimida){
      que reconhece o módulo de informações nunca ficaria sabendo dela.
      Pôr e tirar imagem passam por aqui, e é aqui que se avisa. */
   if(typeof layAvisaImagem==='function')layAvisaImagem(mod);
+  if(typeof arteBotaoAtualiza==='function')arteBotaoAtualiza(mod);
   agendaCompressao(img);        /* converte depois, sem segurar ninguém */
 }
 /* troca a imagem de uma área (remove a anterior, se houver) */
-function aplicaImagem(layImg,src){
+function aplicaImagem(layImg,src,nomeArte){
   const mod=layImg.closest('.lay-modulo');
   const btnLimpar=layImg.querySelector('.lay-img-limpar');
   const antiga=layImg.querySelector('img');
   if(antiga)antiga.remove();
   layImg.classList.remove('com-img');
-  colocaImagem(mod,layImg,btnLimpar,src);
+  colocaImagem(mod,layImg,btnLimpar,src,false,nomeArte);
 }
 /* lê um File/Blob de imagem e joga na área (sempre o original, sem compressão) */
-function imagemDeArquivo(layImg,file){
+function imagemDeArquivo(layImg,file,nomeArte){
   if(!file||!/^image\//.test(file.type))return false;
   const rd=new FileReader();
-  rd.onload=()=>aplicaImagem(layImg,rd.result);
+  /* o nome do arquivo é lido AQUI e em nenhum outro lugar: depois de o
+     FileReader devolver o base64, não há mais de onde tirar.
+     `nomeArte` existe para quem já sabe o nome por outro caminho: um
+     Blob baixado do Drive não tem `name`, mas o arraste trouxe o nome. */
+  rd.onload=()=>aplicaImagem(layImg,rd.result,nomeArte||file.name||'');
   rd.readAsDataURL(file);
   return true;
 }
@@ -9503,7 +9636,7 @@ async function gdEscolher(cel,im){
     if(!r.ok)throw new Error('HTTP '+r.status);
     const blob=await r.blob();
     const rd=new FileReader();
-    rd.onload=()=>{ aplicaImagem(GD.alvo,rd.result); gdFechar(); };
+    rd.onload=()=>{ aplicaImagem(GD.alvo,rd.result,im.name||''); gdFechar(); };
     rd.readAsDataURL(blob);   /* arquivo original, sem conversão */
   }catch(e){
     cel.classList.remove('carregando');
@@ -9642,7 +9775,9 @@ document.addEventListener('drop',e=>{
     if(arquivo){imagemDeArquivo(li,arquivo);return;}
     const url=e.dataTransfer.getData('text/uri-list')||e.dataTransfer.getData('text/plain');
     if(url&&/^https?:/.test(url)){
-      fetch(url).then(r=>r.blob()).then(b=>imagemDeArquivo(li,b))
+      /* o arraste do Drive não entrega arquivo, entrega descrição: o nome
+         vem de lá e é a única chance de guardá-lo */
+      fetch(url).then(r=>r.blob()).then(b=>imagemDeArquivo(li,b,dv&&dv.nome))
         .catch(()=>ftStatus.erro('Não consegui baixar','A imagem do site foi bloqueada pelo navegador.\nSalve o arquivo e arraste do computador.'));
     }
     return;
@@ -10178,6 +10313,7 @@ function moduloHTML(n){
                 </div>
                 
               </div>
+              <button class="lay-arte-bt" type="button" hidden title="Procurar a arte no Explorer"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
               <button class="lay-info-btn" type="button" aria-pressed="false" title="Transformar em módulo de informações"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></button>
               <button class="lay-btn" type="button" title="Copiar este layout"><span class="lay-btn-ic ic-copiar"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></span><span class="lay-btn-ic ic-colar"><svg viewBox="0 0 24 24"><path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/></svg></span><span class="lay-btn-ic ic-cancelar"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></button>
               <button class="lay-del" title="Excluir este layout"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>
@@ -13690,6 +13826,9 @@ function coletaLayout(m){
     tamanhos:tab._lerVals?tab._lerVals():{},
     obs:m.querySelector('.lay-area').innerHTML,
     img:(m.querySelector('.lay-img img')||{}).src||null,
+    /* o NOME DO ARQUIVO ORIGINAL da arte (v3.338). É por ele que o botão
+       da lupa acha o arquivo de trabalho no Explorer. */
+    arte:((m.querySelector('.lay-img img')||{}).dataset||{}).arte||'',
     /* O MODO PRECISA SER GRAVADO (v3.329, e mais ainda desde a v3.331).
        Ele não é dedutível dos campos: um layout de produção e um anexo
        podem ter exatamente os mesmos campos preenchidos. O que os separa
@@ -13760,7 +13899,8 @@ function aplicaLayout(mod,L){
   mod.classList.remove('img-h','img-v');
   const txt=layImg.querySelector('.lay-img-txt');
   if(txt)txt.style.display='';
-  if(L.img)colocaImagem(mod,layImg,layImg.querySelector('.lay-img-limpar'),L.img,!!L.imgComp);
+  if(L.img)colocaImagem(mod,layImg,layImg.querySelector('.lay-img-limpar'),L.img,!!L.imgComp,L.arte||'');
+  if(typeof arteBotaoAtualiza==='function')arteBotaoAtualiza(mod);
   return mod;
 }
 
@@ -16695,7 +16835,7 @@ function gerarHTML(imagens){
     /* os do Relatório de Atividade, pelo mesmo motivo: o CSS deles vive no
        #ftAtvCss, que também não viaja */
     '#atvPage,#atvMenuEtapa,#atvNotif,#atvCarga,#atvPrint,#atvMedindo,#ftAtvCss,'+
-    '.lay-del,.lay-info-btn,.tec-btn,.design-add,.ft-combo-abrir,.hd-abrir,#pickMenu,.hd-cal,.cor-sw,.lay-img-limpar,script,datalist')
+    '.lay-del,.lay-info-btn,.lay-arte-bt,.tec-btn,.design-add,.ft-combo-abrir,.hd-abrir,#pickMenu,.hd-cal,.cor-sw,.lay-img-limpar,script,datalist')
     .forEach(el=>el.remove());
 
   /* A área de páginas carrega uma largura INLINE, posta pelo motor de escala
@@ -25058,6 +25198,22 @@ window.atvImprime=atvImprime;
   };
   [cs,cd,cn].forEach(e=>{ if(e)e.addEventListener('change',guarda); });
   mostra();
+
+  /* ---- a pasta das artes (v3.338) ----
+     Fica no localStorage, e não no banco: é caminho de MÁQUINA. Se fosse
+     para o banco compartilhado, a letra de unidade de um computador
+     passaria por cima da do outro na primeira sincronização. */
+  const pa=document.getElementById('cfgPastaArtes');
+  if(pa){
+    pa.value=artePasta();
+    pa.placeholder=ARTE_PASTA_PADRAO;
+    pa.addEventListener('change',()=>{
+      artePastaGrava(pa.value);
+      pa.value=artePasta();
+      if(typeof arteBotoesTodos==='function')arteBotoesTodos();
+      ftToast('As artes serão procuradas em '+artePasta());
+    });
+  }
 
   atvAtualizaAcesso();
 })();
