@@ -169,6 +169,35 @@ export async function roda(F) {
   await pc.p.waitForSelector('#ftFiltros .ft-fsel');
   await F.assenta(pc.p, () => document.querySelectorAll('.lay-modulo').length);
 
+  /* A FICHA DE COR NO ARQUIVO DO CLIENTE (v3.343).
+     Ela e o unico lugar do pedido onde a cor de impressao aparece
+     desenhada, e nao escrita. O bloco acima garante que existe pelo
+     menos uma; aqui se cobra que ela chegou com a forma certa: amostra
+     rente a moldura, meio quadrado, e o codigo a direita dela. */
+  const ficha = await pc.p.evaluate(() => {
+    const t = document.querySelector('.lay-modulo .dtf-tok');
+    if (!t) return null;
+    const ch = t.querySelector('.dtf-chip'), cd = t.querySelector('.dtf-cod');
+    if (!ch || !cd) return { semPeca: true };
+    const rt = t.getBoundingClientRect(), rc = ch.getBoundingClientRect();
+    const rd = cd.getBoundingClientRect();
+    return {
+      folgaEsquerda: +(rc.left - rt.left).toFixed(1),
+      meioQuadrado: +(rt.height / rc.width).toFixed(2),
+      codigoADireita: rd.left >= rc.right - 0.5,
+      corpo: getComputedStyle(t).fontSize,
+    };
+  });
+  F.diz('a ficha de cor chegou inteira no arquivo', !!ficha && !ficha.semPeca, true);
+  if (ficha && !ficha.semPeca) {
+    F.diz('  amostra rente a moldura  (' + ficha.folgaEsquerda + 'px)',
+      ficha.folgaEsquerda <= 1.5, true);
+    F.diz('  meio quadrado: a altura vale duas larguras  (' + ficha.meioQuadrado + ')',
+      Math.abs(ficha.meioQuadrado - 2) <= 0.25, true);
+    F.diz('  e o codigo a direita, em 11px',
+      [ficha.codigoADireita, ficha.corpo], [true, '11px']);
+  }
+
   const r1 = await pc.p.evaluate(() => ({
     barras: document.querySelectorAll('.ft-filtros').length,
     cimaAntesDaFolha: (() => {

@@ -385,9 +385,19 @@ console.log('\n=== 5c. A OBSERVACAO NAO ENCOLHE NO MODO SEM VALOR ===');
 r = await p.evaluate(async () => {
   const mede = () => {
     const m = document.querySelector('.lay-modulo.info');
+    const f = m.querySelector('.lay-ficha').getBoundingClientRect();
+    const o = m.querySelector('.lf-obs').getBoundingClientRect();
     return {
       obs: +m.querySelector('.lay-area').getBoundingClientRect().height.toFixed(1),
-      ficha: +m.querySelector('.lay-ficha').getBoundingClientRect().height.toFixed(1) };
+      ficha: +f.height.toFixed(1),
+      /* O VAO EMBAIXO, medido de verdade (v3.343).
+         Antes isto era uma proporcao ("a obs ocupa mais de 55% da
+         ficha"), que so funcionava enquanto o bloco de cima fosse
+         pequeno. O cartao de Design cresceu na v3.343 e a proporcao
+         reprovou sem que nada tivesse quebrado: a obs continuava
+         fechando a coluna, so que dividindo espaco com um vizinho
+         maior. O que se quer saber e se sobra vao, e vao se mede. */
+      vao: +(f.bottom - o.bottom).toFixed(1) };
   };
   const com = mede();
   document.body.classList.add('sem-dinheiro');
@@ -402,7 +412,7 @@ checa('sem valor, a observacao nao fica menor que com valor',
   r.sem.obs >= r.com.obs, true);
 /* e ela ocupa o que a tabela deixou, em vez de abrir um vao */
 checa('  e preenche a ficha, sem vao embaixo',
-  r.sem.obs > r.sem.ficha * 0.55, true);
+  Math.abs(r.sem.vao) <= 1, true);
 
 console.log('\n=== 6. DOIS ANEXOS FICAM NA ORDEM ENTRE SI ===');
 r = await p.evaluate(async px => {

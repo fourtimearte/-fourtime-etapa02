@@ -416,6 +416,41 @@ diz('  e nenhum rotulo por linha', cartao.rotulosNaLinha, 0);
 diz('nenhum botao do cartao viajou', cartao.controles, 0);
 diz('  e o quadrado viajou inerte', cartao.inerte, 'none');
 
+secao('A3. o cartao de design chega inteiro no arquivo do cliente');
+/* O DESENHO NOVO DA v3.343 tambem tem de atravessar a exportacao: as
+   fileiras, a palavra DESIGN em pe e as fichas de cor com a amostra
+   rente a borda. E o que e CONTROLE fica para tras: o "+" e o "x" da
+   pilula nao tem quem os atenda do outro lado, e um botao que nao faz
+   nada e um convite a clicar em vao. */
+const desenho = await pt.evaluate(() => {
+  const cx = document.querySelector('.design-caixa');
+  const tag = document.querySelector('.design-tag');
+  const tok = document.querySelector('.dtf-tok');
+  return {
+    fileiras: document.querySelectorAll('.des-fila').length,
+    rotEmPe: cx ? getComputedStyle(cx.querySelector('.design-rot')).writingMode : '(sem)',
+    /* o "+" e o "x" nao viajam */
+    mais: document.querySelectorAll('.design-add').length,
+    xDaPilula: tag ? getComputedStyle(tag, '::after').display : '(sem pilula)',
+    /* a ficha de cor chegou desenhada */
+    temCodigo: !!(tok && tok.querySelector('.dtf-cod')),
+    amostraRente: tok && tok.querySelector('.dtf-chip')
+      ? +(tok.querySelector('.dtf-chip').getBoundingClientRect().left
+          - tok.getBoundingClientRect().left).toFixed(1) : null,
+    /* e nada disso responde a clique */
+    inerte: cx ? getComputedStyle(cx).pointerEvents : '(sem)',
+  };
+});
+diz('as fileiras do design viajaram', desenho.fileiras > 0, true);
+diz('  com a palavra DESIGN em pe', desenho.rotEmPe, 'vertical-rl');
+/* A FORMA da ficha de cor nao se cobra aqui: o pedido do ARENA CROSS nao
+   tem codigo de cor nenhum, e uma conferencia que passa por falta de
+   alvo e pior que conferencia nenhuma. Quem cobra e o bloco 2 da suite
+   mediana, que garante uma cor antes de exportar. */
+diz('o "+" do design nao viajou', desenho.mais, 0);
+diz('  nem o "x" da pilula aparece', desenho.xDaPilula, 'none');
+diz('  e o cartao inteiro chegou inerte', desenho.inerte, 'none');
+
 secao('B. o visualizador de imagem ABRE dentro do arquivo do cliente');
 /* A OUTRA METADE DA MESMA MOEDA (v3.332).
 

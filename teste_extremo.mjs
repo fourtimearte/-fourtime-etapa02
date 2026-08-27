@@ -233,9 +233,30 @@ fila.push(async () => {
   };
   const virgem = await assenta();
 
+  /* A "Etiqueta" DOS ARQUIVOS ANTIGOS VIRA "Eti. Fourtime" (v3.343).
+
+     Etiqueta deixou de ser uma tag so e virou cinco (Fourtime, DTF,
+     Silk, Subli, Cliente). A que existia antes era a etiqueta da casa,
+     entao e nela que ela cai, na ENTRADA: o arquivo velho abre ja no
+     vocabulario novo.
+
+     As amostras congeladas continuam INTOCADAS de proposito: elas sao o
+     registro do que a versao antiga produzia, e reescreve-las apagaria a
+     prova. Quem traduz e o teste, aqui, uma vez so e a vista de todos.
+     Qualquer outra tag que mude de nome sem passar por aqui reprova. */
+  const TRADUZ = { 'Etiqueta': 'Eti. Fourtime' };
+  let traduzidas = 0;
+  const migraDesign = lista => (lista || []).map(d => {
+    const i = d.indexOf('[');
+    const n = i < 0 ? d : d.slice(0, i);
+    if (TRADUZ[n]) traduzidas++;
+    return (TRADUZ[n] || n) + (i < 0 ? '' : d.slice(i));
+  }).sort();
+
   for (const nome of amostras) {
     const rot = nome.replace('.json', '');
     const dados = JSON.parse(readFileSync(PASTA + nome, 'utf8'));
+    (dados.resumo.layouts || []).forEach(L => { L.design = migraDesign(L.design); });
 
     /* ZERAR ANTES, E CONFERIR QUE ZEROU. A pagina e reaproveitada entre as
        amostras; sem isto, sobra da volta anterior poderia fazer a
@@ -263,6 +284,7 @@ fila.push(async () => {
       [depois.pecas, depois.total], [dados.resumo.pecas, dados.resumo.total]);
     diz(rot + ':   nenhuma folha estourada', folha.estouro.every(v => v <= 0.5), true);
   }
+  diz('a tag Etiqueta antiga foi traduzida, e nao ignorada', traduzidas > 0, true);
   await ctx.close();
   return { nome: 'COMPATIBILIDADE DOS .ft ('
     + ((Date.now() - t0) / 1000).toFixed(1) + 's)', linhas };

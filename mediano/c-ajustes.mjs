@@ -243,6 +243,116 @@ export async function roda(F) {
     r.folgaDireita <= 8, true);
 
   /* ---------------------------------------------------------------- */
+  F.secao('4B. O CARTAO DE DESIGN E O CONVITE DO TECIDO (v3.343)');
+  /* O DESENHO NOVO, e o que ele promete:
+
+       . o "+" no canto superior direito e a palavra DESIGN em pe logo
+         abaixo dele, num trilho separado do conteudo;
+       . o conteudo em FILEIRAS: etiquetas em cima, DTF, Sublimacao, e o
+         resto junto no fim;
+       . a ficha de cor com a amostra RENTE a borda esquerda e o codigo a
+         direita, e a amostra e MEIO QUADRADO: metade da largura da
+         altura dela;
+       . o rotulo "Etiqueta" da fileira so aparece quando nao ha etiqueta
+         nenhuma marcada, porque ali ele e o convite;
+       . e o cartao de tecido convida ("Escolha o Tecido") enquanto
+         estiver vazio, mas no PAPEL volta a se chamar Tecido: convite e
+         ordem para quem monta, nao informacao para quem recebe. */
+  await p.evaluate(async () => {
+    aplicaEstado({ _formato:'FOURTIME_ORCAMENTO', _versao:2, header:{ cliente:'DESIGN' },
+      layouts:[
+        { ref:'COM TUDO', tecidos:['DRY FIT'], cores:['Verde Musgo'],
+          design:[{ tag:'Eti. Fourtime', cores:[] }, { tag:'Eti. Cliente', cores:[] },
+                  { tag:'DTF', cores:['001','014'] }, { tag:'Subli', cores:['S17'] },
+                  { tag:'Patch', cores:[] }, { tag:'Bordado', cores:[] }],
+          grade:'adulto', tamanhos:{ M:{ q:'10', u:'50,00' } }, obs:'', img:'' },
+        { ref:'SEM NADA', tecidos:[''], cores:[''], design:[],
+          grade:'adulto', tamanhos:{}, obs:'', img:'' }],
+      anotacoes:[], ajustes:[] });
+    await new Promise(s => setTimeout(s, 700));
+  });
+  r = await p.evaluate(() => {
+    const mods = [...document.querySelectorAll('.lay-modulo')];
+    const cheio = mods[0], vazio = mods[1];
+    const cx = cheio.querySelector('.design-caixa');
+    const mais = cx.querySelector('.design-add'), rot = cx.querySelector('.design-rot');
+    /* MEDE O QUE EXISTE, e devolve zero para o que nao existe: a suite
+       tem de REPROVAR numa versao anterior, e nao morrer nela. */
+    const NADA = { left:0, top:0, right:0, bottom:0, width:0, height:0 };
+    const b = el => el ? el.getBoundingClientRect() : NADA;
+    const rc = b(cx), rm = b(mais), rr = b(rot);
+    const tok = cheio.querySelector('.dtf-tok');
+    const chip = tok && tok.querySelector('.dtf-chip');
+    const cod = tok && tok.querySelector('.dtf-cod');
+    const rt = b(tok), rch = b(chip), rcd = b(cod);
+    return {
+      /* o trilho */
+      maisNoCanto: [+(rc.right - rm.right).toFixed(0) <= 6, +(rm.top - rc.top).toFixed(0) <= 6],
+      rotEmPe: rot ? getComputedStyle(rot).writingMode : '(sem rotulo)',
+      rotAbaixoDoMais: rr.top >= rm.bottom - 1,
+      rotNaDireita: rr.left > rc.left + rc.width / 2,
+      /* as fileiras, na ordem */
+      fileiras: [...cheio.querySelectorAll('.des-fila')]
+        .map(f => [...f.querySelectorAll('.design-grupo')].map(g => g.dataset.tag).join('+')
+                  || (f.querySelector('.design-ph') ? '(convite)' : '(vazia)')),
+      /* a ficha de cor */
+      /* "rente" e ate a moldura: a ficha tem 1px de borda de cada lado, e
+         a amostra preenche o que sobra dentro dela. Por isso o esperado e
+         1px de folga na esquerda e 2px a menos de altura, e nao zero. */
+      chipRente: [+(rch.left - rt.left).toFixed(1), +(rt.height - rch.height).toFixed(1)],
+      chipMeioQuadrado: +(rt.height / rch.width).toFixed(2),
+      codigoADireita: !!cod && rcd.left >= rch.right - 0.5,
+      corpoDoCodigo: cod ? getComputedStyle(cod.parentElement).fontSize : '(sem codigo)',
+      /* o convite da etiqueta */
+      conviteComEtiqueta: !!cheio.querySelector('.design-ph'),
+      conviteSemEtiqueta: !!vazio.querySelector('.design-ph'),
+      /* o cartao de tecido */
+      tecCheio: [cheio.querySelector('.tec-card').classList.contains('vazio'),
+                 getComputedStyle(cheio.querySelector('.tec-cab-rot')).display !== 'none'],
+      tecVazio: (()=>{ const c=vazio.querySelector('.tec-cab-conv');
+        return [vazio.querySelector('.tec-card').classList.contains('vazio'),
+                !!c && getComputedStyle(c).display !== 'none',
+                c ? c.textContent : '(sem convite)']; })(),
+    };
+  });
+  F.diz('o "+" fica no canto superior direito do cartao', r.maisNoCanto, [true, true]);
+  F.diz('  a palavra DESIGN esta em pe', r.rotEmPe, 'vertical-rl');
+  F.diz('  abaixo do "+" e na direita', [r.rotAbaixoDoMais, r.rotNaDireita], [true, true]);
+  F.diz('as fileiras saem na ordem combinada', r.fileiras,
+    ['Eti. Fourtime+Eti. Cliente', 'DTF', 'Subli', 'Patch+Bordado']);
+  F.diz('a amostra encosta na moldura da ficha  (' + r.chipRente + ')',
+    [r.chipRente[0] <= 1.5, r.chipRente[1] <= 2.5], [true, true]);
+  F.diz('  e e meio quadrado: a altura vale duas larguras  (' + r.chipMeioQuadrado + ')',
+    Math.abs(r.chipMeioQuadrado - 2) <= 0.25, true);
+  F.diz('  com o codigo a direita dela', r.codigoADireita, true);
+  F.diz('  em 11px, o corpo do texto dos campos', r.corpoDoCodigo, '11px');
+  F.diz('com etiqueta marcada, o rotulo Etiqueta sai', r.conviteComEtiqueta, false);
+  F.diz('  sem nenhuma, ele fica de convite', r.conviteSemEtiqueta, true);
+  F.diz('o cartao de tecido preenchido se chama Tecido', r.tecCheio, [false, true]);
+  F.diz('  e vazio convida a escolher', r.tecVazio, [true, true, 'Escolha o Tecido']);
+
+  /* NO PAPEL O CONVITE SOME. Ele e ordem para quem monta o orcamento. */
+  await p.emulateMedia({ media: 'print' });
+  r = await p.evaluate(() => {
+    const vazio = [...document.querySelectorAll('.lay-modulo')]
+      .find(m => m.querySelector('.tec-card.vazio'))
+      || [...document.querySelectorAll('.lay-modulo')].pop();
+    const tag = document.querySelector('.lay-modulo .design-tag');
+    const c = vazio && vazio.querySelector('.tec-cab-conv');
+    return { conv: c ? getComputedStyle(c).display : '(sem convite)',
+             rot: vazio ? getComputedStyle(vazio.querySelector('.tec-cab-rot')).display : 'none',
+             xDaPilula: tag ? getComputedStyle(tag, '::after').display : '(sem pilula)' };
+  });
+  F.diz('no papel o cartao vazio volta a se chamar Tecido',
+    [r.conv, r.rot !== 'none'], ['none', true]);
+  F.diz('  e o "x" da pilula de design nao e impresso', r.xDaPilula, 'none');
+  await p.emulateMedia({ media: 'screen' });
+
+  /* devolve o documento do kit: as secoes de baixo contam com ele */
+  await p.evaluate(() => aplicaEstado(JSON.parse(window.__ftKit)));
+  await F.assenta(p, SINAL);
+
+  /* ---------------------------------------------------------------- */
   F.secao('5. BORDA DA FILEIRA SINALIZADA SEGUE A TINTA');
   await p.evaluate(() => {
     const est = coletaEstado(); const L = est.layouts[0];
