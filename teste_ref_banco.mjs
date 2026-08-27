@@ -430,6 +430,68 @@ checa('renomear para um nome apagado tambem tira ele da fila',
 checa('  e a exclusao do nome ANTIGO continua na fila',
   r.fila.includes(REF_C.toUpperCase()), true);
 
+console.log('\n=== 10. A LISTA NAO PODE MENTIR (v3.350) ===');
+/* O contador do grupo e as linhas saem do MESMO array, e mesmo assim
+   apareceu um caso em que o contador dizia 22 e a lista mostrava 21: a
+   referencia estava no banco, o cadastro a recusava por ja existir, e ela
+   nao estava na tela.
+
+   Uma tela que conta uma coisa e mostra outra e pior que uma tela vazia,
+   porque quem olha conclui que o cadastro nao funciona e cadastra de novo.
+   Agora, depois de cada desenho, o que DEVIA estar na tela e comparado com
+   o que esta -- inclusive linhas que existem no DOM mas nao tem altura,
+   que somem do mesmo jeito para quem olha. */
+await abre();
+r = await p.evaluate(() => {
+  const pg = document.getElementById('bdPage');
+  return { semAviso: !!pg.querySelector('.bd-sumiu'),
+           linhas: pg.querySelectorAll('.bd-rf').length,
+           noBanco: (DB.referencias || []).length };
+});
+console.log('     ' + JSON.stringify(r));
+checa('com tudo no lugar, nenhum aviso', r.semAviso, false);
+checa('  e toda referencia do banco tem a sua linha', r.linhas, r.noBanco);
+
+/* a conferencia acusa quando falta linha */
+r = await p.evaluate(([A]) => {
+  const pg = document.getElementById('bdPage');
+  const l = [...pg.querySelectorAll('.bd-rf')].find(d => d.dataset.ref === A);
+  l.remove();
+  /* a conferencia pode nao existir na versao anterior: a suite tem de
+     REPROVAR nela, e nao morrer nela */
+  if (typeof bdConfereReferencias !== 'function')
+    return { faltando: '(sem conferencia)', aviso: false, temBotao: false };
+  const faltando = bdConfereReferencias(pg);
+  const cx = pg.querySelector('.bd-sumiu');
+  return { faltando, aviso: !!cx, temBotao: !!(cx && cx.querySelector('.bd-sumiu-bt')) };
+}, [REF_A]);
+console.log('     ' + JSON.stringify(r));
+checa('linha que sumiu do DOM e acusada', r.faltando, [REF_A]);
+checa('  com aviso na tela', r.aviso, true);
+checa('  e um botao para copiar e mandar', r.temBotao, true);
+
+/* e quando a linha existe mas nao aparece (altura zero) */
+r = await p.evaluate(([A]) => {
+  const pg = document.getElementById('bdPage');
+  bdRender();
+  const l = [...pg.querySelectorAll('.bd-rf')].find(d => d.dataset.ref === A);
+  /* o grupo dela precisa estar ABERTO: em grupo fechado esconder e o certo */
+  l.closest('.bd-rg').classList.add('aberto');
+  l.style.display = 'none';
+  if (typeof bdConfereReferencias !== 'function')
+    return { faltando: '(sem conferencia)', aviso: false };
+  const faltando = bdConfereReferencias(pg);
+  return { faltando, aviso: !!pg.querySelector('.bd-sumiu') };
+}, [REF_A]);
+console.log('     ' + JSON.stringify(r));
+checa('linha sem altura tambem e acusada', r.faltando, [REF_A]);
+checa('  porque estar no DOM nao e estar na tela', r.aviso, true);
+
+/* e um desenho limpo apaga o aviso */
+r = await p.evaluate(() => { bdRender();
+  return !!document.querySelector('#bdPage .bd-sumiu'); });
+checa('desenho limpo tira o aviso', r, false);
+
 console.log('\n' + '='.repeat(76));
 checa('nenhum erro de página', erros.length, 0);
 if (erros.length) erros.slice(0, 5).forEach(e => console.log('     ! ' + e));
