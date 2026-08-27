@@ -328,13 +328,18 @@ export async function roda(F) {
       /* o convite da etiqueta */
       conviteComEtiqueta: !!cheio.querySelector('.design-ph'),
       conviteSemEtiqueta: !!vazio.querySelector('.design-ph'),
-      /* o cartao de tecido */
-      tecCheio: [cheio.querySelector('.tec-card').classList.contains('vazio'),
-                 getComputedStyle(cheio.querySelector('.tec-cab-rot')).display !== 'none'],
-      tecVazio: (()=>{ const c=vazio.querySelector('.tec-cab-conv');
-        return [vazio.querySelector('.tec-card').classList.contains('vazio'),
-                !!c && getComputedStyle(c).display !== 'none',
-                c ? c.textContent : '(sem convite)']; })(),
+      /* O CARTAO DE TECIDO. O alto dele diz sempre "Tecido": ele nomeia o
+         cartao. O convite mora na LINHA em branco, como placeholder do
+         campo, com "Cor" logo abaixo como sempre. */
+      rotuloDoCartao: [...document.querySelectorAll('.tec-cab-rot')]
+        .map(r => r.textContent.trim()),
+      conviteNoAlto: document.querySelectorAll('.tec-cab-conv').length,
+      linhaVazia: (()=>{ const l = vazio.querySelector('.tec-linha');
+        return [l.querySelector('.combo-tecido textarea').getAttribute('placeholder'),
+                l.querySelector('.combo-cor textarea').getAttribute('placeholder')]; })(),
+      linhaCheia: (()=>{ const l = cheio.querySelector('.tec-linha');
+        return [l.querySelector('.combo-tecido textarea').value,
+                l.querySelector('.combo-tecido textarea').getAttribute('placeholder')]; })(),
     };
   });
   F.diz('o "+" fica no canto superior direito do cartao', r.maisNoCanto, [true, true]);
@@ -354,38 +359,42 @@ export async function roda(F) {
       && Math.abs(r.pilulaCentrada.desvio) <= 1.5, true);
   F.diz('com etiqueta marcada, o rotulo Etiqueta sai', r.conviteComEtiqueta, false);
   F.diz('  sem nenhuma, ele fica de convite', r.conviteSemEtiqueta, true);
-  F.diz('o cartao de tecido preenchido se chama Tecido', r.tecCheio, [false, true]);
-  F.diz('  e vazio convida a escolher', r.tecVazio, [true, true, 'Escolha o Tecido']);
+  F.diz('o alto do cartao de tecido diz sempre Tecido',
+    [...new Set(r.rotuloDoCartao)], ['Tecido']);
+  F.diz('  e nao ha mais convite no alto', r.conviteNoAlto, 0);
+  F.diz('a linha em branco convida a escolher, com Cor embaixo',
+    r.linhaVazia, ['Escolha o Tecido', 'Cor']);
+  F.diz('  e a linha preenchida mostra o tecido', r.linhaCheia[0], 'DRY FIT');
 
-  /* NO PAPEL O CONVITE CONTINUA (v3.344). Um cartao de tecido vazio nao e
-     um cartao sem nome: e um furo no pedido, e ele tem de aparecer igual
-     nos tres lugares. E sem o "+", que nao e impresso, a palavra DESIGN
-     nao pode ficar espremida contra o canto de cima do trilho. */
+  /* NO PAPEL O CONVITE CONTINUA. Um tecido faltando nao e um campo sem
+     nome: e um furo no pedido, e tem de aparecer igual nos tres lugares.
+     O convite e placeholder, e a impressao ja mostra placeholder dos
+     campos do layout de proposito. E sem o "+", que nao e impresso, a
+     palavra DESIGN nao pode ficar espremida no trilho. */
   await p.emulateMedia({ media: 'print' });
   r = await p.evaluate(() => {
     const vazio = [...document.querySelectorAll('.lay-modulo')]
-      .find(m => m.querySelector('.tec-card.vazio'))
+      .find(m => { const t = m.querySelector('.tec-linha .combo-tecido textarea');
+                   return t && !t.value.trim(); })
       || [...document.querySelectorAll('.lay-modulo')].pop();
+    const campo = vazio && vazio.querySelector('.tec-linha .combo-tecido textarea');
     const tag = document.querySelector('.lay-modulo .design-tag');
-    const c = vazio && vazio.querySelector('.tec-cab-conv');
     const cx = document.querySelector('.lay-modulo .design-caixa');
     const rot = cx && cx.querySelector('.design-rot');
     const rc = cx ? cx.getBoundingClientRect() : null;
     const rr = rot ? rot.getBoundingClientRect() : null;
     const mais = cx && cx.querySelector('.design-add');
-    return { conv: c ? getComputedStyle(c).display : '(sem convite)',
-             rot: vazio ? getComputedStyle(vazio.querySelector('.tec-cab-rot')).display : 'none',
+    return { convite: campo ? campo.getAttribute('placeholder') : '(sem campo)',
+             conviteVisivel: campo ? getComputedStyle(campo, '::placeholder').opacity : null,
              xDaPilula: tag ? getComputedStyle(tag, '::after').display : '(sem pilula)',
              maisImpresso: mais ? getComputedStyle(mais).display : 'none',
              folgaAcimaDoRotulo: rr ? +(rr.top - rc.top).toFixed(1) : null,
-             /* no papel o "+" e escondido, e o trilho fica so com o
-                rotulo: a folga lateral tem de vir do recheio dele */
              trilho: (rc && cx) ? +(rc.right
                - cx.querySelector('.design-wrap').getBoundingClientRect().right).toFixed(1) : null,
              fonte: rot ? parseFloat(getComputedStyle(rot).fontSize) : null };
   });
-  F.diz('no papel o cartao vazio continua convidando',
-    [r.conv !== 'none', r.rot], [true, 'none']);
+  F.diz('no papel a linha em branco continua convidando',
+    [r.convite, r.conviteVisivel], ['Escolha o Tecido', '1']);
   F.diz('  e o "x" da pilula de design nao e impresso', r.xDaPilula, 'none');
   F.diz('  o "+" tambem nao', r.maisImpresso, 'none');
   F.diz('  e a palavra DESIGN nao fica espremida no trilho  ('
