@@ -41,6 +41,10 @@ await esperaPronto(p);
 const REF_A = 'FT-010-901M — CAMISETA DE TESTE';
 const REF_B = 'FT-010-902M — CAMISETA COM FICHA';
 const REF_C = 'FT-010-903M — CAMISETA VIZINHA';
+/* a lista de grupos do seletor tem de ser a MESMA que a pagina usa para
+   agrupar, menos o "sem codigo": ninguem escolhe cadastrar sem codigo */
+const REF_ORDEM_ESPERADA = ['010','020','030','040','050','060','070','080',
+  '090','100','110','120','KIT'];
 
 const abre = () => p.evaluate(async ([A, B, C]) => {
   DB.referencias = DB.referencias.filter(v => !/90[123]/.test(String(v)));
@@ -227,6 +231,125 @@ r = await p.evaluate(async () => {
 console.log('     ' + JSON.stringify(r));
 checa('admin vê os botões', r.antes !== 'none', true);
 checa('  e quem não é admin não vê', r.depois, 'none');
+
+console.log('\n=== 8. ACRESCENTAR: DOIS CAMPOS E ONDE ELA VAI PARAR (v3.347) ===');
+/* O "adicionar novo item" era um campo de texto solto. Quem cadastrava
+   tinha de reproduzir de cabeca o formato inteiro, separador incluido, e
+   um codigo mal escrito caia no grupo "Sem codigo" sem aviso nenhum.
+
+   Agora sao tres pecas: onde entra, o codigo e o nome da peca. E a caixa
+   de selecao NAO e um terceiro dado guardado: ela escreve o comeco do
+   codigo, e o codigo escrito move a selecao de volta. So existe uma
+   verdade, que e o texto do campo, e por isso as duas nunca podem
+   aparecer contando historias diferentes. */
+await abre();
+r = await p.evaluate(() => {
+  const pg = document.getElementById('bdPage');
+  return { sel: !!pg.querySelector('#bdNovoRefGrupo'),
+           cod: !!pg.querySelector('#bdNovo'),
+           nome: !!pg.querySelector('#bdNovoRefNome'),
+           /* o campo do codigo ja nasce com o prefixo do grupo escolhido */
+           prefixo: pg.querySelector('#bdNovo').value,
+           /* e a lista de grupos e a mesma que a pagina usa para agrupar */
+           grupos: [...pg.querySelectorAll('#bdNovoRefGrupo option')].map(o => o.value) };
+});
+console.log('     ' + JSON.stringify(r));
+checa('a barra tem os tres campos', [r.sel, r.cod, r.nome], [true, true, true]);
+checa('  o codigo ja nasce com o prefixo do grupo', r.prefixo, 'FT-010-');
+checa('  e os grupos sao os da propria pagina',
+  r.grupos, REF_ORDEM_ESPERADA);
+
+/* escolher o grupo escreve o comeco do codigo, e digitar move a selecao */
+r = await p.evaluate(async () => {
+  const pg = document.getElementById('bdPage');
+  const sel = pg.querySelector('#bdNovoRefGrupo'), cod = pg.querySelector('#bdNovo');
+  /* SEM OS CAMPOS NAO HA O QUE MEDIR: devolve sentinela e deixa as
+     conferencias reprovarem, em vez de derrubar a suite numa versao
+     anterior. */
+  if (!sel || !cod) return { aposEscolher: '(sem seletor)', aposTrocar: '(sem seletor)', selDepois: '(sem seletor)' };
+  sel.value = '020'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  await new Promise(s => setTimeout(s, 120));
+  const aposEscolher = cod.value;
+  /* o resto do codigo ja escrito NAO se perde ao trocar de grupo */
+  cod.value = 'FT-020-777M'; cod.dispatchEvent(new Event('input', { bubbles: true }));
+  sel.value = '030'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  await new Promise(s => setTimeout(s, 120));
+  const aposTrocar = cod.value;
+  /* e digitar um codigo de outro grupo move a selecao junto */
+  cod.value = 'FT-060-777F'; cod.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise(s => setTimeout(s, 120));
+  return { aposEscolher, aposTrocar, selDepois: sel.value };
+});
+console.log('     ' + JSON.stringify(r));
+checa('escolher o grupo escreve o comeco do codigo', r.aposEscolher, 'FT-020-');
+checa('  e trocar de grupo nao perde o que ja estava escrito', r.aposTrocar, 'FT-030-777M');
+checa('  digitar um codigo de outro grupo move a selecao', r.selDepois, '060');
+
+/* sem nome nao entra, e sem codigo tambem nao */
+r = await p.evaluate(async () => {
+  const pg = document.getElementById('bdPage');
+  const cod = pg.querySelector('#bdNovo'), nome = pg.querySelector('#bdNovoRefNome');
+  const antes = DB.referencias.length;
+  if (!cod || !nome) return { antes, semNome: -1, semCod: -1 };
+  cod.value = 'FT-060-904F'; nome.value = '';
+  pg.querySelector('#bdAddBtn').click();
+  await new Promise(s => setTimeout(s, 200));
+  const semNome = DB.referencias.length;
+  cod.value = ''; nome.value = 'PECA SEM CODIGO';
+  document.getElementById('bdPage').querySelector('#bdAddBtn').click();
+  await new Promise(s => setTimeout(s, 200));
+  const semCod = DB.referencias.length;
+  return { antes, semNome, semCod };
+});
+console.log('     ' + JSON.stringify(r));
+checa('sem o nome da peca nao entra', r.semNome, r.antes);
+checa('  e sem o codigo tambem nao', r.semCod, r.antes);
+
+/* o caminho feliz: os dois campos viram UM texto, no formato do banco */
+r = await p.evaluate(async () => {
+  const pg = document.getElementById('bdPage');
+  const cod = pg.querySelector('#bdNovo'), nome = pg.querySelector('#bdNovoRefNome');
+  if (!cod || !nome) return { nova: '(sem campos)', grupo: null, nome: null,
+                              grupoAberto: false, naLista: false };
+  cod.value = 'FT-060-904F';
+  nome.value = 'top fem de teste';
+  pg.querySelector('#bdAddBtn').click();
+  await new Promise(s => setTimeout(s, 400));
+  const nova = DB.referencias.find(v => String(v).startsWith('FT-060-904F'));
+  const o = nova ? refParse(nova) : null;
+  return { nova, grupo: o && o.grupo, nome: o && o.nome,
+           /* o grupo dela abriu para ela aparecer, e a linha esta la */
+           grupoAberto: !!document.querySelector('#bdPage .bd-rg[data-g="060"].aberto'),
+           naLista: !!document.querySelector('#bdPage .bd-rf[data-ref="' + nova + '"]') };
+});
+console.log('     ' + JSON.stringify(r));
+checa('os dois campos viram um texto so, no formato do banco',
+  r.nova, 'FT-060-904F — TOP FEM DE TESTE');
+checa('  ela cai no grupo do codigo', [r.grupo, r.nome], ['060', 'TOP FEM DE TESTE']);
+checa('  o grupo abre para ela aparecer', r.grupoAberto, true);
+checa('  e a linha dela esta na lista', r.naLista, true);
+
+/* mesmo codigo com outro nome e a MESMA peca escrita de outro jeito */
+r = await p.evaluate(async () => {
+  const pg = document.getElementById('bdPage');
+  const antes = DB.referencias.length;
+  const cod = pg.querySelector('#bdNovo'), nome = pg.querySelector('#bdNovoRefNome');
+  if (!cod || !nome) return { antes, depois: -1, quantas: -1 };
+  cod.value = 'FT-060-904F';
+  nome.value = 'OUTRO NOME QUALQUER';
+  pg.querySelector('#bdAddBtn').click();
+  await new Promise(s => setTimeout(s, 300));
+  return { antes, depois: DB.referencias.length,
+           quantas: DB.referencias.filter(v => String(v).startsWith('FT-060-904F')).length };
+});
+console.log('     ' + JSON.stringify(r));
+checa('o mesmo codigo com outro nome e recusado', r.depois, r.antes);
+checa('  e continua havendo uma so', r.quantas, 1);
+
+await p.evaluate(() => {
+  DB.referencias = DB.referencias.filter(v => !/9\d\dM|904F/.test(String(v)));
+  bdPersiste();
+});
 
 console.log('\n' + '='.repeat(76));
 checa('nenhum erro de página', erros.length, 0);
