@@ -203,8 +203,14 @@ export async function roda(F) {
     const x = linha.querySelector('.tec-remover');
     const px = el => parseFloat(getComputedStyle(el).fontSize);
     const dir = el => el.getBoundingClientRect().right;
+    const cab = mod.querySelector('.tec-cab');
+    const ref = mod.querySelector('.lay-topo .combo-ref .ft-combo-caixa');
+    const alt = el => +el.getBoundingClientRect().height.toFixed(1);
     return {
       altura: +linha.getBoundingClientRect().height.toFixed(1),
+      alturaSw: alt(sw),
+      alturaCab: alt(cab),
+      alturaRef: alt(ref),
       fonteTecido: px(linha.querySelector('.combo-tecido textarea')),
       fonteCor: px(linha.querySelector('.combo-cor textarea')),
       /* nada da linha passa do quadrado: ele e o ultimo */
@@ -215,9 +221,22 @@ export async function roda(F) {
       folgaDireita: +(card.getBoundingClientRect().right - dir(sw)).toFixed(1),
     };
   });
-  F.diz('a linha do tecido cabe em 30px  (' + r.altura + ')', r.altura <= 30, true);
+  F.diz('a linha do tecido cabe em 33px  (' + r.altura + ')', r.altura <= 33, true);
+  /* RESPIRO EM CIMA E EMBAIXO (v3.342). Sem ele a linha aperta o
+     quadrado contra o filete de cima e o de baixo. O que se cobra e a
+     sobra vertical de cada lado do quadrado, que e o elemento mais alto
+     da linha: 4px por lado, pedidos olhando a tela. */
+  F.diz('  com respiro dos dois lados do quadrado  ('
+    + ((r.altura - r.alturaSw) / 2).toFixed(1) + 'px)',
+    (r.altura - r.alturaSw) / 2 >= 4, true);
   F.diz('  e o nome da cor e menor que o do tecido',
     r.fonteCor < r.fonteTecido, true);
+  /* O CABECALHO DO CARTAO e a REFERENCIA sao a primeira linha das duas
+     colunas do modulo, lado a lado. Alturas diferentes desalinham o topo
+     inteiro, que e por onde o olho entra. */
+  F.diz('o alto do cartao tem a altura da referencia ao lado  ('
+    + r.alturaCab + ' x ' + r.alturaRef + ')',
+    Math.abs(r.alturaCab - r.alturaRef) <= 0.5, true);
   F.diz('o quadrado e o ultimo da linha', r.quadradoUltimo, true);
   F.diz('  com o "x" a esquerda dele', r.xAntes, true);
   F.diz('  e rente a borda do cartao  (' + r.folgaDireita + 'px)',

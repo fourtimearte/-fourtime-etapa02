@@ -289,13 +289,24 @@ console.log('\n=== 10. E FUNCIONA DENTRO DO ARQUIVO GERADO ===');
       /* o que tem nome mostra; o que não tem foi removido */
       visivel: bts[0] ? getComputedStyle(bts[0]).display !== 'none' : false,
       titulo: bts[0] ? bts[0].title : '',
-      semNome: !bts[1] };
+      semNome: !bts[1],
+      /* A LUPA NÃO PODE TER COMPANHIA (v3.342).
+         O "copiar layout" é controle do editor e sempre viajou junto,
+         sem ninguém reparar: sozinho na linha da referência ele parecia
+         parte do desenho. A lupa nasceu ao lado dele e a dupla ficou
+         evidente. Aqui se cobra o que sobra na linha: o selo, a
+         referência e a lupa, e nada mais. */
+      copiar: document.querySelectorAll('.lay-btn').length,
+      naLinha: [...M[0].querySelector('.lay-topo').children].map(c => c.className) };
   });
   console.log('     ' + JSON.stringify(q));
   checa('só o layout com nome tem lupa no arquivo', [q.quantos, q.semNome], [1, true]);
   checa('  ela está visível', q.visivel, true);
   checa('  e diz o que vai procurar e onde',
     q.titulo, 'Procurar "team master 040826" em G:\\Meu Drive');
+  checa('  o "copiar layout" do editor NAO viajou', q.copiar, 0);
+  checa('  e na linha ficam so o selo, a referencia e a lupa',
+    q.naLinha, ['lay-selo', 'ft-combo combo-ref', 'lay-arte-bt']);
   /* O CLIQUE. O protocolo não abre nada neste Linux, mas o que se cobra é
      que o botão TENTE navegar para o endereço certo: sem o ouvinte ligado,
      nada acontece e o teste reprova. */
