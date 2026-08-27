@@ -351,6 +351,58 @@ await p.evaluate(() => {
   bdPersiste();
 });
 
+console.log('\n=== 9. APAGAR E RECADASTRAR NA MESMA SESSAO (v3.348) ===');
+/* O DEFEITO, exatamente como apareceu: cadastrar uma referencia, ve-la na
+   tela e ve-la sumir um segundo depois.
+
+   A causa nao estava no cadastro, estava na FILA. Apagar guarda a chave em
+   `FT_SYNC.remocoes` ate o proximo envio, e o servidor aplica as remocoes
+   DEPOIS de mesclar. O mesmo envio levava o item novo e a ordem de apaga-lo,
+   nessa ordem: o item era gravado e apagado no mesmo instante, e ainda
+   deixava lapide, que impede o cadastro seguinte.
+
+   Cadastrar e a intencao mais recente, e cancela a exclusao que ainda nao
+   saiu daqui. */
+await abre();
+r = await p.evaluate(async ([A]) => {
+  const pg = document.getElementById('bdPage');
+  FT_SYNC.remocoes = {};
+  /* apaga pelo caminho de verdade */
+  bdRefApaga(A);
+  await new Promise(s => setTimeout(s, 300));
+  const naFila = (FT_SYNC.remocoes.referencias || []).slice();
+  /* e recadastra pelo caminho de verdade, com os dois campos */
+  const cod = A.split('—')[0].trim(), nome = A.split('—')[1].trim();
+  pg.querySelector('#bdNovo').value = cod;
+  pg.querySelector('#bdNovoRefNome').value = nome;
+  pg.querySelector('#bdAddBtn').click();
+  await new Promise(s => setTimeout(s, 350));
+  return { naFila,
+           voltou: (DB.referencias || []).includes(A),
+           filaDepois: (FT_SYNC.remocoes.referencias || []).slice() };
+}, [REF_A]);
+console.log('     ' + JSON.stringify(r));
+checa('apagar poe a chave na fila de exclusao', r.naFila, [REF_A.toUpperCase()]);
+checa('  recadastrar traz o item de volta', r.voltou, true);
+checa('  E TIRA a exclusao da fila: senao o servidor apagaria de novo',
+  r.filaDepois.includes(REF_A.toUpperCase()), false);
+
+/* o mesmo vale para renomear PARA um nome que estava na fila */
+r = await p.evaluate(async ([A, C]) => {
+  FT_SYNC.remocoes = {};
+  bdRefApaga(A);
+  await new Promise(s => setTimeout(s, 300));
+  bdRefRenomeia(C, A);
+  await new Promise(s => setTimeout(s, 300));
+  return { existe: (DB.referencias || []).includes(A),
+           fila: (FT_SYNC.remocoes.referencias || []).slice() };
+}, [REF_A, REF_C]);
+console.log('     ' + JSON.stringify(r));
+checa('renomear para um nome apagado tambem tira ele da fila',
+  [r.existe, r.fila.includes(REF_A.toUpperCase())], [true, false]);
+checa('  e a exclusao do nome ANTIGO continua na fila',
+  r.fila.includes(REF_C.toUpperCase()), true);
+
 console.log('\n' + '='.repeat(76));
 checa('nenhum erro de página', erros.length, 0);
 if (erros.length) erros.slice(0, 5).forEach(e => console.log('     ! ' + e));

@@ -55,6 +55,10 @@ const SUITES = [
      registro. Este roda o server.py por dentro, sem HTTP nem navegador,
      porque a regra do recado precisa ser cobrada onde ela mora. */
   'teste_indice_mensal',
+  /* v3.348 — a mesclagem do servidor: a exclusão vence o cadastro do
+     mesmo envio, e a lápide só cede ao admin. É a regra que obriga o
+     editor a cancelar a exclusão pendente ao recadastrar. */
+  'teste_mescla_servidor',
   /* v3.328 — o anexo que se reconhece sozinho e o cliente com tres nomes */
   'teste_info_e_busca',
   /* v3.333 — renomear e apagar referencia, com a ficha de material junto */
