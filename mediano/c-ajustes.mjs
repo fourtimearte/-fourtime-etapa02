@@ -263,7 +263,11 @@ export async function roda(F) {
       layouts:[
         { ref:'COM TUDO', tecidos:['DRY FIT'], cores:['Verde Musgo'],
           design:[{ tag:'Eti. Fourtime', cores:[] }, { tag:'Eti. Cliente', cores:[] },
-                  { tag:'DTF', cores:['001','014'] }, { tag:'Subli', cores:['S17'] },
+                  /* DEZ CORES para o DTF: com menos, elas cabem numa
+                     fileira so na largura desta suite, e a conferencia do
+                     alinhamento da pilula nao teria o que medir. */
+                  { tag:'DTF', cores:['001','014','152','012','015','059','188','233','026','041'] },
+                  { tag:'Subli', cores:['S17'] },
                   { tag:'Patch', cores:[] }, { tag:'Bordado', cores:[] }],
           grade:'adulto', tamanhos:{ M:{ q:'10', u:'50,00' } }, obs:'', img:'' },
         { ref:'SEM NADA', tecidos:[''], cores:[''], design:[],
@@ -303,6 +307,19 @@ export async function roda(F) {
       chipMeioQuadrado: +(rt.height / rch.width).toFixed(2),
       codigoADireita: !!cod && rcd.left >= rch.right - 0.5,
       corpoDoCodigo: cod ? getComputedStyle(cod.parentElement).fontSize : '(sem codigo)',
+      /* A PILULA ALINHA COM A PRIMEIRA FILEIRA DE CORES, e nao no meio
+         delas. So se pode medir com cor bastante para quebrar em duas
+         fileiras: por isso o layout de teste leva seis codigos. */
+      pilulaNoTopo: (()=>{
+        const g = cheio.querySelector('.design-grupo[data-tag="DTF"]');
+        if(!g) return null;
+        const tg = g.querySelector('.design-tag');
+        const toks = [...g.querySelectorAll('.dtf-tok')];
+        if(!tg || toks.length < 2) return null;
+        const linhas = [...new Set(toks.map(t => Math.round(t.getBoundingClientRect().top)))];
+        return { fileiras: linhas.length,
+                 desvio: +(tg.getBoundingClientRect().top - Math.min(...linhas)).toFixed(1) };
+      })(),
       /* o convite da etiqueta */
       conviteComEtiqueta: !!cheio.querySelector('.design-ph'),
       conviteSemEtiqueta: !!vazio.querySelector('.design-ph'),
@@ -325,13 +342,19 @@ export async function roda(F) {
   F.diz('  e e meio quadrado: a altura vale duas larguras  (' + r.chipMeioQuadrado + ')',
     Math.abs(r.chipMeioQuadrado - 2) <= 0.25, true);
   F.diz('  com o codigo a direita dela', r.codigoADireita, true);
-  F.diz('  em 11px, o corpo do texto dos campos', r.corpoDoCodigo, '11px');
+  F.diz('  em 10px', r.corpoDoCodigo, '10px');
+  F.diz('a pilula alinha com a PRIMEIRA fileira de cores  ('
+    + JSON.stringify(r.pilulaNoTopo) + ')',
+    !!r.pilulaNoTopo && r.pilulaNoTopo.fileiras >= 2 && Math.abs(r.pilulaNoTopo.desvio) <= 1.5, true);
   F.diz('com etiqueta marcada, o rotulo Etiqueta sai', r.conviteComEtiqueta, false);
   F.diz('  sem nenhuma, ele fica de convite', r.conviteSemEtiqueta, true);
   F.diz('o cartao de tecido preenchido se chama Tecido', r.tecCheio, [false, true]);
   F.diz('  e vazio convida a escolher', r.tecVazio, [true, true, 'Escolha o Tecido']);
 
-  /* NO PAPEL O CONVITE SOME. Ele e ordem para quem monta o orcamento. */
+  /* NO PAPEL O CONVITE CONTINUA (v3.344). Um cartao de tecido vazio nao e
+     um cartao sem nome: e um furo no pedido, e ele tem de aparecer igual
+     nos tres lugares. E sem o "+", que nao e impresso, a palavra DESIGN
+     nao pode ficar espremida contra o canto de cima do trilho. */
   await p.emulateMedia({ media: 'print' });
   r = await p.evaluate(() => {
     const vazio = [...document.querySelectorAll('.lay-modulo')]
@@ -339,14 +362,89 @@ export async function roda(F) {
       || [...document.querySelectorAll('.lay-modulo')].pop();
     const tag = document.querySelector('.lay-modulo .design-tag');
     const c = vazio && vazio.querySelector('.tec-cab-conv');
+    const cx = document.querySelector('.lay-modulo .design-caixa');
+    const rot = cx && cx.querySelector('.design-rot');
+    const rc = cx ? cx.getBoundingClientRect() : null;
+    const rr = rot ? rot.getBoundingClientRect() : null;
+    const mais = cx && cx.querySelector('.design-add');
     return { conv: c ? getComputedStyle(c).display : '(sem convite)',
              rot: vazio ? getComputedStyle(vazio.querySelector('.tec-cab-rot')).display : 'none',
-             xDaPilula: tag ? getComputedStyle(tag, '::after').display : '(sem pilula)' };
+             xDaPilula: tag ? getComputedStyle(tag, '::after').display : '(sem pilula)',
+             maisImpresso: mais ? getComputedStyle(mais).display : 'none',
+             folgaAcimaDoRotulo: rr ? +(rr.top - rc.top).toFixed(1) : null,
+             /* no papel o "+" e escondido, e o trilho fica so com o
+                rotulo: a folga lateral tem de vir do recheio dele */
+             trilho: (rc && cx) ? +(rc.right
+               - cx.querySelector('.design-wrap').getBoundingClientRect().right).toFixed(1) : null,
+             fonte: rot ? parseFloat(getComputedStyle(rot).fontSize) : null };
   });
-  F.diz('no papel o cartao vazio volta a se chamar Tecido',
-    [r.conv, r.rot !== 'none'], ['none', true]);
+  F.diz('no papel o cartao vazio continua convidando',
+    [r.conv !== 'none', r.rot], [true, 'none']);
   F.diz('  e o "x" da pilula de design nao e impresso', r.xDaPilula, 'none');
+  F.diz('  o "+" tambem nao', r.maisImpresso, 'none');
+  F.diz('  e a palavra DESIGN nao fica espremida no trilho  ('
+    + r.trilho + ' para ' + r.fonte + 'px)',
+    r.trilho !== null && (r.trilho - r.fonte) >= 6, true);
   await p.emulateMedia({ media: 'screen' });
+
+  /* O PAINEL DE CORES ESCOLHE VARIAS DE UMA VEZ (v3.344).
+     Ate a v3.343 ele fechava a cada cor: um pedido de DTF com oito cores
+     custava oito aberturas, oito posicionamentos e oito buscas. Agora ele
+     so fecha quando se clica fora, e clicar de novo na mesma cor tira, que
+     e a unica leitura possivel do segundo clique com o painel aberto. */
+  await p.evaluate(() => {
+    /* comeca de um layout com DTF e NENHUMA cor, para o painel ser a
+       unica origem do que entrar */
+    aplicaEstado({ _formato:'FOURTIME_ORCAMENTO', _versao:2, header:{ cliente:'CORES' },
+      layouts:[{ ref:'CORES', tecidos:['DRY FIT'], cores:[''],
+        design:[{ tag:'DTF', cores:[] }],
+        grade:'adulto', tamanhos:{ M:{ q:'2', u:'10,00' } }, obs:'', img:'' }],
+      anotacoes:[], ajustes:[] });
+  });
+  await p.waitForFunction(() => !!document.querySelector('.lay-modulo .design-grupo[data-tag="DTF"]'));
+  await p.click('.lay-modulo .design-wrap', { button: 'right' });
+  await p.waitForFunction(() => {
+    const m = document.getElementById('ctxCores');
+    return m && getComputedStyle(m).display === 'block';
+  }, null, { timeout: 8000 });
+  const cores = async () => p.evaluate(() =>
+    [...document.querySelectorAll('.lay-modulo .dtf-tok')].map(t => t.dataset.dtf));
+  const painelAberto = () => p.evaluate(() =>
+    getComputedStyle(document.getElementById('ctxCores')).display);
+
+  /* CLICA SO SE O PAINEL AINDA ESTIVER ABERTO. Numa versao que fecha a
+     cada escolha, o segundo clique esperaria por um botao invisivel ate
+     estourar o tempo e derrubaria o bloco inteiro: a suite tem de
+     REPROVAR na versao anterior, e nao morrer nela. */
+  const escolhe = async cod => {
+    if (await painelAberto() !== 'block') return;
+    await p.click('#ctxCores .dtf-item[data-num="' + cod + '"]');
+    await p.waitForTimeout(160);
+  };
+  await escolhe('014');
+  const passo1 = { cores: await cores(), painel: await painelAberto() };
+  await escolhe('152');
+  const passo2 = { cores: await cores(), painel: await painelAberto() };
+  /* o segundo clique na MESMA cor desfaz */
+  await escolhe('014');
+  const passo3 = { cores: await cores(), painel: await painelAberto() };
+  const marcada = await p.evaluate(() => {
+    const b = document.querySelector('#ctxCores .dtf-item[data-num="152"]');
+    return !!b && b.classList.contains('escolhida');
+  });
+  /* clicar FORA e o gesto de terminar */
+  await p.mouse.click(60, 620);
+  await p.waitForTimeout(200);
+  const depoisDeFora = await painelAberto();
+
+  F.diz('a primeira cor entra e o painel FICA aberto',
+    [passo1.cores, passo1.painel], [['014'], 'block']);
+  F.diz('  a segunda entra sem reabrir nada',
+    [passo2.cores, passo2.painel], [['014', '152'], 'block']);
+  F.diz('  clicar de novo na mesma cor tira ela',
+    [passo3.cores, passo3.painel], [['152'], 'block']);
+  F.diz('  e o painel marca o que ja esta no layout', marcada, true);
+  F.diz('clicar fora e que fecha o painel', depoisDeFora, 'none');
 
   /* devolve o documento do kit: as secoes de baixo contam com ele */
   await p.evaluate(() => aplicaEstado(JSON.parse(window.__ftKit)));

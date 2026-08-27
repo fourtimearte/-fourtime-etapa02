@@ -188,14 +188,45 @@ export async function roda(F) {
       corpo: getComputedStyle(t).fontSize,
     };
   });
+  /* A PALAVRA DESIGN NO TRILHO (v3.344). O "+" nao viaja para o arquivo
+     do cliente, e a fileira de cima da grade do trilho encolhia a zero: o
+     rotulo ficava espremido contra o canto superior, encostado nas duas
+     bordas. Sem o botao, ele ocupa o trilho inteiro. */
+  const trilho = await pc.p.evaluate(() => {
+    const cx = document.querySelector('.lay-modulo .design-caixa');
+    if (!cx) return null;
+    const rot = cx.querySelector('.design-rot');
+    if (!rot) return { semRotulo: true };
+    const w = cx.querySelector('.design-wrap');
+    const rc = cx.getBoundingClientRect(), rr = rot.getBoundingClientRect();
+    const rw = w.getBoundingClientRect();
+    return { mais: cx.querySelectorAll('.design-add').length,
+             folgaAcima: +(rr.top - rc.top).toFixed(1),
+             folgaAbaixo: +(rc.bottom - rr.bottom).toFixed(1),
+             /* A LARGURA DO TRILHO. Sem o "+" (que nao viaja), quem a
+                segura e o recheio do proprio rotulo: sem ele o trilho
+                encolhe ate a largura da letra e a palavra em pe fica
+                encostada nas duas bordas. */
+             trilho: +(rc.right - rw.right).toFixed(1),
+             fonte: parseFloat(getComputedStyle(rot).fontSize) };
+  });
+  F.diz('o "+" nao viajou para o arquivo', trilho && trilho.mais, 0);
+  F.diz('  a palavra DESIGN fica centrada no trilho  ('
+    + (trilho ? trilho.folgaAcima + '/' + trilho.folgaAbaixo : '?') + ')',
+    !!trilho && Math.abs(trilho.folgaAcima - trilho.folgaAbaixo) <= 2
+      && trilho.folgaAcima >= 6, true);
+  F.diz('  e o trilho tem folga dos dois lados dela  ('
+    + (trilho ? trilho.trilho + ' para ' + trilho.fonte + 'px' : '?') + ')',
+    !!trilho && (trilho.trilho - trilho.fonte) >= 6, true);
+
   F.diz('a ficha de cor chegou inteira no arquivo', !!ficha && !ficha.semPeca, true);
   if (ficha && !ficha.semPeca) {
     F.diz('  amostra rente a moldura  (' + ficha.folgaEsquerda + 'px)',
       ficha.folgaEsquerda <= 1.5, true);
     F.diz('  meio quadrado: a altura vale duas larguras  (' + ficha.meioQuadrado + ')',
       Math.abs(ficha.meioQuadrado - 2) <= 0.25, true);
-    F.diz('  e o codigo a direita, em 11px',
-      [ficha.codigoADireita, ficha.corpo], [true, '11px']);
+    F.diz('  e o codigo a direita, em 10px',
+      [ficha.codigoADireita, ficha.corpo], [true, '10px']);
   }
 
   const r1 = await pc.p.evaluate(() => ({

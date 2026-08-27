@@ -236,15 +236,15 @@ fila.push(async () => {
   /* A "Etiqueta" DOS ARQUIVOS ANTIGOS VIRA "Eti. Fourtime" (v3.343).
 
      Etiqueta deixou de ser uma tag so e virou cinco (Fourtime, DTF,
-     Silk, Subli, Cliente). A que existia antes era a etiqueta da casa,
-     entao e nela que ela cai, na ENTRADA: o arquivo velho abre ja no
-     vocabulario novo.
+     Silk, Subli, Cliente). A que existia antes era a etiqueta DO
+     CLIENTE, entao e nela que ela cai, na ENTRADA: o arquivo velho abre
+     ja no vocabulario novo.
 
      As amostras congeladas continuam INTOCADAS de proposito: elas sao o
      registro do que a versao antiga produzia, e reescreve-las apagaria a
      prova. Quem traduz e o teste, aqui, uma vez so e a vista de todos.
      Qualquer outra tag que mude de nome sem passar por aqui reprova. */
-  const TRADUZ = { 'Etiqueta': 'Eti. Fourtime' };
+  const TRADUZ = { 'Etiqueta': 'Eti. Cliente' };
   let traduzidas = 0;
   const migraDesign = lista => (lista || []).map(d => {
     const i = d.indexOf('[');
