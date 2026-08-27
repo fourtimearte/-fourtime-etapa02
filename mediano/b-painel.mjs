@@ -316,11 +316,13 @@ export async function roda(F) {
   await p.evaluate(() => { const bu = document.getElementById('ccBusca');
     bu.value = 'genero'; bu.dispatchEvent(new Event('input', { bubbles: true })); });
   await p.waitForTimeout(200);
-  /* 9 na tela e 17 na de papel: desde a v3.297 as duas abas governam os
-     MESMOS objetos, entao "genero" acha tarja+borda+texto dos tres dos dois lados */
+  /* 9 na tela e 18 na de papel: desde a v3.297 as duas abas governam os
+     MESMOS objetos, entao "genero" acha tarja+borda+texto dos tres dos dois
+     lados. O 18 e a lista de papel INTEIRA, que nao foi filtrada -- ela
+     ganhou "Bordas do cabecalho" na v3.352 e por isso passou de 17 para 18. */
   F.diz('a busca da aba Cores filtra so a lista dela',
     await p.evaluate(() => [document.querySelectorAll('#ccLista input[data-var]').length,
-                            document.querySelectorAll('#ccListaImp input[data-var-imp]').length]), [9, 17]);
+                            document.querySelectorAll('#ccListaImp input[data-var-imp]').length]), [9, 18]);
   await p.evaluate(() => { const bi = document.getElementById('ccBuscaImp');
     bi.value = 'genero'; bi.dispatchEvent(new Event('input', { bubbles: true })); });
   await p.waitForTimeout(200);

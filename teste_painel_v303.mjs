@@ -199,8 +199,10 @@ checa('a lista de cores rola por dentro', r.rola, true);
 checa('  e avisa que rola (sombra no pé)', r.avisaQueRola, true);
 /* v3.297: 22 -> 34. A aba Cores passou a governar os MESMOS objetos da aba
    Impressão — tarja, borda e texto de cada gênero, mais o selo do layout e
-   a barra de aviso — em vez de só a tarja. */
-checa('  o contador diz quantas cores existem', r.conta, '34 cores');
+   a barra de aviso — em vez de só a tarja.
+   v3.352: 34 -> 35, com a entrada "Bordas do cabeçalho". As linhas da grade
+   do cabeçalho saíram de --ft-borda e passaram a ter token próprio. */
+checa('  o contador diz quantas cores existem', r.conta, '35 cores');
 checa('filtrar por "genero" acha as nove', r.porGenero,
       ['--ft-genero-masc','--ft-genero-masc-bd','--ft-genero-masc-tx',
        '--ft-genero-fem','--ft-genero-fem-bd','--ft-genero-fem-tx',

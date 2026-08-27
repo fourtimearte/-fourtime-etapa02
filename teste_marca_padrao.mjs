@@ -40,9 +40,11 @@ const vai=async n=>{ await p.evaluate(x=>document.querySelector(`.cc-nav-bt[data
 const rodape=()=>p.evaluate(()=>document.getElementById('ccPendentes').textContent);
 
 console.log('\n=== 1. TODO CAMPO DE TOKEN TEM MARCA, EM TODAS AS ABAS ===');
-/* cores: 34 · impressão: 17 cores + 3 tamanhos · fontes: 4 tamanhos +
-   fonte do documento + fonte da interface + estado (B/I) */
-for(const [aba,quantos] of [['cores',34],['impressao',20],['fontes',7]]){
+/* cores: 35 · impressão: 18 cores + 3 tamanhos · fontes: 4 tamanhos +
+   fonte do documento + fonte da interface + estado (B/I)
+   v3.352: cores 34 -> 35 e impressão 17 -> 18 cores, com "Bordas do
+   cabeçalho" nas duas abas (--ft-borda-cab e --pr-borda-cab). */
+for(const [aba,quantos] of [['cores',35],['impressao',21],['fontes',7]]){
   await vai(aba);
   const r=await p.evaluate(n=>{
     const pn=document.querySelector(`.cc-painel[data-painel="${n}"]`);

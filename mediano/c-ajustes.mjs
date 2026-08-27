@@ -816,18 +816,26 @@ export async function roda(F) {
       const antes = t.value;
       t.value = 'FT-020-001M — RAGLAN MASC COM PUNHO';
       const cabe = t.scrollWidth <= t.clientWidth + 1;
+      const larg = t.clientWidth;
       t.value = antes;
       return { selo: w(m.querySelector('.lay-selo')), ref: w(t),
                tecido: w(m.querySelector('.combo-tecido textarea')),
                /* o rotulo de cada linha saiu na v3.340; o que existe agora
                   e um so, no cabecalho do cartao */
                rotulo: w(m.querySelector('.tec-cab-rot')),
-               cabe };
+               cabe, larg };
     });
     F.diz(`${media}: selo L-NN em negrito`, r.selo, '700');
     F.diz(`   referencia em negrito`, r.ref, '700');
     F.diz(`   e so elas - tecido segue normal`, [r.tecido, r.rotulo], ['400', '600']);
-    F.diz(`   um nome de tamanho normal cabe em negrito`, r.cabe, true);
+    /* NO PAPEL a referencia inteira TEM de caber: e o nome da peca, e o
+       papel e o entregavel. Na TELA ela divide a linha com a seta e com as
+       quatro bolinhas de genero (v3.352), que nao existem no papel -- ali o
+       campo e menor e uma referencia longa rola dentro dele. O que se cobra
+       na tela e um PISO de largura: se alguem espremer o campo ainda mais,
+       este numero cai e a suite avisa. */
+    if (media === 'print') F.diz(`   um nome de tamanho normal cabe em negrito`, r.cabe, true);
+    else F.diz(`   na tela o campo nao encolhe abaixo do piso`, r.larg >= 165, true);
   }
   await p.emulateMedia({ media: 'screen' });
 
@@ -882,6 +890,10 @@ export async function roda(F) {
         (cinzas[cor] = cinzas[cor] || new Set()).add(quem); };
       f.querySelectorAll('*').forEach(el => {
         if (el.closest('.lay-selo') || el.closest('.dtf-chip') || el.closest('.design-grupo')) return;
+        /* AS BOLINHAS DE GENERO (v3.352) sao tinta de genero, como a tarja:
+           cada uma tem a borda da propria cor, de proposito. Sinal, e nao
+           estrutura -- e ainda por cima nem vao para o papel. */
+        if (el.closest('.ref-gen')) return;
         if (el.closest('.ft-combo[data-genero]')) return;      /* tinta de genero */
         /* A BARRA DE AVISO e sinal, como o selo - e desde a v3.295 o traco
            dela tem cor PROPRIA no papel (--pr-aviso-bd), diferente do
@@ -931,6 +943,134 @@ export async function roda(F) {
     getComputedStyle(document.querySelector('.lay-selo')).borderTopColor);
   F.diz(`o selo tem borda propria no escuro  (claro=${seloClaro} escuro=${seloEscuro})`,
         seloEscuro !== seloClaro, true);
+
+  /* ---------------------------------------------------------------- */
+  F.secao('16. A LINHA DA REFERENCIA E A GRADE DO CABECALHO (v3.352)');
+
+  /* 16A. as quatro bolinhas de genero, na ponta da referencia */
+  r = await p.evaluate(() => {
+    const combo = document.querySelector('.combo-ref');
+    const g = combo.querySelector('.ref-gen');
+    if (!g) return { existe: false };
+    const bts = [...g.querySelectorAll('.ref-gen-bt')];
+    const antes = combo.dataset.genero || '';
+    const clica = i => bts[i].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    clica(1); const depoisF = combo.dataset.genero || '';
+    clica(0); const depoisM = combo.dataset.genero || '';
+    clica(3); const limpou = combo.dataset.genero || '';
+    if (antes) combo.dataset.genero = antes;
+    const dot = bts[0].getBoundingClientRect();
+    const ico = document.querySelector('.lay-btn svg').getBoundingClientRect();
+    /* o menu tem de continuar fechado: um clique na bolinha nao pede lista */
+    const menu = document.getElementById('pickMenu');
+    return { existe: true, quantas: bts.length, depoisF, depoisM, limpou,
+             dot: +dot.width.toFixed(1), ico: +ico.width.toFixed(1),
+             redondo: Math.abs(dot.width - dot.height) < .6,
+             menuFechado: !menu || getComputedStyle(menu).display === 'none' };
+  });
+  F.diz('as quatro bolinhas de genero estao na referencia', [r.existe, r.quantas], [true, 4]);
+  F.diz('  clicar pinta o campo de feminino', r.depoisF, 'feminino');
+  F.diz('  e de masculino', r.depoisM, 'masculino');
+  F.diz('  e a quarta limpa o genero', r.limpou, '');
+  F.diz('  sao redondas', r.redondo, true);
+  /* "tamanho similar", a pedido: a bolinha e o icone do botao ao lado nao
+     podem divergir mais que 3px */
+  F.diz(`  do tamanho do icone dos botoes  (bolinha=${r.dot} icone=${r.ico})`,
+        Math.abs(r.dot - r.ico) <= 3, true);
+  F.diz('  e clicar nelas NAO abre a lista', r.menuFechado, true);
+
+  /* 16B. os botoes da direita: mesma altura da barra, e quadrados */
+  r = await p.evaluate(() => {
+    const t = document.querySelector('.lay-topo');
+    const cx = t.querySelector('.combo-ref .ft-combo-caixa').getBoundingClientRect();
+    return [...t.querySelectorAll('.lay-info-btn,.lay-btn,.lay-del')].map(b => {
+      const x = b.getBoundingClientRect();
+      return { quadrado: Math.abs(x.width - x.height) < .6,
+               mesmaAltura: Math.abs(x.height - cx.height) < 1 };
+    });
+  });
+  F.diz('os botoes da direita sao quadrados (1:1)', r.every(x => x.quadrado), true);
+  F.diz('  e tem a altura da barra de referencia', r.every(x => x.mesmaAltura), true);
+
+  /* 16C. no papel e no arquivo do Trello as bolinhas nao existem */
+  await p.emulateMedia({ media: 'print' });
+  /* sentinela em vez de estouro: na versao anterior o elemento nao existe,
+     e a suite tem de REPROVAR nele, e nao morrer nele */
+  F.diz('no papel as bolinhas somem',
+    await p.evaluate(() => { const g = document.querySelector('.ref-gen');
+      return g ? getComputedStyle(g).display : '(sem bolinhas)'; }), 'none');
+  await p.emulateMedia({ media: 'screen' });
+  F.diz('  e o HTML do Trello nao as leva',
+    await p.evaluate(() => /class="ref-gen"/.test(gerarHTML())), false);
+
+  /* 16D. tabela sem valores: duas colunas iguais e QTD em caixa alta */
+  r = await p.evaluate(() => {
+    document.body.classList.add('sem-dinheiro');
+    const t = document.querySelector('.lay-tabela-mini');
+    const vis = e => getComputedStyle(e).display !== 'none';
+    const th = [...t.querySelectorAll('thead th')].filter(vis).map(e => e.getBoundingClientRect().width);
+    const td = [...t.querySelectorAll('tbody tr:first-child td')].filter(vis).map(e => e.getBoundingClientRect().width);
+    const qtd = [...t.querySelectorAll('thead th')].filter(vis)[1];
+    const caixa = getComputedStyle(qtd).textTransform;
+    document.body.classList.remove('sem-dinheiro');
+    return { th: th.map(x => +x.toFixed(1)), td: td.map(x => +x.toFixed(1)), caixa };
+  });
+  F.diz(`sem valores: as duas colunas medem o mesmo  ${JSON.stringify(r.th)}`,
+        r.th.length === 2 && Math.abs(r.th[0] - r.th[1]) < 1, true);
+  F.diz('  e as celulas tambem', r.td.length === 2 && Math.abs(r.td[0] - r.td[1]) < 1, true);
+  F.diz('  o titulo QTD em caixa alta', r.caixa, 'uppercase');
+
+  /* 16E. a grade do cabecalho: token proprio e espessura igual em qualquer zoom.
+
+     A conta que importa e a ESPESSURA DEPOIS DA ESCALA: o vao em px da
+     pagina ja vem multiplicado pelo zoom. Se ela ficar entre 1,00 e 1,03
+     o navegador arredonda toda divisoria para 1 pixel; com 1,05 (o que
+     havia antes) uma cai em 1 e a vizinha em 2, que era o defeito
+     relatado. Isto e um proxy MEDIDO do que foi conferido pixel a pixel
+     em 81 zooms quando a correcao foi escrita. */
+  r = await p.evaluate(async () => {
+    const area = document.querySelector('.area-paginas');
+    const cab = document.querySelector('.doc-header');
+    const zAntes = area.style.getPropertyValue('--zoom');
+    const fora = [];
+    for (const z of [1, 1.05, 1.13, 1.15, 1.24, 1.37, 0.78, 0.84, 0.7]) {
+      area.style.setProperty('--zoom', z);
+      await new Promise(s => setTimeout(s, 40));
+      const cel = [...cab.children].map(c => c.getBoundingClientRect());
+      const porY = {};
+      cel.forEach(c => { const k = c.y.toFixed(1); (porY[k] = porY[k] || []).push(c); });
+      Object.values(porY).forEach(arr => {
+        arr.sort((a, b) => a.x - b.x);
+        for (let i = 1; i < arr.length; i++) {
+          const v = arr[i].x - (arr[i - 1].x + arr[i - 1].width);
+          if (v < 1 || v > 1.03) fora.push([z, +v.toFixed(3)]);
+        }
+      });
+    }
+    if (zAntes) area.style.setProperty('--zoom', zAntes); else area.style.removeProperty('--zoom');
+    return { fora: fora.slice(0, 6), quantos: fora.length,
+             fundo: getComputedStyle(cab).backgroundColor,
+             token: !!getComputedStyle(document.documentElement).getPropertyValue('--ft-borda-cab').trim(),
+             noPainel: CC_VARS.some(v => v[0] === '--ft-borda-cab')
+                    && CC_IMPRESSAO.some(v => v[0] === '--pr-borda-cab') };
+  });
+  F.diz('a linha do cabecalho tem token proprio', r.token, true);
+  F.diz('  e ele esta nas duas abas do painel', r.noPainel, true);
+  F.diz(`  espessura igual em todo zoom  ${JSON.stringify(r.fora)}`, r.quantos, 0);
+
+  /* trocar o token muda o cabecalho e SO ele */
+  r = await p.evaluate(() => {
+    const raiz = document.documentElement;
+    const tabAntes = getComputedStyle(document.querySelector('.lay-tabela-mini td')).borderTopColor;
+    raiz.style.setProperty('--ft-borda-cab', 'rgb(1, 2, 3)');
+    const o = { cab: getComputedStyle(document.querySelector('.doc-header')).backgroundColor,
+                tab: getComputedStyle(document.querySelector('.lay-tabela-mini td')).borderTopColor,
+                tabAntes };
+    raiz.style.removeProperty('--ft-borda-cab');
+    return o;
+  });
+  F.diz('  mexer nele pinta a grade do cabecalho', r.cab, 'rgb(1, 2, 3)');
+  F.diz('  e nao encosta na linha da tabela', r.tab, r.tabAntes);
 
   /* deixa a pagina como estava: tema claro e media de tela */
   await p.emulateMedia({ media: 'screen' });
