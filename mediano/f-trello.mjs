@@ -225,8 +225,8 @@ export async function roda(F) {
       ficha.folgaEsquerda <= 1.5, true);
     F.diz('  meio quadrado: a altura vale duas larguras  (' + ficha.meioQuadrado + ')',
       Math.abs(ficha.meioQuadrado - 2) <= 0.25, true);
-    F.diz('  e o codigo a direita, em 10px',
-      [ficha.codigoADireita, ficha.corpo], [true, '10px']);
+    F.diz('  e o codigo a direita, em 9px',
+      [ficha.codigoADireita, ficha.corpo], [true, '9px']);
   }
 
   const r1 = await pc.p.evaluate(() => ({

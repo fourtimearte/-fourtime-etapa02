@@ -307,18 +307,23 @@ export async function roda(F) {
       chipMeioQuadrado: +(rt.height / rch.width).toFixed(2),
       codigoADireita: !!cod && rcd.left >= rch.right - 0.5,
       corpoDoCodigo: cod ? getComputedStyle(cod.parentElement).fontSize : '(sem codigo)',
-      /* A PILULA ALINHA COM A PRIMEIRA FILEIRA DE CORES, e nao no meio
-         delas. So se pode medir com cor bastante para quebrar em duas
-         fileiras: por isso o layout de teste leva seis codigos. */
-      pilulaNoTopo: (()=>{
+      /* A PILULA FICA CENTRADA NAS FILEIRAS DE COR, e nao alinhada com a
+         primeira. So se pode medir com cor bastante para quebrar em duas
+         fileiras: por isso o layout de teste leva dez codigos.
+         O que se compara e o centro da pilula com o centro do BLOCO de
+         cores, e nao com o da linha do cartao: quem tem de mandar aqui
+         sao as cores daquela tecnica. */
+      pilulaCentrada: (()=>{
         const g = cheio.querySelector('.design-grupo[data-tag="DTF"]');
         if(!g) return null;
         const tg = g.querySelector('.design-tag');
+        const bandeja = g.querySelector('.design-tokens');
         const toks = [...g.querySelectorAll('.dtf-tok')];
-        if(!tg || toks.length < 2) return null;
+        if(!tg || !bandeja || toks.length < 2) return null;
         const linhas = [...new Set(toks.map(t => Math.round(t.getBoundingClientRect().top)))];
+        const rt = tg.getBoundingClientRect(), rb = bandeja.getBoundingClientRect();
         return { fileiras: linhas.length,
-                 desvio: +(tg.getBoundingClientRect().top - Math.min(...linhas)).toFixed(1) };
+                 desvio: +((rt.top + rt.height / 2) - (rb.top + rb.height / 2)).toFixed(1) };
       })(),
       /* o convite da etiqueta */
       conviteComEtiqueta: !!cheio.querySelector('.design-ph'),
@@ -342,10 +347,11 @@ export async function roda(F) {
   F.diz('  e e meio quadrado: a altura vale duas larguras  (' + r.chipMeioQuadrado + ')',
     Math.abs(r.chipMeioQuadrado - 2) <= 0.25, true);
   F.diz('  com o codigo a direita dela', r.codigoADireita, true);
-  F.diz('  em 10px', r.corpoDoCodigo, '10px');
-  F.diz('a pilula alinha com a PRIMEIRA fileira de cores  ('
-    + JSON.stringify(r.pilulaNoTopo) + ')',
-    !!r.pilulaNoTopo && r.pilulaNoTopo.fileiras >= 2 && Math.abs(r.pilulaNoTopo.desvio) <= 1.5, true);
+  F.diz('  em 9px', r.corpoDoCodigo, '9px');
+  F.diz('a pilula fica CENTRADA nas fileiras de cor  ('
+    + JSON.stringify(r.pilulaCentrada) + ')',
+    !!r.pilulaCentrada && r.pilulaCentrada.fileiras >= 2
+      && Math.abs(r.pilulaCentrada.desvio) <= 1.5, true);
   F.diz('com etiqueta marcada, o rotulo Etiqueta sai', r.conviteComEtiqueta, false);
   F.diz('  sem nenhuma, ele fica de convite', r.conviteSemEtiqueta, true);
   F.diz('o cartao de tecido preenchido se chama Tecido', r.tecCheio, [false, true]);
