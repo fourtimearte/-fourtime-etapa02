@@ -492,6 +492,71 @@ r = await p.evaluate(() => { bdRender();
   return !!document.querySelector('#bdPage .bd-sumiu'); });
 checa('desenho limpo tira o aviso', r, false);
 
+/* ---- 11. GRUPO ABERTO MOSTRA TODAS AS SUAS LINHAS (v3.351) ----
+
+   O sintoma que o usuario relatou: com varias categorias abertas, cada
+   uma aparecia CORTADA na vertical, algumas linhas fatiadas ao meio, e a
+   referencia recem cadastrada simplesmente nao estava na tela.
+
+   A causa nao era o banco. Os grupos `.bd-rg` sao filhos diretos do
+   `.bd-main`, e o `.bd-main` era um flex em COLUNA de altura travada.
+   Item de flex encolhe por padrao: faltando altura, cada grupo era
+   espremido na proporcao do que faltava, e `.bd-rg{overflow:hidden}`
+   cortava o resto. Nada transbordava, entao nem barra de rolagem havia.
+
+   Este teste roda numa JANELA BAIXA de proposito: e onde falta altura. */
+await p.setViewportSize({ width: 1500, height: 620 });
+await p.evaluate(async () => {
+  /* garante lista grande: todo grupo que existe fica aberto */
+  (DB.referencias || []).forEach(v => { const o = refParse(v); _bdRefAbertos.add(o.grupo); });
+  bdRender();
+  await new Promise(s => setTimeout(s, 250));
+});
+r = await p.evaluate(() => {
+  const pg = document.getElementById('bdPage');
+  const abertos = [...pg.querySelectorAll('.bd-rg.aberto')];
+  const espremidos = [], cortadas = [];
+  abertos.forEach(g => {
+    /* a caixa do grupo esconde o que passa: se o conteudo e maior que a
+       caixa, tem linha invisivel la dentro */
+    if (g.scrollHeight - g.clientHeight > 1) espremidos.push(g.dataset.g);
+    const gr = g.getBoundingClientRect();
+    g.querySelectorAll('.bd-rf').forEach(l => {
+      const t = l.getBoundingClientRect();
+      if (t.height < 1 || t.bottom > gr.bottom + 1 || t.top < gr.top - 1)
+        cortadas.push(l.dataset.ref);
+    });
+  });
+  /* e o numero do cabecalho tem de bater com o que se ve */
+  const mentindo = abertos.filter(g => {
+    const diz = (g.querySelector('.bd-rg-conta') || {}).textContent || '';
+    const n = Number(String(diz).split('/')[1]);
+    const vistas = [...g.querySelectorAll('.bd-rf')]
+      .filter(l => l.getBoundingClientRect().height > 0).length;
+    return n && vistas !== n;
+  }).map(g => g.dataset.g);
+  return { abertos: abertos.length, espremidos, cortadas: cortadas.length, mentindo };
+});
+console.log('     ' + JSON.stringify(r).slice(0, 260));
+checa('varios grupos abertos ao mesmo tempo', r.abertos > 3, true);
+checa('  nenhum grupo esconde conteudo por dentro', r.espremidos, []);
+checa('  nenhuma linha cortada pela borda do grupo', r.cortadas, 0);
+checa('  o contador do cabecalho bate com o que se ve', r.mentindo, []);
+
+/* e a pagina, essa sim, rola: e ela quem carrega a altura extra */
+r = await p.evaluate(() => {
+  const pg = document.getElementById('bdPage');
+  const alvo = pg.querySelector('.bd-main');
+  return { rola: pg.scrollHeight - pg.clientHeight > 1,
+           semTeto: getComputedStyle(alvo).maxHeight === 'none',
+           naoEncolhe: getComputedStyle(pg.querySelector('.bd-rg')).flexShrink === '0' };
+});
+console.log('     ' + JSON.stringify(r));
+checa('a altura extra vira rolagem da pagina', r.rola, true);
+checa('  a caixa branca nao tem altura maxima', r.semTeto, true);
+checa('  e o grupo nao e um item que encolhe', r.naoEncolhe, true);
+await p.setViewportSize({ width: 1500, height: 1000 });
+
 console.log('\n' + '='.repeat(76));
 checa('nenhum erro de página', erros.length, 0);
 if (erros.length) erros.slice(0, 5).forEach(e => console.log('     ! ' + e));

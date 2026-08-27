@@ -67,6 +67,11 @@ const SUITES = [
   'teste_tecidos_tipos',
   /* v3.338 — a lupa que abre a busca da arte no Explorer */
   'teste_arte_explorer',
+  /* v3.351 — a varredura das caixas espremidas. Um flex em coluna sem
+     altura + um filho com overflow:hidden e flex-shrink no padrao corta
+     o conteudo SEM barra de rolagem: some sem deixar rastro. Roda em
+     janela baixa, em todas as secoes. */
+  'teste_caixas_espremidas',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
