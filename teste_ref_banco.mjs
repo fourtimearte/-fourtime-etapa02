@@ -346,6 +346,33 @@ console.log('     ' + JSON.stringify(r));
 checa('o mesmo codigo com outro nome e recusado', r.depois, r.antes);
 checa('  e continua havendo uma so', r.quantas, 1);
 
+/* A RECUSA TEM DE SER VISTA (v3.349).
+
+   Antes ela era um recado de 2,6 segundos no canto de baixo, com a lista
+   intacta atras dele. Quem estava olhando para a lista via o que parecia
+   nada acontecer, e a conclusao natural era "o cadastro nao funciona" --
+   quando a verdade era "essa ja esta ai". Foi exatamente esse o relato.
+
+   Agora a lista se filtra pelo codigo, o grupo dela abre, a linha pisca e
+   a explicacao vem numa janela que espera resposta: a pergunta "cade?"
+   fica respondida na tela. */
+r = await p.evaluate(() => ({
+  busca: bdBusca,
+  linhas: [...document.querySelectorAll('#bdPage .bd-rf')].map(d => d.dataset.ref),
+  piscando: !!document.querySelector('#bdPage .ft-nova'),
+  janela: (document.getElementById('ftStatusFundo') || {}).className || '',
+  titulo: (document.getElementById('ftStatusTitulo') || {}).textContent || '',
+}));
+console.log('     ' + JSON.stringify(r));
+checa('a recusa filtra a lista pelo codigo', r.busca, 'FT-060-904F');
+checa('  deixando so a referencia que ja existia', r.linhas,
+  ['FT-060-904F — TOP FEM DE TESTE']);
+checa('  com a linha dela piscando', r.piscando, true);
+checa('  e uma janela que espera resposta, dizendo o que houve',
+  [/\bon\b/.test(r.janela), r.titulo], [true, 'Essa referência já existe']);
+await p.evaluate(() => ftStatus.fecha());
+await p.waitForTimeout(200);
+
 await p.evaluate(() => {
   DB.referencias = DB.referencias.filter(v => !/9\d\dM|904F/.test(String(v)));
   bdPersiste();
