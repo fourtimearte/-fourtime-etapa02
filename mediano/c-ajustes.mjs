@@ -498,9 +498,13 @@ export async function roda(F) {
     const adu = [...t3.querySelectorAll('tbody tr')].find(x => x.className.includes('tam-adulto'));
     const g = td => { const s = getComputedStyle(td);
       return { topo: s.borderTopColor, esq: s.borderLeftColor, base: s.boxShadow }; };
-    const cab = document.querySelector('.folha-a4 .doc-header');
+    /* A LINHA DO DOCUMENTO NAO E MAIS A DO CABECALHO (v3.353): a grade do
+       cabecalho ganhou token proprio e um cinza mais claro. Quem representa
+       a linha do documento aqui e a caixa de imagem, que sempre leu
+       --doc-linha e nunca teve cor propria. */
+    const img = document.querySelector('.folha-a4 .lay-img');
     return { adu: adu ? g(adu.children[1]) : null,
-             linhaDoDocumento: cab ? getComputedStyle(cab).backgroundColor : null };
+             linhaDoDocumento: img ? getComputedStyle(img).borderTopColor : null };
   });
   F.diz('infantil: borda de topo vermelha', inf.cruz.topo, 'rgb(244, 199, 201)');
   F.diz('  divisorias internas tambem', inf.cruz.esq, 'rgb(244, 199, 201)');
@@ -901,6 +905,12 @@ export async function roda(F) {
            ela ser exatamente #C6161B; excluir pelo ELEMENTO e o criterio de
            verdade e e o mesmo ja usado para o selo. */
         if (el.closest('.warn-bar')) return;
+        /* A GRADE DO CABECALHO saiu do conjunto na v3.353. Ela ganhou token
+           proprio (--ft-borda-cab) e um cinza mais claro que o do resto do
+           documento, de proposito: o cabecalho recua e os dados do cliente
+           ficam em primeiro plano. Continua sendo cobrada -- logo abaixo,
+           com a pergunta certa para ela. */
+        if (el.closest('.doc-header')) return;
         const s = getComputedStyle(el);
         const nome = el.tagName.toLowerCase() + '.' + ((el.className && el.className.split) ? el.className.split(' ')[0] : '');
         ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'].forEach(l => {
@@ -908,7 +918,9 @@ export async function roda(F) {
         });
       });
       const cab = f.querySelector('.doc-header');
-      if (cab) conta(getComputedStyle(cab).backgroundColor, 'grade do cabeçalho');
+      const meia = f.querySelector('.hd-meia + .hd-meia');
+      const cabCor = cab ? getComputedStyle(cab).backgroundColor : '(sem cabecalho)';
+      const meiaCor = meia ? getComputedStyle(meia).borderLeftColor : '(sem celula dividida)';
       const deQuem = {};
       Object.keys(cinzas).forEach(c => deQuem[c] = [...cinzas[c]].slice(0, 6));
       /* CORTADAS DAQUI, as duas por estarem repetidas de forma mais forte em
@@ -921,12 +933,24 @@ export async function roda(F) {
              aqui ela ja esta contida na conferencia de cima: o cabecalho
              entra no mesmo conjunto de cores, entao uma cor so JA quer
              dizer tabela = cabecalho = caixa de imagem. */
-      return { quantasCores: Object.keys(cinzas).length, cores: Object.keys(cinzas), deQuem };
+      return { quantasCores: Object.keys(cinzas).length, cores: Object.keys(cinzas), deQuem,
+               cabCor, meiaCor, doc: Object.keys(cinzas)[0] };
     });
     /* quando falha, o que interessa e QUAL cor sobrou e de quem - sem isso
        a falha so diz "2" e nao da para consertar nada */
     F.diz(`claro/${media}: uma unica cor de linha no documento`
       + (r.quantasCores !== 1 ? '  ' + JSON.stringify(r.deQuem) : ''), r.quantasCores, 1);
+    /* E O CABECALHO, com a pergunta que e dele: a grade INTEIRA fala com
+       uma voz so -- o vao da grade e a borda da celula dividida (Pedido /
+       Envio) tem de ser a MESMA cor, senao a linha do cabecalho muda de
+       tom no meio do caminho. */
+    F.diz(`   a grade do cabecalho fala com uma voz so  (${r.cabCor})`,
+          r.meiaCor, r.cabCor);
+    /* NA TELA ela e mais clara que a do documento, a pedido. NO PAPEL as
+       duas leem a mesma paleta de impressao e voltam a ser uma so. */
+    if (media === 'print') F.diz('   e no papel volta a ser a linha do documento', r.cabCor, r.doc);
+    else F.diz(`   e na tela e mais clara que a do documento  (doc=${r.doc})`,
+               r.cabCor !== r.doc, true);
   }
   await p.emulateMedia({ media: 'screen' });
 
@@ -1071,6 +1095,68 @@ export async function roda(F) {
   });
   F.diz('  mexer nele pinta a grade do cabecalho', r.cab, 'rgb(1, 2, 3)');
   F.diz('  e nao encosta na linha da tabela', r.tab, r.tabAntes);
+
+  /* ---------------------------------------------------------------- */
+  F.secao('17. A PALETA COLADA VIROU PADRAO (v3.353)');
+
+  /* 17A. o cinza do cabecalho e o escolhido, e o painel o da por gravado */
+  r = await p.evaluate(() => {
+    const c = getComputedStyle(document.documentElement);
+    return { claro: (CC_PADRAO.claro['--ft-borda-cab'] || '').toLowerCase(),
+             escuro: (CC_PADRAO.escuro['--ft-borda-cab'] || '').toLowerCase(),
+             vivo: c.getPropertyValue('--ft-borda-cab').trim().toLowerCase(),
+             /* o painel so diz "tudo igual ao arquivo" se NENHUM token
+                estiver pendente: e a prova de que o padrao foi mesmo
+                atualizado, e nao so o localStorage desta maquina.
+                O contador nasce com um travessao e so e escrito quando
+                alguem conta -- chamar aqui e o que faz a pergunta valer */
+             pendentes: (typeof ccContaPendentes === 'function'
+               ? (ccContaPendentes(), (document.getElementById('ccPendentes') || {}).textContent)
+               : '(sem contador)') };
+  });
+  F.diz('o cinza do cabecalho e o escolhido', [r.claro, r.vivo], ['#e2e5ee', '#e2e5ee']);
+  F.diz('  e o escuro segue a linha do tema escuro', r.escuro, '#383e44');
+  F.diz('  o painel nao acusa pendencia', r.pendentes, 'tudo igual ao arquivo');
+
+  /* 17B. a fonte do documento: Plex de ponta a ponta, numeros em Plex Mono */
+  r = await p.evaluate(() => {
+    const fam = {};
+    document.querySelectorAll('.folha-a4, .folha-a4 *').forEach(e => {
+      const b = e.getBoundingClientRect(); if (b.width < 2 || b.height < 2) return;
+      const nome = getComputedStyle(e).fontFamily.split(',')[0].replace(/["']/g, '').trim();
+      (fam[nome] = fam[nome] || 0);
+      fam[nome]++;
+    });
+    const num = document.querySelector('.folha-a4 .lay-tabela-mini td.num');
+    return { familias: fam,
+             folha: getComputedStyle(document.querySelector('.folha-a4')).fontFamily.split(',')[0].replace(/["']/g, '').trim(),
+             numeros: num ? getComputedStyle(num).fontFamily.split(',')[0].replace(/["']/g, '').trim() : '(sem tabela)',
+             padrao: (CC_FONTE_PADRAO['--ft-fonte'] || '').replace(/["']/g, '') };
+  });
+  F.diz('a folha inteira em IBM Plex Sans', r.folha, 'IBM Plex Sans');
+  F.diz('  e nao sobrou nada em Roboto no documento', r.familias.Roboto || 0, 0);
+  /* os NUMEROS continuam monoespacados: quantidade em coluna se le com
+     digito de largura fixa, e isso e decisao de leitura, nao de familia */
+  F.diz('  os numeros da tabela seguem em IBM Plex Mono', r.numeros, 'IBM Plex Mono');
+  F.diz('  e o padrao do painel diz o mesmo', r.padrao.split(',')[0], 'IBM Plex Sans');
+
+  /* 17C. o "Copiar CSS" nao pode perder metade da escolha de fonte.
+     Escolher a fonte do documento mexe em CINCO tokens; o bloco copiado
+     levava so um, e colar de volta devolvia parte da escolha. */
+  r = await p.evaluate(async () => {
+    const sel = document.getElementById('ccFonte');
+    sel.value = "'Plus Jakarta Sans',sans-serif";
+    sel.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('ccCopiar').click();
+    await new Promise(s => setTimeout(s, 250));
+    const txt = (document.getElementById('ccSaida') || {}).value || '';
+    document.getElementById('ccReset').click();
+    await new Promise(s => setTimeout(s, 250));
+    return ['--ft-fonte', '--ft-fonte-doc-ui', '--ft-fonte-doc-mono',
+            '--ft-fonte-mod', '--ft-fonte-tab']
+      .filter(v => !new RegExp('\\n\\s*' + v + ':').test(txt));
+  });
+  F.diz('o CSS copiado leva as cinco fontes, e nao so uma', r, []);
 
   /* deixa a pagina como estava: tema claro e media de tela */
   await p.emulateMedia({ media: 'screen' });
