@@ -1266,6 +1266,41 @@ export async function roda(F) {
   F.diz('  a pilula da tecnica fica fora do retangulo', r.pilulaSolta, true);
   F.diz('  e tecnica sem cor nao desenha retangulo nenhum', r.semCorSemBloco, 'none');
 
+  /* 18B2. O CANTO SO NAS PONTAS DE VERDADE (v3.355)
+
+     Numa fileira so o canto do retangulo cai onde tem de cair: esquerda
+     da primeira cor, direita do ultimo codigo. Quebrada em duas, o
+     `overflow:hidden` recortava pelo retangulo e a curva de baixo mordia
+     a cor que ABRE a segunda fileira -- uma cor do MEIO da sequencia.
+     Quebrada, a barra perde o canto: ou ele marca comeco e fim, ou nao
+     marca nada. */
+  r = await p.evaluate(async () => {
+    const g = document.querySelector('.lay-modulo .design-grupo[data-tag="DTF"]');
+    const bl = g.querySelector('.design-tokens');
+    const raio = () => parseFloat(getComputedStyle(bl).borderTopLeftRadius);
+    const umaFila = raio();
+    /* enche ate quebrar */
+    ['021','045','078','101','133','007','012','014','016','018','020','022']
+      .forEach(c => bl.insertAdjacentHTML('beforeend', tokenHTML(c)));
+    atualizaGrupo(g);
+    await new Promise(s => requestAnimationFrame(() => requestAnimationFrame(s)));
+    await new Promise(s => setTimeout(s, 120));
+    const t = bl.querySelector('.dtf-tok');
+    const quebrou = bl.getBoundingClientRect().height > t.getBoundingClientRect().height * 1.5;
+    const variasFilas = raio();
+    /* e volta ao que era */
+    [...bl.querySelectorAll('.dtf-tok')].slice(3).forEach(x => x.remove());
+    atualizaGrupo(g);
+    await new Promise(s => requestAnimationFrame(() => requestAnimationFrame(s)));
+    await new Promise(s => setTimeout(s, 120));
+    return { umaFila, quebrou, variasFilas, voltou: raio() };
+  });
+  F.diz('numa fileira so a barra tem canto arredondado', r.umaFila > 0, true);
+  F.diz('  com muitas cores ela quebra mesmo', r.quebrou, true);
+  /* era o defeito relatado: canto arredondado no MEIO da barra */
+  F.diz('  e quebrada ela perde o canto', r.variasFilas, 0);
+  F.diz('  voltando a uma fileira, o canto volta', r.voltou > 0, true);
+
   /* 18C. o trilho e quadrado com a fileira */
   r = await p.evaluate(() => {
     const c = document.querySelector('.lay-modulo .design-caixa');
