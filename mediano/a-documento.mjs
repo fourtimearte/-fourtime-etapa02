@@ -145,8 +145,11 @@ export async function roda(F) {
      olha, e a ORDEM dos rotulos ainda e cobrada duas vezes: aqui e na
      secao do arquivo exportado. */
   F.diz('a grade tem 4 colunas e 3 fileiras', [grade.nCols, grade.filas], [4, 3]);
+  /* v3.354: a coluna 1 passou a ter TRES fileiras como as outras. A logo
+     deixou de ocupar duas celulas e a segunda virou o CNPJ da empresa, que
+     por isso entra na lista logo depois dela. */
   F.diz('  e os campos estao na ordem certa', grade.itens.map(i => i.rot),
-    ['LOGO','Cliente','CPF/CNPJ','Pedido Nº','Vendedor','Departamento','Entrega',
+    ['LOGO','CNPJ','Cliente','CPF/CNPJ','Pedido Nº','Vendedor','Departamento','Entrega',
      'Status','Embalagem','Pagamento','Total']);
 
   /* a quebra de pagina do orcamento e uma conta fixa: se o cabecalho passar
@@ -199,7 +202,7 @@ export async function roda(F) {
   const ordem = [...html.matchAll(/class="hd-campo[^"]*"><span class="hd-label">([^<]+)</g)].map(m => m[1]);
   /* o Status sumiu desta lista de proposito: ele nao tem mais rotulo */
   F.diz('a ordem dos rotulos no arquivo e a da tela', ordem,
-    ['Cliente','CPF/CNPJ','Vendedor','Departamento','Entrega','Embalagem','Pagamento','Total']);
+    ['CNPJ','Cliente','CPF/CNPJ','Vendedor','Departamento','Entrega','Embalagem','Pagamento','Total']);
   F.diz('  e a celula do status viaja sem rotulo',
     /class="hd-campo hd-obs">\s*<div class="hd-tags-caixa"/.test(html), true);
 

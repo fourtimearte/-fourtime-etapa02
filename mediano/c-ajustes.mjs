@@ -417,7 +417,10 @@ export async function roda(F) {
       anotacoes:[], ajustes:[] });
   });
   await p.waitForFunction(() => !!document.querySelector('.lay-modulo .design-grupo[data-tag="DTF"]'));
-  await p.click('.lay-modulo .design-wrap', { button: 'right' });
+  /* NA PILULA DTF, e nao no cartao (v3.354). O menu de cores deixou de
+     pertencer ao cartao inteiro e passou a pertencer a pilula da tecnica:
+     clique direito no vao vazio, no Silk ou numa etiqueta nao abre nada. */
+  await p.click('.lay-modulo .design-grupo[data-tag="DTF"] .design-tag', { button: 'right' });
   await p.waitForFunction(() => {
     const m = document.getElementById('ctxCores');
     return m && getComputedStyle(m).display === 'block';
@@ -978,10 +981,14 @@ export async function roda(F) {
     if (!g) return { existe: false };
     const bts = [...g.querySelectorAll('.ref-gen-bt')];
     const antes = combo.dataset.genero || '';
-    const clica = i => bts[i].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    clica(1); const depoisF = combo.dataset.genero || '';
-    clica(0); const depoisM = combo.dataset.genero || '';
-    clica(3); const limpou = combo.dataset.genero || '';
+    /* POR data-g, e nao por indice: a ordem das bolinhas mudou na v3.354
+       (a branca passou para a frente) e um teste que clica por posicao
+       muda de significado sem ninguem perceber */
+    const clica = gen => g.querySelector(`.ref-gen-bt[data-g="${gen}"]`)
+      .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    clica('feminino'); const depoisF = combo.dataset.genero || '';
+    clica('masculino'); const depoisM = combo.dataset.genero || '';
+    clica(''); const limpou = combo.dataset.genero || '';
     if (antes) combo.dataset.genero = antes;
     const dot = bts[0].getBoundingClientRect();
     const ico = document.querySelector('.lay-btn svg').getBoundingClientRect();
@@ -990,6 +997,8 @@ export async function roda(F) {
     return { existe: true, quantas: bts.length, depoisF, depoisM, limpou,
              dot: +dot.width.toFixed(1), ico: +ico.width.toFixed(1),
              redondo: Math.abs(dot.width - dot.height) < .6,
+             ordem: bts.map(x => x.dataset.g),
+             seta: !!combo.querySelector('.ft-combo-abrir'),
              menuFechado: !menu || getComputedStyle(menu).display === 'none' };
   });
   F.diz('as quatro bolinhas de genero estao na referencia', [r.existe, r.quantas], [true, 4]);
@@ -997,6 +1006,12 @@ export async function roda(F) {
   F.diz('  e de masculino', r.depoisM, 'masculino');
   F.diz('  e a quarta limpa o genero', r.limpou, '');
   F.diz('  sao redondas', r.redondo, true);
+  /* v3.354: a BRANCA vem primeira. Ela e o estado de partida, e comeco de
+     fileira e onde se procura o comeco de qualquer coisa. */
+  F.diz('  a branca vem primeira, na esquerda', r.ordem, ['', 'masculino', 'feminino', 'infantil']);
+  /* e a seta de abrir a lista saiu: clicar no campo ja abre, e o lugar
+     dela era o unico pedaco de largura que sobrava para o nome da peca */
+  F.diz('  a referencia nao tem mais seta de abrir', r.seta, false);
   /* "tamanho similar", a pedido: a bolinha e o icone do botao ao lado nao
      podem divergir mais que 3px */
   F.diz(`  do tamanho do icone dos botoes  (bolinha=${r.dot} icone=${r.ico})`,
@@ -1157,6 +1172,152 @@ export async function roda(F) {
       .filter(v => !new RegExp('\\n\\s*' + v + ':').test(txt));
   });
   F.diz('o CSS copiado leva as cinco fontes, e nao so uma', r, []);
+
+  /* ---------------------------------------------------------------- */
+  F.secao('18. O CNPJ NO CABECALHO E O BLOCO DE CORES (v3.354)');
+
+  /* 18A. a coluna 1 tem tres fileiras: logo, CNPJ, status */
+  r = await p.evaluate(() => {
+    const h = document.querySelector('.folha-a4 .doc-header');
+    const hr = h.getBoundingClientRect();
+    const col1 = [...h.children].filter(c => !c.classList.contains('hd-oculto')
+      && Math.abs(c.getBoundingClientRect().left - hr.left) < 2)
+      .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+      .map(c => c.className.split(' ').slice(-1)[0] || c.className);
+    const cn = h.querySelector('.hd-cnpj');
+    if (!cn) return { col1, num: '(sem celula de CNPJ)' };
+    const cr = cn.getBoundingClientRect();
+    const num = cn.querySelector('.hd-cnpj-num');
+    const nr = num.getBoundingClientRect();
+    const logo = h.querySelector('.logo-box').getBoundingClientRect();
+    /* CENTRALIZADO E O CONJUNTO, e nao o numero sozinho: a celula tem o
+       rotulo CNPJ e o numero lado a lado, e quem tem de ficar no meio e o
+       par. Medir so o numero acusaria torto um cartao que esta certo. */
+    const lb = cn.querySelector('.hd-label').getBoundingClientRect();
+    const esq = Math.min(lb.left, nr.left), dir = Math.max(lb.right, nr.right);
+    return { col1, num: num.textContent.trim(),
+             centroX: Math.abs((esq + dir) / 2 - (cr.left + cr.right) / 2) < 1.5,
+             centroY: Math.abs((nr.top + nr.bottom) / 2 - (cr.top + cr.bottom) / 2) < 1.5,
+             logoUmaFileira: Math.abs(logo.height - cr.height) < 1.5,
+             alturaCab: +(hr.height).toFixed(1) };
+  });
+  F.diz('a coluna 1 e logo, CNPJ e status, nesta ordem', r.col1, ['logo-box', 'hd-cnpj', 'hd-obs']);
+  F.diz('  com o CNPJ da Fourtime', r.num, '25.260.940/0001-40');
+  F.diz('  centralizado na horizontal', r.centroX, true);
+  F.diz('  e na vertical', r.centroY, true);
+  F.diz('  e a logo agora ocupa uma fileira so', r.logoUmaFileira, true);
+
+  /* e ele viaja: papel e arquivo do cliente */
+  await p.emulateMedia({ media: 'print' });
+  F.diz('no papel o CNPJ continua la',
+    await p.evaluate(() => { const n = document.querySelector('.hd-cnpj-num');
+      return n ? getComputedStyle(n).display !== 'none' : false; }), true);
+  await p.emulateMedia({ media: 'screen' });
+  /* pelo ELEMENTO, e nao pelo numero: o CNPJ ja aparecia no RODAPE do
+     documento, entao procurar o numero solto acha o rodape e passa mesmo
+     sem a celula nova existir */
+  F.diz('  e o arquivo do Trello leva a celula do cabecalho',
+    await p.evaluate(() => /class="hd-cnpj-num">25\.260\.940\/0001-40</.test(gerarHTML())), true);
+
+  /* 18B. as cores sao UM retangulo, sem vao e sem moldura por ficha */
+  await p.evaluate(async () => {
+    const w = document.querySelector('.lay-modulo .design-wrap');
+    w.querySelectorAll('.design-grupo').forEach(g => g.remove());
+    ['DTF', 'Silk'].forEach(t => w.appendChild(criaGrupo(t)));
+    ordenaTags(w);
+    const g = w.querySelector('.design-grupo[data-tag="DTF"]');
+    ['120', '126', '143'].forEach(c =>
+      g.querySelector('.design-tokens').insertAdjacentHTML('beforeend', tokenHTML(c)));
+    atualizaGrupo(g);
+    await new Promise(s => setTimeout(s, 120));
+  });
+  await p.waitForTimeout(220);
+  r = await p.evaluate(() => {
+    const g = document.querySelector('.lay-modulo .design-grupo[data-tag="DTF"]');
+    const bl = g.querySelector('.design-tokens');
+    const toks = [...bl.querySelectorAll('.dtf-tok')];
+    const cs = getComputedStyle(bl);
+    /* CONECTADAS: entre uma ficha e a seguinte nao pode sobrar nem um pixel */
+    let maiorVao = 0;
+    for (let i = 1; i < toks.length; i++) {
+      const a = toks[i - 1].getBoundingClientRect(), b = toks[i].getBoundingClientRect();
+      if (Math.abs(a.top - b.top) < 1) maiorVao = Math.max(maiorVao, b.left - a.right);
+    }
+    const t0 = getComputedStyle(toks[0]);
+    const pilula = g.querySelector('.design-tag').getBoundingClientRect();
+    const vazio = document.querySelector('.lay-modulo .design-grupo[data-tag="Silk"] .design-tokens');
+    return { blocoTemMoldura: parseFloat(cs.borderTopWidth) > 0,
+             blocoTemCanto: parseFloat(cs.borderTopLeftRadius) > 0,
+             gap: cs.gap,
+             fichaSemMoldura: parseFloat(t0.borderTopWidth) === 0,
+             fichaSemCanto: parseFloat(t0.borderTopLeftRadius) === 0,
+             maiorVao: +maiorVao.toFixed(2),
+             /* a pilula NAO encosta no bloco: ela e uma peca a parte */
+             pilulaSolta: bl.getBoundingClientRect().left - pilula.right > 1,
+             /* largura igual e o que faz a segunda fileira virar grade */
+             largurasIguais: new Set(toks.map(t => Math.round(t.getBoundingClientRect().width))).size === 1,
+             semCorSemBloco: vazio ? getComputedStyle(vazio).display : '(sem grupo)' };
+  });
+  F.diz('as cores formam um retangulo unico', [r.blocoTemMoldura, r.blocoTemCanto], [true, true]);
+  F.diz('  e a ficha de dentro nao tem moldura propria',
+    [r.fichaSemMoldura, r.fichaSemCanto], [true, true]);
+  F.diz('  nem vao entre uma e a seguinte', [r.gap, r.maiorVao], ['0px', 0]);
+  F.diz('  as fichas medem o mesmo, entao a 2a fileira vira grade', r.largurasIguais, true);
+  F.diz('  a pilula da tecnica fica fora do retangulo', r.pilulaSolta, true);
+  F.diz('  e tecnica sem cor nao desenha retangulo nenhum', r.semCorSemBloco, 'none');
+
+  /* 18C. o trilho e quadrado com a fileira */
+  r = await p.evaluate(() => {
+    const c = document.querySelector('.lay-modulo .design-caixa');
+    const cols = getComputedStyle(c).gridTemplateColumns.split(' ');
+    const trilho = parseFloat(cols[cols.length - 1]);
+    const fila = c.querySelector('.des-fila-eti').getBoundingClientRect().height;
+    const add = c.querySelector('.design-add').getBoundingClientRect();
+    const cr = c.getBoundingClientRect();
+    return { trilho: +trilho.toFixed(1), fila: +fila.toFixed(1),
+             /* o "+" centrado na coluna: quem manda na largura e a coluna */
+             maisCentrado: Math.abs((add.left + add.right) / 2 - (cr.right - trilho / 2)) < 2 };
+  });
+  F.diz(`o trilho tem a largura da altura da fileira  (${r.trilho} x ${r.fila})`,
+    Math.abs(r.trilho - r.fila) < 1, true);
+  F.diz('  e o "+" fica centrado nele', r.maisCentrado, true);
+
+  /* 18D. so a pilula certa abre o menu certo */
+  r = await p.evaluate(async () => {
+    const menu = document.getElementById('ctxCores');
+    const abre = async sel => {
+      menu.style.display = 'none';
+      const el = document.querySelector(sel);
+      if (!el) return '(sem pilula)';
+      const rr = el.getBoundingClientRect();
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true,
+        clientX: rr.left + 3, clientY: rr.top + 3 }));
+      await new Promise(s => setTimeout(s, 160));
+      if (getComputedStyle(menu).display !== 'block') return 'nao abriu';
+      const ab = menu.querySelector('.ft-aba.ativa');
+      return 'abriu:' + (ab ? ab.dataset.tab : '?');
+    };
+    const w = document.querySelector('.lay-modulo .design-wrap');
+    if (!w.querySelector('.design-grupo[data-tag="Subli"]')) {
+      w.appendChild(criaGrupo('Subli')); ordenaTags(w);
+      await new Promise(s => setTimeout(s, 120));
+    }
+    const o = {
+      dtf: await abre('.lay-modulo .design-grupo[data-tag="DTF"] .design-tag'),
+      subli: await abre('.lay-modulo .design-grupo[data-tag="Subli"] .design-tag'),
+      silk: await abre('.lay-modulo .design-grupo[data-tag="Silk"] .design-tag'),
+      vazio: await abre('.lay-modulo .des-fila-eti'),
+    };
+    menu.style.display = 'none';
+    return o;
+  });
+  console.log('     ' + JSON.stringify(r));
+  F.diz('a pilula DTF abre a lista de DTF', r.dtf, 'abriu:dtf');
+  F.diz('  a Subli abre a de sublimacao', r.subli, 'abriu:sb');
+  /* era ESTE o defeito: qualquer clique direito no cartao abria a lista de
+     DTF, inclusive em cima de tecnica que nao tem cor nenhuma */
+  F.diz('  Silk nao abre lista de cor', r.silk, 'nao abriu');
+  F.diz('  e o vao vazio tambem nao', r.vazio, 'nao abriu');
 
   /* deixa a pagina como estava: tema claro e media de tela */
   await p.emulateMedia({ media: 'screen' });
