@@ -24,6 +24,12 @@ sys.path.insert(0, ${JSON.stringify(DIR)})
 os.environ.setdefault("FT_DB_PATH", "/tmp/ftx-teste.db")
 os.environ["FT_VARRE_SEG"] = "0"          # o relogio nao roda no teste
 os.environ["FT_LOGIN_DESLIGADO"] = "1"
+# HOJE E 3 DE AGOSTO NESTE ARQUIVO. As fixtures vivem entre 13 e 27 de
+# agosto, e desde a v3.356 a varredura passa para a segunda de hoje tudo o
+# que ficou para tras. Sem fixar o dia, a suite mediria o calendario da
+# maquina em vez de medir a fusao do recado, e passaria hoje para falhar
+# na semana que vem. A rolagem tem secao propria, com o dia dito na mao.
+os.environ["FT_HOJE_FIXO"] = "2026-08-03"
 import server as S
 
 falhas = []
@@ -251,6 +257,62 @@ checa("a VIAPOL ficou finalizada, e uma vez so",
 checa("  com a data de conclusao gravada", d["pedidos"]["V6"]["concluidoEm"], "2026-08-13")
 checa("o pedido movido a mao virou planManual", d["pedidos"]["Z9"]["planManual"], True)
 checa("  e o que nasceu na data da entrega, nao", d["pedidos"]["V6"]["planManual"], False)
+
+# ==================================================================
+#  A SEMANA QUE ACABOU NAO SEGURA O QUE NAO FOI FEITO  (v3.356)
+#
+#  A regra roda no _atv_rola, que recebe o dia de hoje de fora: regra que
+#  depende do calendario da maquina passaria hoje e falharia na semana
+#  que vem sem nada ter mudado.
+# ==================================================================
+print("\\n=== A ROLAGEM DA SEMANA QUE ACABOU (v3.356) ===")
+checa("a segunda de 01/09 e 31/08", S._atv_segunda_iso("2026-09-01"), "2026-08-31")
+checa("  a de 27/08 e 24/08", S._atv_segunda_iso("2026-08-27"), "2026-08-24")
+checa("  e lixo nao vira data", S._atv_segunda_iso("semana"), "")
+
+def reg(**k):
+    base = {"etapa": "corte", "planManual": False, "sumiu": False}
+    base.update(k); return base
+
+docs = {"2026-08": {"pedidos": {
+          "A": reg(id="A", plan="2026-08-27", etapa="costura"),
+          "B": reg(id="B", plan="2026-08-27", etapa="finalizado"),
+          "C": reg(id="C", plan="2026-09-02"),
+          "D": reg(id="D", plan="2026-08-20", etapa="silk", planManual=True),
+          "E": reg(id="E", plan="2026-08-25", sumiu=True),
+          "F": reg(id="F", plan="2026-08-31")}},
+        "2026-09": {"pedidos": {}}}
+pega = lambda m: docs.setdefault(m, {"pedidos": {}})
+n = S._atv_rola(docs, pega, "2026-09-01")
+achar = lambda i: next((p for d in docs.values() for k, p in d["pedidos"].items() if k == i), None)
+checa("rolam so os dois que ficaram para tras", n, 2)
+checa("  o nao finalizado vai para a segunda de hoje", achar("A")["plan"], "2026-08-31")
+checa("  e guarda de onde saiu", achar("A")["rolou"], ["2026-08-27"])
+checa("  o finalizado fica onde acabou", achar("B")["plan"], "2026-08-27")
+checa("  quem esta na semana que vem nao se mexe", achar("C")["plan"], "2026-09-02")
+# A PROMESSA DO planManual e "a varredura nao arrasta este pedido atras da
+# data de entrega do orcamento", e nao "ele fica preso numa semana que
+# acabou". Sem isto, quem foi planejado a mao e nao terminou continua
+# sumindo da tela, que era o defeito relatado.
+checa("  o planejado a mao tambem rola", achar("D")["plan"], "2026-08-31")
+checa("  e continua sendo manual", achar("D")["planManual"], True)
+checa("  quem saiu da pasta fica quieto", achar("E")["plan"], "2026-08-25")
+checa("  e quem ja estava na segunda nao ganha marca", achar("F").get("rolou"), None)
+
+checa("rodar de novo no mesmo dia nao mexe em nada", S._atv_rola(docs, pega, "2026-09-01"), 0)
+
+# uma semana depois, o que continua aberto rola outra vez e o registro
+# passa a lembrar dos DOIS enderecos: um aviso em cada semana por onde ele
+# passou sem ser feito
+S._atv_rola(docs, pega, "2026-09-08")
+checa("na semana seguinte ele rola de novo", achar("A")["plan"], "2026-09-07")
+checa("  lembrando dos dois lugares onde esteve",
+      achar("A")["rolou"], ["2026-08-27", "2026-08-31"])
+checa("  e muda de arquivo mensal junto", "A" in docs["2026-09"]["pedidos"], True)
+checa("  saindo do mes antigo", "A" in docs["2026-08"]["pedidos"], False)
+
+# o campo e da VARREDURA, e nao da tela: a tela nao pode escreve-lo
+checa("a tela nao pode mexer no rolou", "rolou" in S._ATV_CAMPOS_DA_TELA, False)
 
 print("\\n" + "=" * 76)
 if falhas:

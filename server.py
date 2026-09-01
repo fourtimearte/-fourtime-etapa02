@@ -17,7 +17,7 @@
 #  servido em "/" — editor completamente online.
 # ============================================================
 import os, re, json, glob, sqlite3, threading, hashlib, uuid, copy, hmac, time, secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -3646,6 +3646,36 @@ def _atv_mes_de_iso(iso):
     return str(iso or "")[:7] if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(iso or "")) else ""
 
 
+# O SERVIDOR PENSA EM UTC E A FABRICA TRABALHA EM BRASILIA.
+# Tres horas de diferenca nao importam para carimbo de gravacao, mas
+# importam para a pergunta "que dia e hoje": as 22h de domingo em Goiania
+# o relogio UTC ja marca segunda, e a virada da semana aconteceria com a
+# fabrica ainda fechada, um dia antes do combinado.
+FT_FUSO_HORAS = int(os.environ.get("FT_FUSO_HORAS", "-3") or "-3")
+
+
+def _atv_hoje_br():
+    """Hoje, no fuso da fabrica, em AAAA-MM-DD.
+
+       O FT_HOJE_FIXO existe pelo mesmo motivo que o ATV.hojeFixo da tela:
+       uma regra que depende do calendario da maquina nao pode ser
+       conferida, porque o teste passaria hoje e falharia na semana que vem
+       sem nada ter mudado. Em producao ele nao existe e vale o relogio."""
+    fixo = os.environ.get("FT_HOJE_FIXO") or ""
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", fixo):
+        return fixo
+    return (datetime.now(timezone.utc)
+            + timedelta(hours=FT_FUSO_HORAS)).strftime("%Y-%m-%d")
+
+
+def _atv_segunda_iso(iso):
+    """A segunda-feira da semana de uma data AAAA-MM-DD."""
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(iso or "")):
+        return ""
+    d = datetime(int(iso[:4]), int(iso[5:7]), int(iso[8:10]))
+    return (d - timedelta(days=d.weekday())).strftime("%Y-%m-%d")
+
+
 def _atv_iso_de_br(br):
     """13/08/2026 -> 2026-08-13. Vazio quando nao da."""
     m = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", str(br or "").strip())
@@ -3984,6 +4014,51 @@ def _atv_le_orcamento(fid, nome, dia):
             "subPecas": int(sp), "perPecas": int(pp), "total": int(sp) + int(pp)}
 
 
+def _atv_rola(docs, pega, hoje_iso=""):
+    """Passa para a segunda-feira de hoje tudo o que nao foi feito e ficou
+       numa semana que ja acabou. Devolve quantos rolaram.
+
+       `hoje_iso` existe para o teste dizer que dia e: uma regra que
+       depende do calendario da maquina nao pode ser conferida."""
+    seg_hoje = _atv_segunda_iso(hoje_iso or _atv_hoje_br())
+    if not seg_hoje:
+        return 0
+    agora_iso = datetime.now(timezone.utc).isoformat()
+    rolados = 0
+    # duas passadas: a primeira pode ABRIR um mes novo (quando a segunda de
+    # hoje cai fora dos que ja estavam abertos), e o que estiver la dentro
+    # tambem tem direito a rolar
+    for _passe in (1, 2):
+        for mes in list(docs.keys()):
+            for pid_reg, p in list((docs[mes].get("pedidos") or {}).items()):
+                plan = str(p.get("plan") or "")
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", plan):
+                    continue
+                if plan >= seg_hoje:
+                    continue
+                if p.get("etapa") == "finalizado" or p.get("sumiu"):
+                    continue
+                hist = p.get("rolou")
+                if not isinstance(hist, list):
+                    hist = []
+                if plan not in hist:
+                    hist.append(plan)
+                # a lista e curta de proposito: ela existe para desenhar o
+                # aviso nas semanas passadas, nao para ser um diario
+                p["rolou"] = [x for x in hist if isinstance(x, str)][-12:]
+                p["plan"] = seg_hoje
+                p["rolouEm"] = agora_iso
+                rolados += 1
+                destino = _atv_mes_de_iso(seg_hoje)
+                if destino and destino != mes:
+                    try:
+                        pega(destino)["pedidos"][pid_reg] = \
+                            docs[mes]["pedidos"].pop(pid_reg)
+                    except Exception:
+                        pass
+    return rolados
+
+
 def _atv_varre(mes_alvo, teto=400):
     """Le o Drive e encaixa o que achou nos indices mensais.
 
@@ -4154,6 +4229,33 @@ def _atv_varre(mes_alvo, teto=400):
             except Exception:
                 pass
 
+    # =================================================================
+    #  A SEMANA QUE ACABOU NAO SEGURA O QUE NAO FOI FEITO  (v3.356)
+    #
+    #  A regra cabe numa linha: nao finalizado e com planejamento ANTES da
+    #  segunda-feira de hoje vai para a segunda-feira de hoje.
+    #
+    #  Ela ja quer dizer "so depois da semana terminar", sem precisar de
+    #  nenhuma condicao a mais: dentro da semana corrente todo plan dela e
+    #  maior ou igual a segunda, entao nada se mexe. E um pedido tres
+    #  semanas atrasado cai direto na segunda de hoje, que e onde o
+    #  trabalho esta -- nao adianta arrasta-lo de semana em semana ate
+    #  chegar aqui.
+    #
+    #  ELA VALE TAMBEM PARA O planManual. A promessa daquele campo e "a
+    #  varredura nao arrasta este pedido atras da data de entrega do
+    #  orcamento", e nao "este pedido fica preso numa semana que ja
+    #  acabou". Sem isto, quem foi planejado a mao e nao terminou continua
+    #  sumindo da tela, que era justamente o defeito.
+    #
+    #  ONDE ELE ESTAVA FICA REGISTRADO, e nao copiado. O registro continua
+    #  sendo UM, com UM plan; ele so ganha em `rolou` a lista dos enderecos
+    #  de onde saiu. A semana antiga DESENHA o aviso a partir disso. Gravar
+    #  uma linha fantasma de verdade seria recriar a copia que a v3.326
+    #  existiu para matar.
+    # =================================================================
+    rolados = _atv_rola(docs, pega)
+
     carimbos = {}
     for mes in sorted(docs.keys()):
         with _atv_trava(mes):
@@ -4163,7 +4265,8 @@ def _atv_varre(mes_alvo, teto=400):
             except Exception:
                 pass
     return {"criados": criados, "atualizados": atualizados, "sumidos": sumidos,
-            "abertos": abertos, "carimbos": carimbos, "meses": sorted(docs.keys())}
+            "abertos": abertos, "rolados": rolados,
+            "carimbos": carimbos, "meses": sorted(docs.keys())}
 
 
 @app.post("/api/ft/atv/varrer")

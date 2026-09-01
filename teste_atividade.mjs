@@ -49,7 +49,14 @@ const srv = spawn('python3', ['-m', 'uvicorn', 'server:app', '--host', '127.0.0.
   env: { ...process.env,
     FT_DB_PATH: join(mkdtempSync(join(tmpdir(), 'ftatv-')), 't.db'),
     FT_TOKEN: '2026@Fourtime', FT_ADMIN_TOKEN: '21560110',
-    FT_DRIVE_CREDENCIAIS: '', FT_LOGIN_DESLIGADO: '' },
+    FT_DRIVE_CREDENCIAIS: '', FT_LOGIN_DESLIGADO: '',
+    /* O SERVIDOR TAMBEM PRECISA SABER QUE DIA E (v3.356). A tela ja tinha
+       o ATV.hojeFixo; desde que a varredura passa para a segunda de hoje
+       tudo o que ficou para tras, o relogio do servidor decide o resultado
+       tanto quanto o da tela. Sem fixar os dois, esta suite mediria o
+       calendario da maquina: passaria hoje e falharia na semana que vem
+       sem nada ter mudado. */
+    FT_HOJE_FIXO: '2026-08-19' },
   stdio: ['ignore', 'pipe', 'pipe'] });
 srv.stderr.on('data', d => { const t = String(d);
   if (/Error|Traceback/.test(t)) console.log('  [servidor] ' + t.slice(0, 300)); });
@@ -299,11 +306,16 @@ checa('  cada um no dia da entrega dele', r.planos,
 checa('  950 pecas somadas', r.pecas, 950);
 checa('  e nenhum nasce marcado a mao', r.manual, 0);
 checa('  o departamento veio do cabecalho', r.dep, 'Sublimação');
-/* O INDICE E UM SO. Esta e a afirmacao que a arquitetura inteira existe
-   para poder fazer: nao ha arquivo de semana, ha arquivo de mes. */
+/* O INDICE E MENSAL. Esta e a afirmacao que a arquitetura inteira existe
+   para poder fazer: nao ha arquivo de semana, ha arquivo de mes.
+   Sao DOIS meses e nao um desde a v3.356: o mes da semana aberta e o
+   seguinte. O aviso de "movido para a proxima semana" e desenhado a
+   partir do registro DEPOIS de ele ter rolado, e um pedido que rolou do
+   fim de agosto para setembro passa a morar no arquivo de setembro. O que
+   nao existe, e continua nao existindo, e arquivo de SEMANA. */
 r = await p.evaluate(() => Object.keys(ATV.meses));
-checa('a semana veio de UM indice mensal, nao de um arquivo de semana',
-  r, ['2026-08']);
+checa('a semana veio de indice MENSAL, nao de arquivo de semana',
+  r, ['2026-08', '2026-09']);
 
 console.log('\n=== 3. MUDAR A ETAPA MANDA UM RECADO, NAO MANDA O ARQUIVO ===');
 /* O ponto da virada. Se o editor mandasse a semana inteira, duas maquinas

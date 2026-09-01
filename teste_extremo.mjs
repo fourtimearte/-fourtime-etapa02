@@ -77,7 +77,14 @@ const srv = spawn('python3', ['-m', 'uvicorn', 'server:app', '--host', '127.0.0.
   env: { ...process.env,
     FT_DB_PATH: join(mkdtempSync(join(tmpdir(), 'ftx-')), 't.db'),
     FT_TOKEN: S_EQUIPE, FT_ADMIN_TOKEN: S_ADMIN,
-    FT_DRIVE_CREDENCIAIS: '', FT_LOGIN_DESLIGADO: '' },
+    FT_DRIVE_CREDENCIAIS: '', FT_LOGIN_DESLIGADO: '',
+    /* O SERVIDOR TAMBEM PRECISA SABER QUE DIA E (v3.356). A tela ja tinha
+       o ATV.hojeFixo; desde que a varredura passa para a segunda de hoje
+       tudo o que ficou para tras sem ser finalizado, o relogio do servidor
+       decide o resultado tanto quanto o da tela. Sem fixar os dois, esta
+       suite mediria o calendario da maquina: passaria hoje e falharia na
+       semana que vem sem nada ter mudado. */
+    FT_HOJE_FIXO: '2026-08-19' },
   stdio: ['ignore', 'pipe', 'pipe'] });
 srv.stderr.on('data', d => { const t = String(d);
   if (/Error|Traceback/.test(t)) console.log('  [servidor] ' + t.slice(0, 300)); });
@@ -1070,7 +1077,12 @@ r = await pEd.evaluate(() => ({ linhas: ATV.linhas.length,
 console.log('     ' + JSON.stringify(r));
 checa('os seis pedidos entraram sozinhos, um por dia', r.linhas, 6);
 checa('  950 pecas somadas', r.pecas, 950);
-checa('  e a semana saiu de UM indice mensal', r.indices, ['2026-08']);
+/* DOIS meses e nao um desde a v3.356: o da semana aberta e o SEGUINTE. O
+   aviso de "movido para a proxima semana" e desenhado a partir do registro
+   depois de ele ter rolado, e quem rola do fim de agosto passa a morar no
+   arquivo de setembro. O que nao existe, e continua nao existindo, e
+   arquivo de SEMANA. */
+checa('  e a semana saiu de indice MENSAL', r.indices, ['2026-08', '2026-09']);
 
 titulo('7a. O RECADO, E NENHUM BOTAO DE SALVAR');
 RECADOS = [];
@@ -1151,6 +1163,85 @@ checa('entrega em 18 com hoje 19: vencido', r.vencido, true);
 checa('  entrega em 21: no prazo', r.noPrazo, false);
 checa('e o vencido continua sabendo em que etapa esta',
   [r.etapaDoVencido, r.tarja], ['prensa', true]);
+
+titulo('7ac. A SEMANA QUE ACABOU NAO SEGURA O QUE NAO FOI FEITO');
+/* A REGRA, do lado da tela. O servidor ja tem a dele no
+   teste_indice_mensal: aqui o assunto e o AVISO que fica no lugar de onde
+   o pedido saiu, e o que ele NAO pode fazer -- entrar em conta e aceitar
+   clique.
+
+   Os dados entram como o servidor os deixa DEPOIS de rolar: o `plan` ja e
+   a segunda nova e o `rolou` guarda o endereco antigo. Montar assim, e
+   nao chamando a varredura, e o que deixa a conferencia falar de uma
+   coisa so. */
+r = await pEd.evaluate(async () => {
+  const guarda = JSON.parse(JSON.stringify(ATV.meses));
+  ATV.hojeFixo = '2026-09-01';        /* terca; a semana de 24 a 29 acabou */
+  ATV.meses = { '2026-08': { carimbo: 'x', pedidos: {
+      A: { id: 'A', pedido: 'PD004100', cliente: 'ACAI NO COCO LTDA',
+           departamento: 'Comercial', entrega: '27/08/2026',
+           plan: '2026-08-31', rolou: ['2026-08-27'], etapa: 'costura',
+           planManual: false, total: 120, sub: 40, per: 80, sumiu: false },
+      B: { id: 'B', pedido: 'PD004101', cliente: 'PRONTO LTDA',
+           departamento: 'Comercial', entrega: '27/08/2026',
+           plan: '2026-08-27', etapa: 'finalizado',
+           total: 80, sub: 80, per: 0, sumiu: false } } },
+    '2026-09': { carimbo: 'x', pedidos: {} } };
+  const olha = sem => {
+    ATV.semana = sem; atvMonta();
+    const c = atvContas();
+    return { mostra: ATV.linhas.map(l => (l.rolado ? 'aviso:' : '') + l.pedido),
+             conta: ATV.todasDaSemana.map(l => l.pedido),
+             pecas: c.pecas, pedidos: c.pedidos };
+  };
+  const passada = olha('2026-08-24');
+  const atual = olha('2026-08-31');
+  const seguinte = olha('2026-09-07');
+  /* de volta para a semana antiga, para olhar o DESENHO do aviso */
+  olha('2026-08-24');
+  await new Promise(s => setTimeout(s, 60));
+  const el = document.querySelector('.atv-linha[data-id="A"]');
+  const desenho = el ? {
+    classe: /(^| )rolou( |$)/.test(el.className),
+    opacidade: getComputedStyle(el).opacity,
+    dia: (el.closest('.atv-lista') || {}).dataset ? el.closest('.atv-lista').dataset.lista : '',
+    texto: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 70),
+    /* INERTE: sem puxador de arrastar, sem data clicavel, sem chip
+       clicavel. O aviso carrega o MESMO id do pedido de verdade, e o
+       recado acha o registro por id: um clique aqui editaria o pedido
+       vivo, na semana nova. */
+    puxador: !!el.querySelector('.atv-puxador'),
+    dataClicavel: !!el.querySelector('.atv-cal-bt'),
+    chipClicavel: !!el.querySelector('.atv-chip[data-id]'),
+  } : null;
+  /* e voltando para a semana antiga com o pedido TRAZIDO de volta, o
+     aviso some sozinho, sem ninguem limpar campo nenhum */
+  ATV.meses['2026-08'].pedidos.A.plan = '2026-08-27';
+  ATV.semana = '2026-08-24'; atvMonta();
+  const devolvido = ATV.linhas.map(l => (l.rolado ? 'aviso:' : '') + l.pedido);
+  ATV.meses = guarda; ATV.hojeFixo = '2026-08-19';
+  ATV.semana = '2026-08-17'; atvMonta();
+  return { passada, atual, seguinte, desenho, devolvido };
+});
+console.log('     ' + JSON.stringify(r).slice(0, 460));
+checa('a semana antiga mostra o aviso no lugar do pedido',
+  r.passada.mostra, ['aviso:PD004100', 'PD004101']);
+/* ELE NAO CONTA PECA. Era o pedido: o aviso e nota, e nota nao e trabalho
+   desta semana. As contas saem de `todasDaSemana`, e o aviso nao entra la. */
+checa('  e nao entra na conta de pecas nem de pedidos',
+  [r.passada.conta, r.passada.pecas, r.passada.pedidos], [['PD004101'], 80, 1]);
+checa('o pedido de verdade esta na semana nova', r.atual.mostra, ['PD004100']);
+checa('  contando as 120 pecas la', r.atual.pecas, 120);
+checa('e a semana da frente nao herda nada', r.seguinte.mostra, []);
+checa('o aviso fica no DIA de onde saiu', (r.desenho || {}).dia, '2026-08-27');
+checa('  apagado', (r.desenho || {}).opacidade, '0.45');
+checa('  dizendo para onde foi', /ATRASADO - MOVIDO PARA PRÓXIMA SEMANA/
+  .test((r.desenho || {}).texto || ''), true);
+checa('  e sem nada clicavel: puxador, data e chip',
+  [(r.desenho || {}).puxador, (r.desenho || {}).dataClicavel, (r.desenho || {}).chipClicavel],
+  [false, false, false]);
+checa('trazendo o pedido de volta, o aviso some sozinho',
+  r.devolvido, ['PD004100', 'PD004101']);
 
 titulo('7d. ARRASTAR MUDA O DIA, E SOLTA UM RECADO');
 /* o aviso de sucesso da varredura cobre o canto e engole o pointerdown:
