@@ -307,26 +307,120 @@ console.log('\n=== 10. E FUNCIONA DENTRO DO ARQUIVO GERADO ===');
   checa('  o "copiar layout" do editor NAO viajou', q.copiar, 0);
   checa('  e na linha ficam so o selo, a referencia e a lupa',
     q.naLinha, ['lay-selo', 'ft-combo combo-ref', 'lay-arte-bt']);
-  /* O CLIQUE. O protocolo não abre nada neste Linux, mas o que se cobra é
-     que o botão TENTE navegar para o endereço certo: sem o ouvinte ligado,
-     nada acontece e o teste reprova. */
+  /* O CLIQUE PRECISA DEIXAR RASTRO (v3.357).
+
+     Antes esta conferencia era "clicar nao lanca erro", e ela passava com
+     ouvinte nenhum ligado: um botao morto tambem nao lanca erro. Era por
+     isso que a lupa podia estar quebrada no arquivo do cliente sem a
+     suite notar.
+
+     O `search-ms:` nao abre nada neste Linux e nao ha como observar a
+     navegacao. O que se observa e o RECADO que o proprio botao mostra:
+     ele so aparece se o ouvinte rodou ate o fim. */
   q = await pa.evaluate(async () => {
-    let pedido = '';
-    const orig = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
-    /* location.href não é substituível; o que dá para observar é a
-       navegação sendo iniciada */
     const bt = document.querySelector('.lay-modulo .lay-arte-bt');
-    let tem = false;
-    try { tem = typeof bt.onclick === 'function' || true; } catch (e) {}
-    /* o title já provou o termo; aqui basta saber que há ouvinte de clique
-       registrado, e isso se vê pelo efeito: clicar não pode lançar erro */
+    let pedido = '';
     try { bt.click(); pedido = 'ok'; } catch (e) { pedido = String(e.message); }
-    return { pedido, tem };
+    await new Promise(s => setTimeout(s, 400));
+    const rec = [...document.body.children].reverse().find(e =>
+      e.tagName === 'DIV' && /position:\s*fixed/.test(e.getAttribute('style') || '')
+      && /Procurando/.test(e.textContent || ''));
+    return { pedido, recado: rec ? rec.textContent : '(sem recado)',
+             aceso: rec ? getComputedStyle(rec).opacity : '' };
   });
   console.log('     ' + JSON.stringify(q));
   checa('clicar na lupa do arquivo não quebra nada', q.pedido, 'ok');
+  checa('  e o clique deixa rastro: o ouvinte rodou',
+    /Procurando "team master 040826"/.test(q.recado), true);
+  checa('  dizendo que o nome tambem foi copiado',
+    /copiado/.test(q.recado), true);
+  checa('  e o recado esta visivel', q.aceso, '1');
   checa('  e o arquivo não teve erro nenhum', errArq, []);
   await pa.close();
+}
+
+/* ==================================================================
+   9. DENTRO DA PREVIA DO TRELLO, A LUPA DIZ POR QUE NAO ABRE (v3.357)
+
+   Navegador nenhum deixa um iframe abrir programa externo. Aberto pela
+   previa do Trello, o clique na lupa nao produzia NADA -- nem Explorer,
+   nem recado -- e um botao que nao responde se le como quebrado.
+   ================================================================== */
+{
+  const { writeFileSync } = await import('fs');
+  const { tmpdir } = await import('os');
+  const { join } = await import('path');
+  const alvoArq = join(tmpdir(), 'ft_arte_export.html');
+  const quadro = join(tmpdir(), 'ft_arte_quadro.html');
+  writeFileSync(quadro, '<!doctype html><meta charset="utf-8">'
+    + '<iframe src="ft_arte_export.html" style="width:1300px;height:900px;border:0"></iframe>');
+  const pq = await b.newPage({ viewport: { width: 1400, height: 1000 } });
+  const errQ = [];
+  pq.on('pageerror', e => errQ.push(String(e).slice(0, 200)));
+  await pq.goto(pathToFileURL(quadro).href, { waitUntil: 'domcontentloaded' });
+  await pq.waitForTimeout(900);
+  const f = pq.frames().find(x => /ft_arte_export/.test(x.url()));
+  const r9 = f ? await f.evaluate(async () => {
+    const bt = document.querySelector('.lay-modulo .lay-arte-bt');
+    if (!bt) return { titulo: '(sem lupa)', recado: '' };
+    const titulo = bt.title;
+    bt.click();
+    await new Promise(s => setTimeout(s, 400));
+    const rec = [...document.body.children].reverse().find(e =>
+      e.tagName === 'DIV' && /position:\s*fixed/.test(e.getAttribute('style') || ''));
+    return { titulo, recado: rec ? rec.textContent : '(sem recado)' };
+  }) : { titulo: '(sem quadro)', recado: '' };
+  console.log('     ' + JSON.stringify(r9).slice(0, 260));
+  checa('no quadro, a lupa avisa antes mesmo do clique',
+    /baixe o arquivo/.test(r9.titulo), true);
+  checa('  e o clique explica em vez de nao fazer nada',
+    /o Explorer nao abre daqui/.test(r9.recado), true);
+  checa('  copiando o nome para colar na busca',
+    /Copiei "team master 040826"/.test(r9.recado), true);
+  checa('  sem erro nenhum dentro do quadro', errQ, []);
+  await pq.close();
+}
+
+/* ==================================================================
+   10. A PASTA CONFIGURADA VIAJA COM O ARQUIVO (v3.357)
+
+   O editor deixa dizer onde o Drive esta montado e guarda a escolha. O
+   arquivo exportado ignorava isso e mandava sempre "G:\Meu Drive": numa
+   maquina com o Drive em outra letra, o Explorer abria procurando numa
+   pasta que nao existe.
+   ================================================================== */
+{
+  const { writeFileSync } = await import('fs');
+  const { tmpdir } = await import('os');
+  const { join } = await import('path');
+  const alvo2 = join(tmpdir(), 'ft_arte_pasta.html');
+  writeFileSync(alvo2, await p.evaluate(() => {
+    artePastaGrava('H:\\Drive da Fourtime');
+    return gerarHTML();
+  }));
+  const pp = await b.newPage({ viewport: { width: 1400, height: 1000 } });
+  const errP = [];
+  pp.on('pageerror', e => errP.push(String(e).slice(0, 200)));
+  await pp.goto(pathToFileURL(alvo2).href, { waitUntil: 'domcontentloaded' });
+  await pp.waitForTimeout(800);
+  const r10 = await pp.evaluate(async () => {
+    const bt = document.querySelector('.lay-modulo .lay-arte-bt');
+    if (!bt) return { titulo: '(sem lupa)', recado: '' };
+    const titulo = bt.title;
+    bt.click();
+    await new Promise(s => setTimeout(s, 400));
+    const rec = [...document.body.children].reverse().find(e =>
+      e.tagName === 'DIV' && /position:\s*fixed/.test(e.getAttribute('style') || ''));
+    return { titulo, recado: rec ? rec.textContent : '(sem recado)' };
+  });
+  console.log('     ' + JSON.stringify(r10).slice(0, 220));
+  checa('a pasta escolhida na maquina viaja no arquivo',
+    r10.titulo, 'Procurar "team master 040826" em H:\\Drive da Fourtime');
+  checa('  e e ela que o clique procura',
+    /em H:\\Drive da Fourtime/.test(r10.recado), true);
+  checa('  sem erro nenhum', errP, []);
+  await pp.close();
+  await p.evaluate(() => artePastaGrava(''));   /* devolve o padrao */
 }
 
 console.log('\n' + '='.repeat(76));
