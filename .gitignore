@@ -5,3 +5,4 @@ __pycache__/
 /package-lock.json
 /shot-a4-*.png
 /shot-atv-*.png
+.tess

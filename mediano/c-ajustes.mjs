@@ -842,7 +842,14 @@ export async function roda(F) {
        na tela e um PISO de largura: se alguem espremer o campo ainda mais,
        este numero cai e a suite avisa. */
     if (media === 'print') F.diz(`   um nome de tamanho normal cabe em negrito`, r.cabe, true);
-    else F.diz(`   na tela o campo nao encolhe abaixo do piso`, r.larg >= 165, true);
+    /* O PISO CAIU DE 165 PARA 150 NA v3.359, e por uma decisao, nao por
+       descuido. A lupa da arte passou a existir tambem SEM nome (apagada,
+       para abrir o painel de ler ou digitar), e ela ocupa o lugar dela na
+       linha. Medido: com nome o campo ja era 153px na v3.358 e continua
+       153; sem nome era 188 e virou 153. Ou seja, a linha parou de PULAR
+       35px no instante em que um nome e preenchido, que era o que
+       acontecia antes. O piso agora cobre os dois casos. */
+    else F.diz(`   na tela o campo nao encolhe abaixo do piso`, r.larg >= 150, true);
   }
   await p.emulateMedia({ media: 'screen' });
 

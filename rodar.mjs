@@ -77,6 +77,10 @@ const SUITES = [
      ou errada. Um fetch pendurado deixava o cadeado da sincronizacao
      fechado para sempre e so o F5 recuperava. */
   'teste_sync_travado',
+  /* v3.359 - o nome da arte lido da propria imagem (OCR) ou digitado a
+     mao. Nada aqui depende da internet: prova o desenho em volta do
+     motor, inclusive o que acontece quando o CDN nao vem. */
+  'teste_arte_ocr',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor

@@ -108,7 +108,7 @@ console.log('     ' + JSON.stringify(r));
 checa('o nome do arquivo foi guardado na imagem', r.guardou, 'team master 040826 01.png');
 checa('  e o botão aparece', r.botaoAparece, true);
 checa('  dizendo o que vai procurar e onde',
-  r.titulo, 'Procurar "team master 040826" em G:\\Meu Drive');
+  r.titulo, 'Procurar "team master 040826" em G:\\Meu Drive  (botao direito: corrigir o nome)');
 
 console.log('\n=== 4. SOBREVIVE A SALVAR E REABRIR ===');
 r = await p.evaluate(async () => {
@@ -127,9 +127,18 @@ checa('o .ft guarda o nome', r.noArquivo, 'team master 040826 01.png');
 checa('  reabrir devolve o nome', r.depois, 'team master 040826 01.png');
 checa('  e o botão volta a aparecer', r.botao, true);
 
-console.log('\n=== 5. SEM NOME, SEM BOTAO ===');
-/* pedido salvo antes da v3.338 não tem o nome guardado. Uma lupa que
-   abre busca vazia é pior que lupa nenhuma. */
+console.log('\n=== 5. SEM NOME, A LUPA APAGADA ===');
+/* REGRA TROCADA NA v3.359. Ate a v3.358 era "sem nome, sem botao", e a
+   razao estava certa enquanto nao havia o que fazer sem nome: uma lupa
+   que abre busca vazia e pior que lupa nenhuma.
+
+   Agora ha o que fazer. A lupa apagada ABRE O PAINEL para ler o nome da
+   propria imagem (OCR) ou digitar. Sumir justamente no caso em que a
+   pessoa precisa dela era o avesso do que se queria.
+
+   No ARQUIVO EXPORTADO a regra antiga continua valendo, e de proposito:
+   la nao se edita nada. Quem cuida disso e o ARTE_RUNTIME, e a secao 8
+   desta mesma suite cobra isso. */
 r = await p.evaluate(async px => {
   const doc = coletaEstado();
   delete doc.layouts[0].arte;          /* exatamente o que um .ft velho traz */
@@ -139,16 +148,18 @@ r = await p.evaluate(async px => {
   const m = document.querySelector('.lay-modulo');
   const bt = m.querySelector('.lay-arte-bt');
   return { temImagem: !!m.querySelector('.lay-img img'),
-    escondido: getComputedStyle(bt).display === 'none',
-    /* e ele não pode ocupar largura nenhuma na linha */
+    aparece: getComputedStyle(bt).display !== 'none',
+    apagado: bt.classList.contains('sem-nome'),
     largura: Math.round(bt.getBoundingClientRect().width),
     titulo: bt.title };
 }, PX);
 console.log('     ' + JSON.stringify(r));
 checa('o pedido antigo abre com a imagem', r.temImagem, true);
-checa('  e sem o botão', r.escondido, true);
-checa('  sem ocupar largura na linha da referência', r.largura, 0);
-checa('  com o motivo no title', r.titulo, 'Sem o nome do arquivo original');
+checa('  e a lupa aparece assim mesmo', r.aparece, true);
+checa('  apagada, para nao se confundir com a que busca', r.apagado, true);
+checa('  ocupando o mesmo lugar de sempre', r.largura > 0, true);
+checa('  com o convite no title', r.titulo,
+  'Sem o nome do arquivo original. Clique para ler da imagem ou digitar.');
 
 console.log('\n=== 6. A PASTA E CONFIGURAVEL, E SO DESTA MAQUINA ===');
 r = await p.evaluate(async () => {
