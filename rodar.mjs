@@ -72,6 +72,11 @@ const SUITES = [
      o conteudo SEM barra de rolagem: some sem deixar rastro. Roda em
      janela baixa, em todas as secoes. */
   'teste_caixas_espremidas',
+  /* v3.358 - A RESPOSTA QUE NUNCA CHEGA. Categoria que as 37 suites nao
+     cobriam: todas mediam o que acontece QUANDO a resposta chega, certa
+     ou errada. Um fetch pendurado deixava o cadeado da sincronizacao
+     fechado para sempre e so o F5 recuperava. */
+  'teste_sync_travado',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor

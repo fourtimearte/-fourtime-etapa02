@@ -1291,6 +1291,23 @@ def drive_listar(request: Request, pasta: str = "", busca: str = ""):
     return {"pasta": alvo, "raiz": FT_DRIVE_PASTA, "caminho": caminho,
             "pastas": pastas, "imagens": imagens, "busca": termo}
 
+# ============================================================
+#  O CONTEUDO DE UM ID DO DRIVE NAO MUDA (v3.358)
+#
+#  A arte estava saindo com max-age=3600 e a miniatura com 86400. Uma
+#  hora, um dia. Passado o prazo, a MESMA arte voltava a atravessar o
+#  Render inteira, e a banda e cobrada por GB.
+#
+#  So que editar uma arte no Drive gera um id NOVO; o id que esta aqui
+#  aponta para bytes que nunca mudam. Prazo curto ai nao era cautela,
+#  era medo sem objeto.
+#
+#  Com `immutable` o navegador nem revalida: cada maquina baixa cada
+#  arte uma vez na vida. E se algum dia um id precisar mesmo trocar de
+#  conteudo, quem manda no cache e o id, entao basta o id novo.
+# ============================================================
+FT_CACHE_ETERNO = "public, max-age=31536000, immutable"
+
 @app.get("/api/drive/miniatura/{fid}")
 def drive_miniatura(fid: str, request: Request):
     """Miniatura leve, só para a grade do painel."""
@@ -1309,12 +1326,12 @@ def drive_miniatura(fid: str, request: Request):
                 with urllib.request.urlopen(req, timeout=25) as r:
                     dados = r.read()
                 return Response(content=dados, media_type="image/jpeg",
-                                headers={"Cache-Control": "public, max-age=86400"})
+                                headers={"Cache-Control": FT_CACHE_ETERNO})
             except Exception:
                 time.sleep(0.4 * (n + 1))
     dados, tipo = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"}, binario=True)
     return Response(content=dados, media_type=tipo or "image/jpeg",
-                    headers={"Cache-Control": "public, max-age=86400"})
+                    headers={"Cache-Control": FT_CACHE_ETERNO})
 
 @app.get("/api/drive/imagem/{fid}")
 def drive_imagem(fid: str, request: Request):
@@ -1325,7 +1342,7 @@ def drive_imagem(fid: str, request: Request):
         raise HTTPException(status_code=403, detail="Arquivo fora da raiz permitida.")
     dados, tipo = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"}, binario=True)
     return Response(content=dados, media_type=tipo or "image/jpeg",
-                    headers={"Cache-Control": "public, max-age=3600"})
+                    headers={"Cache-Control": FT_CACHE_ETERNO})
 
 # ============================================================
 #  POWER-UP DO TRELLO — proxy dos anexos, com JWT
