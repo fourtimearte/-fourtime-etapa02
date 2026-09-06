@@ -2879,6 +2879,12 @@ async def ft_padronizar_mes(request: Request):
 # A tag do módulo Design que marca sublimação. Tudo o que não a tem cai em
 # "personalizado" — é a divisão que o relatório usa nas colunas.
 FT_TAG_SUBLI = "subli"
+# TAGS QUE NAO SAO TECNICA DE IMPRESSAO (v3.360). Gola e ribana dizem como a
+# peca e MONTADA, nao como ela e impressa. Sem esta lista, um layout de
+# sublimacao com "Gola Tecido" marcado passaria a sair MISTO no relatorio, em
+# vermelho, sem que nada de outra tecnica tivesse entrado nele: alarme falso
+# criado por uma etiqueta de acabamento.
+FT_TAGS_ACABAMENTO = {"gola tecido", "ribana"}
 
 
 def _rel_numero(x):
@@ -2919,7 +2925,11 @@ def _rel_do_conteudo(c):
             val += q * u
         if FT_TAG_SUBLI in baixas:
             sp += pcs; sv += val
-            if len(tags) > 1:
+            # MISTO e sublimacao COM OUTRA TECNICA junto, e o acabamento nao
+            # e tecnica: ele nao conta para acender o vermelho.
+            companhia = {t for t in tags
+                         if t.strip().lower() not in FT_TAGS_ACABAMENTO}
+            if len(companhia) > 1:
                 mistos.append({"ref": str(l.get("ref") or "").strip(),
                                "tags": sorted(tags),
                                "pecas": int(pcs), "valor": round(val, 2)})

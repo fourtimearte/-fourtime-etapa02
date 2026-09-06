@@ -81,6 +81,9 @@ const SUITES = [
      mao. Nada aqui depende da internet: prova o desenho em volta do
      motor, inclusive o que acontece quando o CDN nao vem. */
   'teste_arte_ocr',
+  /* v3.360 - Gola Tecido e Ribana: secao propria no menu, fileira propria
+     no cartao, e fora da conta de "misto" do relatorio. */
+  'teste_tags_acabamento',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
