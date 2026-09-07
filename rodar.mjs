@@ -84,6 +84,10 @@ const SUITES = [
   /* v3.360 - Gola Tecido e Ribana: secao propria no menu, fileira propria
      no cartao, e fora da conta de "misto" do relatorio. */
   'teste_tags_acabamento',
+  /* v3.361 - varios meses no relatorio. O seletor virou grade de doze
+     botoes; cada mes continua guardado sozinho no seu .ftr e o combinado
+     nunca vira arquivo. */
+  'teste_relatorio_meses',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
