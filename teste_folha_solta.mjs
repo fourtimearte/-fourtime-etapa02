@@ -145,7 +145,11 @@ const CENARIOS = [
   { nome: 'dois meses somados, 60 pedidos', meses: [8, 9], n: 60,  nomes: NOMES, folhas: 6 },
   { nome: 'com dois pedidos fora da conta', meses: [8],    n: 30,  nomes: NOMES, folhas: 2,
     fora: ['R3', 'R7'] },
-  { nome: 'com mistos e nomes com < & "',   meses: [8],    n: 24,  nomes: NOMES, folhas: 1,
+  /* 2 FOLHAS, E NAO 1 (v3.374). Desde a reserva de uma linha inteira, a
+     folha fecha uma linha mais cedo: com 24 pedidos ela enche e o TOTAL
+     GERAL passa para a segunda. E o preco combinado de nunca deixar nada
+     debaixo do rodape na maquina de quem imprime. */
+  { nome: 'com mistos e nomes com < & "',   meses: [8],    n: 24,  nomes: NOMES, folhas: 2,
     mistos: true },
   { nome: 'muitas folhas, 140 pedidos',     meses: [8, 9], n: 140, nomes: NOMES, folhas: 13 },
 ];
@@ -323,6 +327,7 @@ const cruzou = async cen => await pagina.evaluate(async c => {
   relMontaImpressao();
   document.body.classList.add('rel-imprimindo');
   const maus = [];
+  let menor = 1e9;
   document.querySelectorAll('#relPrint .folha').forEach((f, i) => {
     const rod = f.querySelector('.rel-rod');
     const trs = f.querySelectorAll('tbody tr, tfoot tr');
@@ -332,19 +337,39 @@ const cruzou = async cen => await pagina.evaluate(async c => {
     if (folga < 0) maus.push('folha ' + (i+1) + ' (' +
       (ult.parentElement.tagName === 'TFOOT' ? 'total geral' : 'linha') +
       ') cruza ' + folga.toFixed(1) + 'px');
+    if (folga < menor) menor = folga;
+  });
+  /* a altura de uma linha de dados: e ela a unidade da reserva */
+  let alt = 0;
+  document.querySelectorAll('#relPrint tbody tr').forEach(tr => {
+    if (tr.classList.contains('sem-cab') || tr.classList.contains('sem-tot')) return;
+    const h = tr.getBoundingClientRect().height;
+    if (h > 0 && (!alt || h < alt)) alt = h;
   });
   document.body.classList.remove('rel-imprimindo');
   relDesmontaImpressao();
-  return maus;
+  return { maus, menor:+menor.toFixed(2), alt:+alt.toFixed(2) };
 }, cen);
 
 /* Estes numeros nao sao decorativos: sao os que a varredura pegou com o
    total geral por cima do rodape. 50 dava -9.9px, 102 dava -12.7px. */
 for (const cen of [{ n:25, meses:[8] }, { n:50, meses:[8] }, { n:102, meses:[8] },
                    { n:154, meses:[8] }, { n:22, meses:[7,8] }, { n:66, meses:[7,8] }]) {
-  const maus = await cruzou(cen);
+  const r = await cruzou(cen);
   ok('nada cruza o rodape com ' + cen.n + ' pedidos em ' + cen.meses.length + ' mes(es)',
-     maus.length === 0, maus.join(' · '));
+     r.maus.length === 0, r.maus.join(' · '));
+  /* E NAO BASTA NAO CRUZAR (v3.374).
+
+     Medindo aqui, a v3.373 nao cruzava em 362 cenarios; na maquina de
+     quem imprime, cruzava. A folha desenhada pelo navegador na midia
+     `print` nao e milimetricamente a folha que o codigo mede na midia
+     `screen`, e nao ha como medir na midia certa.
+
+     Entao a conferencia nao pergunta se sobrou. Pergunta se sobrou UMA
+     LINHA INTEIRA: qualquer diferenca menor que isso entre o medido e o
+     desenhado ainda cai dentro da sobra. */
+  ok('  e ainda sobra uma linha inteira de reserva',
+     r.menor >= r.alt, 'sobra ' + r.menor + 'px, linha ' + r.alt + 'px');
 }
 
 /* e a regua tem de olhar o tfoot ANTES do tbody: invertida, ela volta a
