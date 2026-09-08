@@ -100,6 +100,7 @@ const SUITES = [
      decalque da tela e passou a sair de um gerador proprio. A suite cobra
      que o papel sai IDENTICO com o visualizador arrancado do documento. */
   'teste_folha_solta',
+  'teste_menu_referencia',
   /* v3.372 - o clique de cor separado do de tecido, a margem zero do @page
      do relatorio (a folha ja tem a dela) e a coluna Aviso da Atividade. */
   'teste_aviso_e_tecido',
