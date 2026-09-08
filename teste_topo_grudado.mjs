@@ -198,9 +198,18 @@ ok('  e escurece um degrau no tema claro', luz(cor.grudado.flut) < luz(cor.parad
 ok('  a faixa dos numeros escurece mais que o corpo',
    luz(cor.grudado.cards) < luz(cor.grudado.flut),
    luz(cor.grudado.flut).toFixed(0) + ' / ' + luz(cor.grudado.cards).toFixed(0));
-ok('  o cinza nao se confunde com o fundo da pagina',
-   Math.abs(luz(cor.grudado.flut) - luz(cor.pag)) > 4,
-   cor.grudado.flut + ' vs pagina ' + cor.pag);
+/* O QUE SEPARA O GRUDADO DA PAGINA NAO E A COR, E A SOMBRA.
+   Esta conferencia ja cobrou o contrario, e estava errada: na maquete v6 o
+   cabecalho grudado fica praticamente da COR DA PAGINA (245.6 contra
+   243.4) e quem o descola e a sombra com a borda. O que tem de ser grande
+   e o degrau entre PARADO e GRUDADO, que e a promessa "o cinza so aparece
+   quando gruda". Medido na maquete: 11.6. Aqui: 11.1. */
+ok('  o degrau entre parado e grudado e do tamanho do da maquete',
+   luz(cor.parado.flut) - luz(cor.grudado.flut) >= 9,
+   (luz(cor.parado.flut) - luz(cor.grudado.flut)).toFixed(1));
+ok('  e a pagina fica um degrau abaixo do cartao parado, para o recuo se ver',
+   luz(cor.parado.flut) - luz(cor.pag) >= 5,
+   (luz(cor.parado.flut) - luz(cor.pag)).toFixed(1) + '  (pagina ' + cor.pag + ')');
 ok('  e ganha sombra', cor.grudado.sombra !== 'none' && cor.grudado.sombra !== cor.parado.sombra);
 ok('soltando, o branco volta', cor.voltou.flut === cor.parado.flut,
    cor.voltou.flut + ' vs ' + cor.parado.flut);
