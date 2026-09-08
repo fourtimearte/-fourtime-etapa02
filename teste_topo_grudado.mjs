@@ -377,6 +377,37 @@ ok('  e com as do subtotal', JSON.stringify(rel.sub) === JSON.stringify(rel.lin)
 ok('  na mesma margem esquerda', rel.esqCab === rel.esqLin, rel.esqCab + ' vs ' + rel.esqLin);
 ok('nenhuma celula corta o proprio conteudo', rel.cortadas === 0, String(rel.cortadas));
 
+console.log('\n=== 7b. NADA SE METE ENTRE O CABECALHO E A PRIMEIRA SEMANA ===');
+/* A nota dos mistos explicava o asterisco e, para isso, se punha entre o
+   cabecalho grudado e a lista, empurrando tudo a cada desenho. Saiu na
+   v3.369. O asterisco continua, e continua se explicando sozinho no
+   passar do mouse, um pedido de cada vez e com as tecnicas pelo nome. */
+const mistos = await pagina.evaluate(async () => {
+  const pg = document.getElementById('relPage');
+  REL.dados.itens.forEach((x, i) => { x.mistos = i % 3 === 0
+    ? [{ tags: ['Sublimação', 'Silk'] }] : []; });
+  relDesenha();
+  await new Promise(r => setTimeout(r, 350));
+  const cel = pg.querySelector('.rv-lin .n.misto');
+  const filhos = [...pg.children].map(e => e.className.split(' ')[0]);
+  const iVao = filhos.indexOf('rv-vao');
+  return {
+    notas: pg.querySelectorAll('.rv-nota').length,
+    depoisDoVao: iVao >= 0 ? filhos[iVao + 1] : '-',
+    asteriscos: pg.querySelectorAll('.rv-lin .n.misto').length,
+    sinal: cel ? cel.textContent.trim().slice(-1) : '',
+    dica: cel ? (cel.getAttribute('title') || '') : '',
+  };
+});
+ok('a nota dos mistos nao esta mais na tela', mistos.notas === 0, String(mistos.notas));
+ok('  a primeira semana vem logo depois do cabecalho',
+   mistos.depoisDoVao === 'rv-cart', mistos.depoisDoVao);
+ok('o asterisco continua no valor', mistos.asteriscos > 0 && mistos.sinal === '*',
+   mistos.asteriscos + ' / ' + mistos.sinal);
+ok('  e continua se explicando no passar do mouse',
+   /sublimação junto de outra técnica/i.test(mistos.dica)
+   && /Sublimação \+ Silk/.test(mistos.dica), mistos.dica);
+
 console.log('\n=== 8. O RECUO LATERAL, EM VARIAS ALTURAS DE JANELA ===');
 /* A REGRESSAO QUE ESTA SECAO EXISTE PARA IMPEDIR (v3.368).
 
@@ -433,6 +464,99 @@ ok('  o cabecalho grudado comeca na mesma margem que os cartoes',
 ok('a Atividade tem o MESMO recuo do Relatorio, em toda altura',
    recuos.every(r => r.atv && r.atv.esq === r.rel.esq && r.atv.dir === r.rel.dir),
    JSON.stringify(recuos.map(r => r.alt + ':' + (r.atv ? r.atv.esq + '/' + r.atv.dir : 'sem'))));
+
+console.log('\n=== 8b. A ESCADA DE PESO DAS DUAS TABELAS ===');
+/* "Parece que esta tudo igual, mesma fonte e peso." Estava mesmo, e por
+   dois motivos que so aparecem medindo celula por celula:
+
+   1. O NOME DO CLIENTE nao ficava em negrito no Relatorio. A classe pedia
+      600, mas quem carrega o texto e o botao `.rel-abrir`, que e da FOLHA
+      IMPRESSA e traz `font-weight:500` escrito na mao.
+
+   2. A COLUNA PEDIDO da Atividade perdia o monoespacado. `.atv-linha
+      .abre` traz `font-family:inherit`, `font-size:inherit` e
+      `color:inherit` para o botao do NOME desaprender o estilo de botao;
+      so que a celula do PEDIDO E um botao, tem a mesma especificidade e
+      vem depois.
+
+   Nos dois casos o defeito e o mesmo: uma regra escrita para OUTRA coisa,
+   com a mesma especificidade e mais abaixo no arquivo, apagando o peso de
+   quem devia puxar a leitura. Por isso a conferencia mede o COMPUTADO, e
+   nao a existencia da regra. */
+const escada = await pagina.evaluate(async () => {
+  const pg = document.getElementById('relPage');
+  pg.hidden = false;
+  REL.dados.itens.forEach(x => { x.mistos = []; });
+  relDesenha();
+  await new Promise(r => setTimeout(r, 350));
+  const ler = e => { if (!e) return null; const c = getComputedStyle(e);
+    return { peso: +c.fontWeight, tam: c.fontSize,
+      mono: /Mono|mono/.test(c.fontFamily), cor: c.color }; };
+  const lin = pg.querySelector('.rv-lin[data-id]');
+  const rel = {
+    vend: ler(lin.querySelector('.vend')),
+    dia: ler(lin.querySelector('.dt')),
+    cliCelula: ler(lin.querySelector('.cli')),
+    cliBotao: ler(lin.querySelector('.cli .rel-abrir')),
+    ped: ler(lin.querySelector('.ped')),
+    valor: ler(lin.querySelector('.n.v')),
+    total: ler(lin.querySelector('.n.forte')),
+    cabc: ler(pg.querySelector('.rv-cabc > *')),
+  };
+  /* a Atividade, desenhada com a semana de mentira ja montada */
+  const pa = document.getElementById('atvPage');
+  pa.hidden = false; atvDesenha();
+  await new Promise(r => setTimeout(r, 300));
+  const la = pa.querySelector('.atv-linha');
+  const filhos = [...la.children];
+  const atv = {
+    ped: ler(filhos[1]), nome: ler(filhos[2]), dep: ler(filhos[3]),
+    entrega: ler(filhos[4]), tot: ler(la.querySelector('.n.tot')),
+    sub: ler(la.querySelector('.n.tr-s')),
+  };
+  pa.hidden = true;
+  return { rel, atv };
+});
+console.log('     REL ' + JSON.stringify(escada.rel));
+console.log('     ATV ' + JSON.stringify(escada.atv));
+/* --- Relatorio de Pedidos --- */
+ok('o cliente sai em 600, e o botao dentro dele tambem',
+   escada.rel.cliCelula.peso === 600 && escada.rel.cliBotao.peso === 600,
+   escada.rel.cliCelula.peso + ' / ' + escada.rel.cliBotao.peso);
+ok('  e na mesma cor da celula, sem o cinza de botao',
+   escada.rel.cliBotao.cor === escada.rel.cliCelula.cor,
+   escada.rel.cliBotao.cor + ' vs ' + escada.rel.cliCelula.cor);
+ok('o vendedor e o pedido ficam mais fracos que o cliente',
+   escada.rel.vend.peso === 500 && escada.rel.ped.peso === 500
+   && escada.rel.vend.cor !== escada.rel.cliCelula.cor,
+   escada.rel.vend.peso + '/' + escada.rel.ped.peso + ' ' + escada.rel.vend.cor);
+ok('os totais do pedido sobem para 600, acima dos valores da tecnica',
+   escada.rel.total.peso === 600 && escada.rel.valor.peso === 500,
+   escada.rel.total.peso + ' vs ' + escada.rel.valor.peso);
+ok('  o cabecalho de colunas em 700, acima de todos',
+   escada.rel.cabc.peso === 700, String(escada.rel.cabc.peso));
+ok('dia, pedido e valores sao monoespacados; vendedor e cliente nao',
+   escada.rel.dia.mono && escada.rel.ped.mono && escada.rel.valor.mono
+   && !escada.rel.vend.mono && !escada.rel.cliCelula.mono,
+   JSON.stringify([escada.rel.dia.mono, escada.rel.ped.mono, escada.rel.valor.mono,
+                   escada.rel.vend.mono, escada.rel.cliCelula.mono]));
+/* --- Relatorio de Atividade --- */
+ok('a coluna Pedido continua monoespacada, mesmo sendo um botao',
+   escada.atv.ped.mono === true && escada.atv.ped.peso === 700,
+   escada.atv.ped.peso + ' mono=' + escada.atv.ped.mono + ' ' + escada.atv.ped.tam);
+ok('  e na cor forte da linha, e nao no cinza que o botao herdaria',
+   escada.atv.ped.cor === escada.atv.entrega.cor,
+   escada.atv.ped.cor + ' vs ' + escada.atv.entrega.cor);
+ok('o nome do cliente sai em 600, como no Relatorio',
+   escada.atv.nome.peso === 600, String(escada.atv.nome.peso));
+ok('  o departamento fica em 500, abaixo dele',
+   escada.atv.dep.peso === 500, String(escada.atv.dep.peso));
+ok('o total sobe para 700, acima das duas tecnicas',
+   escada.atv.tot.peso === 700 && escada.atv.sub.peso === 500,
+   escada.atv.tot.peso + ' vs ' + escada.atv.sub.peso);
+ok('as duas tabelas usam o MESMO tom forte',
+   escada.rel.cliCelula.cor === escada.atv.nome.cor,
+   escada.rel.cliCelula.cor + ' vs ' + escada.atv.nome.cor);
 
 console.log('\n=== 9. A IMPRESSAO NAO FOI TOCADA ===');
 /* A folha nao mora mais na tela: quem a monta e relFolhaFonte(), desde a
