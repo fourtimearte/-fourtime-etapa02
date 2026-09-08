@@ -260,9 +260,13 @@ ok('  com valor e conta em cada um',
    JSON.stringify(velho));
 ok('  o cartao de saturacao mantem o id', velho.satId === true);
 ok('  a barra de saturacao mantem a largura medida', /%$/.test(velho.barra), velho.barra);
-ok('as dez colunas continuam com os mesmos nomes',
+/* ONZE desde a v3.372: a coluna Aviso entrou entre Nome e Departamento.
+   Ela nao cabe em Atualizacao, onde mora a ETAPA: etapa diz ONDE o pedido
+   esta, aviso diz o que esta ATRAPALHANDO, e as duas coisas acontecem ao
+   mesmo tempo. */
+ok('as onze colunas continuam com os mesmos nomes',
    JSON.stringify(velho.colunas) === JSON.stringify(
-     ['','Pedido','Nome','Departamento','Entrega','Planejamento','Total','Subl.','Person.','Atualização']),
+     ['','Pedido','Nome','Aviso','Departamento','Entrega','Planejamento','Total','Subl.','Person.','Atualização']),
    JSON.stringify(velho.colunas));
 ok('os seis dias e as trinta linhas continuam desenhados',
    velho.dias === 6 && velho.linhas === 30, velho.dias + ' dias, ' + velho.linhas + ' linhas');

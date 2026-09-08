@@ -3637,7 +3637,11 @@ _ATV_MEMORIA = {}         # "2026-08" -> {"doc":..., "fid":..., "mod":...}
 # os unicos campos que uma tela pode mudar. Tudo o mais e da varredura, e
 # essa separacao e a lei que impede o Gerar de desfazer o que foi decidido
 # a mao (ver _atv_varre).
-_ATV_CAMPOS_DA_TELA = {"etapa", "plan", "planManual", "concluidoEm", "obs"}
+_ATV_CAMPOS_DA_TELA = {"etapa", "plan", "planManual", "concluidoEm", "obs", "aviso"}
+# OS AVISOS (v3.372). Etapa diz ONDE o pedido esta; aviso diz o que esta
+# ATRAPALHANDO. Sao duas perguntas diferentes, e por isso dois campos: um
+# pedido pode estar em Costura e faltando tecido ao mesmo tempo.
+_ATV_AVISOS_VALIDOS = {"", "falta-tecido"}
 _ATV_ETAPAS_VALIDAS = {
     "", "corte", "subli", "dtf", "prensa", "silk", "bordado", "calandra",
     "futurize", "conferencia", "cdcostura", "costura", "embalagem", "finalizado",
@@ -3898,6 +3902,11 @@ def _atv_aplica(doc, id_ped, campo, valor, quem):
         p["concluidoEm"] = v
     elif campo == "obs":
         p["obs"] = str(valor or "")[:400]
+    elif campo == "aviso":
+        v = str(valor or "")
+        if v not in _ATV_AVISOS_VALIDOS:
+            raise HTTPException(status_code=400, detail="Aviso inválido.")
+        p["aviso"] = v
     p["mexidoEm"] = datetime.now(timezone.utc).isoformat()
     if quem:
         p["mexidoPor"] = str(quem)[:80]
@@ -4220,7 +4229,7 @@ def _atv_varre(mes_alvo, teto=400):
                     "sub": int(it.get("subPecas") or 0),
                     "per": int(it.get("perPecas") or 0),
                     "total": int(it.get("total") or 0),
-                    "etapa": "", "plan": entrega_iso, "planManual": False,
+                    "etapa": "", "aviso": "", "plan": entrega_iso, "planManual": False,
                     "concluidoEm": "", "sumiu": False, "entregaMudou": "",
                     "mod": mod, "mesArq": mes_arq, "arquivo": it.get("arquivo") or "",
                     "criadoEm": datetime.now(timezone.utc).isoformat()}

@@ -1078,7 +1078,19 @@ export async function roda(F) {
       return !!m && getComputedStyle(m).display === q;
     }, alvo, { timeout: 8000 }).catch(() => {});
   };
-  let pt = await centro('.lay-modulo .combo-cor textarea');
+  const displayPick = () => p.evaluate(() => getComputedStyle(document.getElementById('pickMenu')).display);
+  const esperaPick = async alvo => {
+    await p.waitForFunction(q => {
+      const m = document.getElementById('pickMenu');
+      return !!m && getComputedStyle(m).display === q;
+    }, alvo, { timeout: 8000 }).catch(() => {});
+  };
+  /* v3.372: QUEM ABRE O QUE.
+     O QUADRADO abre o menu de cor. O NOME da cor, o nome do tecido e o
+     resto do cartao abrem a lista de TECIDO. Antes as duas regioes eram
+     vizinhas e levavam a listas diferentes sem nada que as separasse aos
+     olhos: quem queria trocar o tecido caia no menu de cor. */
+  let pt = await centro('.lay-modulo .tec-linha .cor-sw');
   await p.mouse.click(pt.x, pt.y);
   await esperaCor('block');
   const abriuNoClique = await displayCor();
@@ -1087,9 +1099,15 @@ export async function roda(F) {
   await p.mouse.click(60, 620);
   await esperaCor('none');
   const fechouFora = await displayCor();
-  F.diz('clique de verdade no campo ABRE o menu', abriuNoClique, 'block');
+  F.diz('clique de verdade no QUADRADO ABRE o menu de cor', abriuNoClique, 'block');
   F.diz('  e ele NAO some no mesmo gesto', seguiuAberto, 'block');
   F.diz('  um clique fora fecha', fechouFora, 'none');
+  pt = await centro('.lay-modulo .combo-cor textarea');
+  await p.mouse.click(pt.x, pt.y);
+  await esperaPick('block');
+  F.diz('o NOME da cor leva a lista de TECIDO', await displayPick(), 'block');
+  F.diz('  e nao ao menu de cor', await displayCor(), 'none');
+  await p.mouse.click(60, 620); await esperaPick('none');
   pt = await centro('.lay-modulo .tec-linha .cor-sw');
   await p.mouse.click(pt.x, pt.y);
   /* ESPERA O MENU APARECER, e nao 350ms.
@@ -1104,18 +1122,29 @@ export async function roda(F) {
   F.diz('o quadradinho tambem abre com clique de verdade', await displayCor(), 'block');
   await p.mouse.click(60, 620); await p.waitForTimeout(250);
 
-  /* O campo tinha DOIS caminhos: o quadradinho abria o menu de grupos e o
-     campo (ou a seta) abria o dropdown generico dos outros combos: duas
-     listas diferentes para a mesma escolha. */
+  /* AGORA O CARTAO TEM DOIS ALVOS DE PROPOSITO, e cada um com o seu.
+     O quadrado abre o menu de cor; qualquer outro ponto do cartao, o nome
+     da cor inclusive, abre a lista de tecido. O que nao pode voltar e a
+     seta levando a uma terceira lista. */
   r = await p.evaluate(async () => {
     const combo = document.querySelector('.lay-modulo .combo-cor');
     const ta = combo.querySelector('textarea');
     const seta = combo.querySelector('.ft-combo-abrir') || combo.querySelector('.ft-combo-seta');
     const cm = document.getElementById('corMenu'), pm = document.getElementById('pickMenu');
     const o = {};
+    /* v3.372: o campo de cor leva a lista de TECIDO. */
     ta.dispatchEvent(new MouseEvent('mousedown', { bubbles:true }));
     await new Promise(s => setTimeout(s, 250));
-    o.campo = { cor:cm.style.display, pick:pm.style.display, grupos:cm.querySelectorAll('.cor-grupo').length };
+    o.campo = { cor:cm.style.display, pick:pm.style.display };
+    /* fecha pelo MESMO gesto que o editor escuta: o dropdown generico se
+       fecha no mousedown de fora, e nao num .click() avulso. Sem isso ele
+       seguia aberto e a conferencia do quadrado o via por engano. */
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles:true }));
+    document.body.click(); await new Promise(s => setTimeout(s, 200));
+    /* e o QUADRADO leva ao menu de cor, com os grupos e alinhado ao campo */
+    combo.closest('.tec-linha').querySelector('.cor-sw').click();
+    await new Promise(s => setTimeout(s, 250));
+    o.quadrado = { cor:cm.style.display, pick:pm.style.display, grupos:cm.querySelectorAll('.cor-grupo').length };
     /* v3.340: o campo de cor perdeu a .ft-combo-caixa (ele virou o nome
        solto embaixo do tecido, dentro do cartao). O que o menu tem de
        acompanhar agora e o proprio campo. */
@@ -1154,8 +1183,9 @@ export async function roda(F) {
     o.tecido = { pick:pm.style.display, cor:cm.style.display };
     return o;
   });
-  F.diz('clicar no CAMPO abre o menu de grupos', [r.campo.cor, r.campo.grupos], ['block', 12]);
-  F.diz('  e nao o dropdown generico', r.campo.pick !== 'block', true);
+  F.diz('clicar no CAMPO leva a lista de tecido', [r.campo.pick, r.campo.cor], ['block', 'none']);
+  F.diz('o QUADRADO abre o menu de grupos', [r.quadrado.cor, r.quadrado.grupos], ['block', 12]);
+  F.diz('  e nao o dropdown generico', r.quadrado.pick !== 'block', true);
   F.diz('  alinhado com a caixa do campo', r.alinhado, true);
   F.diz('o campo de cor nao tem mais seta: quem abre e o quadrado', r.temSeta, false);
   if (r.seta) F.diz('  e se a seta voltar, leva ao mesmo menu',
