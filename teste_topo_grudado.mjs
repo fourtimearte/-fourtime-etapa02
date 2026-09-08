@@ -570,7 +570,9 @@ const imp = await pagina.evaluate(() => {
     rodFolha: !!(folha && folha.querySelector('.rel-rod')),
     tabela: !!tab,
     colunasTabela: tab ? tab.querySelectorAll('thead tr:last-child th').length : 0,
-    cardsFolha: folha ? folha.querySelectorAll('.rel-cards .rel-card').length : 0,
+    colunasColgroup: tab ? tab.querySelectorAll('colgroup col').length : 0,
+    /* v3.370: os quatro resumos moram dentro do topo da folha */
+    cardsFolha: folha ? folha.querySelectorAll('.rel-res .cx').length : 0,
     /* nenhuma peca da tela nova pode ter vazado para dentro da folha */
     semTelaDentro: folha ? folha.querySelectorAll('.rv-topo,.rv-cart,.rv-lin').length === 0 : false,
     montaAtividade: typeof atvMontaImpressao === 'function',
@@ -579,8 +581,12 @@ const imp = await pagina.evaluate(() => {
 });
 ok('a folha do relatorio continua inteira',
    imp.folha && imp.cabFolha && imp.rodFolha && imp.tabela, JSON.stringify(imp));
-ok('  com as onze colunas de sempre', imp.colunasTabela === 11, String(imp.colunasTabela));
-ok('  e os quatro cartoes da folha', imp.cardsFolha === 4, String(imp.cardsFolha));
+/* DEZ COLUNAS, e nao mais onze: a coluna de acao era o botao de tirar da
+   conta, que so faz sentido na tela. No papel ela nunca teve conteudo, e
+   escondida por CSS ainda desalinhava as larguras do colgroup. */
+ok('  com as dez colunas do papel', imp.colunasTabela === 10, String(imp.colunasTabela));
+ok('  e o colgroup com o mesmo tanto', imp.colunasColgroup === 10, String(imp.colunasColgroup));
+ok('  e os quatro resumos no topo', imp.cardsFolha === 4, String(imp.cardsFolha));
 ok('  sem nada da tela nova dentro dela', imp.semTelaDentro === true);
 ok('as duas montagens de papel continuam la',
    imp.montaAtividade && imp.montaRelatorio, JSON.stringify(imp));
@@ -589,12 +595,18 @@ const regras = await pagina.evaluate(() => {
     .replace(/\s+/g, ' ');
   return {
     atvSaiNoPapel: /body\.atv-imprimindo \.atv-page\{display:none/.test(txt),
-    semEscalaNoPapel: /transform:none !important;width:var\(--rel-natural/.test(txt),
+    /* v3.370: a folha ja NASCE 297x210mm, entao nao ha mais reducao para
+       desfazer. O que se cobra agora e que ela tenha o tamanho do papel. */
+    folhaEmMilimetros: /\.rel-folha\{[^}]*width:297mm;height:210mm/.test(txt),
+    semTransformNoPapel: /body\.rel-imprimindo \.rel-folha\{ ?transform:none ?!important/
+      .test(txt),
   };
 });
 ok('a pagina de tela da atividade fica fora do papel', regras.atvSaiNoPapel === true);
-ok('a folha impressa continua em tamanho real, sem escala',
-   regras.semEscalaNoPapel === true);
+ok('a folha impressa e uma A4 deitada de verdade, 297 x 210 mm',
+   regras.folhaEmMilimetros === true);
+ok('  e nenhuma escala sobra na hora de imprimir',
+   regras.semTransformNoPapel === true);
 
 console.log('\n' + feitas + ' conferencias, ' + falhas + ' falha(s)');
 if (erros.length) { console.log('  erros de pagina: ' + erros.slice(0,3).join(' // ')); falhas++; }

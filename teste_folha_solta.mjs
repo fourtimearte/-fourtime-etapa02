@@ -97,15 +97,19 @@ const monta = async cen => await pagina.evaluate(async c => {
   const folhas = cx ? [...cx.querySelectorAll('.folha')] : [];
   const detalhe = {
     cabPorFolha: folhas.map(f => f.querySelectorAll('.rel-cab').length),
-    rodPorFolha: folhas.map(f => f.querySelector('.rodape-pg').textContent),
-    cardsPrimeira: folhas.length ? folhas[0].querySelectorAll('.rel-cards .rel-card').length : -1,
-    cardsSegunda: folhas.length > 1 ? folhas[1].querySelectorAll('.rel-cards').length : -1,
+    rodPorFolha: folhas.map(f => (f.querySelector('.rel-rod .pg')||{}).textContent),
+    /* v3.370: os quatro resumos moram DENTRO do topo e se repetem em todas
+       as folhas, como na Atividade. Antes so a primeira os tinha, e quem
+       pegasse a folha 3 no chao de fabrica nao sabia de que periodo era. */
+    resumosPorFolha: folhas.map(f => f.querySelectorAll('.rel-res .cx').length),
+    rodapePorFolha: folhas.map(f => f.querySelectorAll('.rel-rod').length),
     theadPorFolha: folhas.map(f => f.querySelectorAll('thead').length),
     tfootTotal: cx ? cx.querySelectorAll('tfoot').length : -1,
     linhasTotal: cx ? cx.querySelectorAll('tbody tr[data-id]').length : -1,
     /* o texto do primeiro cliente, como chegou ao papel */
+    /* no papel o cliente e texto, e nao botao: papel nao clica */
     primeiroCliente: folhas.length
-      ? (folhas[0].querySelector('tbody tr[data-id] .cli .rel-abrir') || {}).textContent : '',
+      ? (folhas[0].querySelector('tbody tr[data-id] .cli') || {}).textContent : '',
     primeiroVend: folhas.length
       ? (folhas[0].querySelector('tbody tr[data-id] .vend') || {}).textContent : '',
     primeiroPed: folhas.length
@@ -123,15 +127,27 @@ const monta = async cen => await pagina.evaluate(async c => {
 }, cen);
 
 console.log('\n=== 1. O PAPEL NAO DEPENDE MAIS DA TELA ===');
-/* os numeros de folhas sao os mesmos medidos na v3.363, antes da mudanca */
+/* OS NUMEROS DE FOLHAS SAO O GANHO DA v3.370, e por isso ficam escritos
+   aqui: se um dia a folha voltar a inchar, e aqui que vai doer.
+
+     cenario                        antes (v3.369)   agora
+     um mes, 40 pedidos                    3           2
+     dois meses somados, 60 pedidos       10           6
+     com dois pedidos fora da conta        3           2
+     com mistos, 24 pedidos                2           1
+     140 pedidos                          22          13
+
+   O conteudo e o mesmo; o que saiu foi peso: os quatro cartoes grandes, a
+   barra de fatia, a legenda, o fundo das seis colunas de numero, a tarja
+   escura da semana e o zebrado das linhas. */
 const CENARIOS = [
-  { nome: 'um mes, 40 pedidos',            meses: [8],    n: 40,  nomes: NOMES, folhas: 3  },
-  { nome: 'dois meses somados, 60 pedidos', meses: [8, 9], n: 60,  nomes: NOMES, folhas: 10 },
-  { nome: 'com dois pedidos fora da conta', meses: [8],    n: 30,  nomes: NOMES, folhas: 3,
+  { nome: 'um mes, 40 pedidos',            meses: [8],    n: 40,  nomes: NOMES, folhas: 2  },
+  { nome: 'dois meses somados, 60 pedidos', meses: [8, 9], n: 60,  nomes: NOMES, folhas: 6 },
+  { nome: 'com dois pedidos fora da conta', meses: [8],    n: 30,  nomes: NOMES, folhas: 2,
     fora: ['R3', 'R7'] },
-  { nome: 'com mistos e nomes com < & "',   meses: [8],    n: 24,  nomes: NOMES, folhas: 2,
+  { nome: 'com mistos e nomes com < & "',   meses: [8],    n: 24,  nomes: NOMES, folhas: 1,
     mistos: true },
-  { nome: 'muitas folhas, 140 pedidos',     meses: [8, 9], n: 140, nomes: NOMES, folhas: 22 },
+  { nome: 'muitas folhas, 140 pedidos',     meses: [8, 9], n: 140, nomes: NOMES, folhas: 13 },
 ];
 const guardado = [];
 for (const c of CENARIOS) {
@@ -150,18 +166,19 @@ for (const c of CENARIOS) {
 console.log('\n=== 2. CADA FOLHA CONTINUA COMPLETA ===');
 const g = guardado[4].r.detalhe;      /* o cenario das 22 folhas */
 ok('o cabecalho se repete em TODAS as folhas',
-   g.cabPorFolha.every(v => v === 1) && g.cabPorFolha.length === 22,
+   g.cabPorFolha.every(v => v === 1) && g.cabPorFolha.length === 13,
    JSON.stringify(g.cabPorFolha.slice(0, 5)) + ' de ' + g.cabPorFolha.length);
 ok('o cabecalho da tabela tambem',
    g.theadPorFolha.every(v => v === 1), JSON.stringify(g.theadPorFolha.slice(0, 5)));
-ok('os quatro cartoes so na PRIMEIRA folha',
-   g.cardsPrimeira === 4 && g.cardsSegunda === 0,
-   g.cardsPrimeira + ' / ' + g.cardsSegunda);
+ok('os quatro resumos se repetem em TODAS as folhas',
+   g.resumosPorFolha.every(v => v === 4), JSON.stringify(g.resumosPorFolha.slice(0,5)));
+ok('  e o rodape tambem, um por folha',
+   g.rodapePorFolha.every(v => v === 1), JSON.stringify(g.rodapePorFolha.slice(0,5)));
 ok('o total geral fecha uma vez so', g.tfootTotal === 1, String(g.tfootTotal));
 ok('as 140 linhas cabem todas, sem perder nenhuma', g.linhasTotal === 140,
    String(g.linhasTotal));
-ok('a numeracao vai de 1 a 22, na ordem',
-   g.rodPorFolha.every((t, i) => t === 'Página ' + (i + 1) + ' de 22'),
+ok('a numeracao vai de 1 a 13, na ordem',
+   g.rodPorFolha.every((t, i) => t === 'Página ' + (i + 1) + ' de 13'),
    g.rodPorFolha.slice(0, 3).join(' | '));
 
 console.log('\n=== 3. OS NOMES CHEGAM INTEIROS AO PAPEL ===');
@@ -190,7 +207,7 @@ const separado = await pagina.evaluate(async () => {
     telaTemLinhas: pg.querySelectorAll('.rv-lin[data-id]').length,
     /* a folha: continua sendo a folha, montada a parte */
     fonteTemCab: !!fonte.querySelector('.rel-cab'),
-    fonteTemCards: fonte.querySelectorAll('.rel-cards .rel-card').length,
+    fonteTemCards: fonte.querySelectorAll('.rel-res .cx').length,
     fonteTemTabela: !!fonte.querySelector('.rel-tab'),
     fonteTemTopoDaTela: !!fonte.querySelector('.rv-topo'),
     /* e a escala e a barra fixa, que so existiam por causa do transform,
