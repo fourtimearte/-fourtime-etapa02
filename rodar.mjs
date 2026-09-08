@@ -96,6 +96,10 @@ const SUITES = [
      nos dois temas, e a linha de titulo que faltava na barra fixa do
      Relatorio de Pedidos. Cobra tambem que a impressao ficou intocada. */
   'teste_topo_grudado',
+  /* v3.364 - a folha impressa do Relatorio de Pedidos deixou de ser um
+     decalque da tela e passou a sair de um gerador proprio. A suite cobra
+     que o papel sai IDENTICO com o visualizador arrancado do documento. */
+  'teste_folha_solta',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
