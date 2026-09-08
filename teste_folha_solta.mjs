@@ -290,6 +290,91 @@ ok('a folha comeca na margem zero do papel', papel.recuoFolha === 0,
 ok('  porque o recuo da tela nao vale na impressao',
    papel.recuoPagina === '0px', papel.recuoPagina);
 
+console.log('\n=== 5b. NADA CRUZA O RODAPE (v3.373) ===');
+/* A REGUA MEDIA A LINHA ERRADA.
+
+   `cabe()` perguntava pela ultima linha do TBODY. O TOTAL GERAL nao mora
+   no tbody, mora no tfoot, e vem depois dele no papel: a regua olhava a
+   ultima linha de dados, via que cabia, e o total geral era desenhado
+   ATRAVESSANDO o texto do rodape na ultima folha. De todo relatorio.
+
+   Aqui a conferencia nao pergunta ao HTML se a regra existe. Ela monta as
+   folhas de verdade, mede a ultima linha de cada uma contra o rodape, e
+   cobra que sobre folga. E a unica forma de ver isto: o HTML das folhas
+   estava certo o tempo todo. */
+const cruzou = async cen => await pagina.evaluate(async c => {
+  const nomes = ['LADO DE FORA','LETICIA JUMPERS','LETICIA JUMPERS ARTESANAL',
+                 'SOLDISBEL','UMBROKEN FUNCIONAL'];
+  REL.periodos = { anos:[2026], meses:c.meses, comMovimento:c.meses };
+  REL.sel = { ano:2026, meses:c.meses, mes:c.meses[0], dia:0 };
+  REL.filtro = { cliente:'', vend:'', dia:0, tipo:'' };
+  const itens = [];
+  for (let i = 0; i < c.n; i++) itens.push({
+    id:'R'+i, dia:(i%28)+1, mes:c.meses[i%c.meses.length], ano:2026,
+    cliente:nomes[i%nomes.length], pedido:'PD004'+(100+i),
+    vendedor:['Lucas','Dani','Kev','Alam','Fabricio'][i%5], arquivo:'orc'+i+'.ft',
+    subPecas:40+i, subValor:3000+i*77, perPecas:15+(i%9), perValor:1200+i*41, mistos:[] });
+  REL.dados = { ano:2026, meses:c.meses, mes:c.meses[0], dia:0,
+    geradoEm:'2026-08-30T02:36:00.000Z', itens, falhas:[] };
+  REL.fora = new Set();
+  relDesenha();
+  await new Promise(r => setTimeout(r, 150));
+  relDesmontaImpressao();
+  relMontaImpressao();
+  document.body.classList.add('rel-imprimindo');
+  const maus = [];
+  document.querySelectorAll('#relPrint .folha').forEach((f, i) => {
+    const rod = f.querySelector('.rel-rod');
+    const trs = f.querySelectorAll('tbody tr, tfoot tr');
+    const ult = trs[trs.length - 1];
+    if (!ult || !rod) return;
+    const folga = rod.getBoundingClientRect().top - ult.getBoundingClientRect().bottom;
+    if (folga < 0) maus.push('folha ' + (i+1) + ' (' +
+      (ult.parentElement.tagName === 'TFOOT' ? 'total geral' : 'linha') +
+      ') cruza ' + folga.toFixed(1) + 'px');
+  });
+  document.body.classList.remove('rel-imprimindo');
+  relDesmontaImpressao();
+  return maus;
+}, cen);
+
+/* Estes numeros nao sao decorativos: sao os que a varredura pegou com o
+   total geral por cima do rodape. 50 dava -9.9px, 102 dava -12.7px. */
+for (const cen of [{ n:25, meses:[8] }, { n:50, meses:[8] }, { n:102, meses:[8] },
+                   { n:154, meses:[8] }, { n:22, meses:[7,8] }, { n:66, meses:[7,8] }]) {
+  const maus = await cruzou(cen);
+  ok('nada cruza o rodape com ' + cen.n + ' pedidos em ' + cen.meses.length + ' mes(es)',
+     maus.length === 0, maus.join(' · '));
+}
+
+/* e a regua tem de olhar o tfoot ANTES do tbody: invertida, ela volta a
+   medir a linha errada sem que nenhuma folha pareca diferente */
+const regua = await pagina.evaluate(() => {
+  /* a funcao inteira, e nao um pedaco: o comentario que explica o conserto
+     e maior que qualquer fatia que se escolha, e cortava a linha medida */
+  const t = String(window.relMontaImpressao).replace(/\s+/g, ' ');
+  return {
+    tfootPrimeiro: /tfoot tr:last-child'\) *\|\| *tbody\.lastElementChild/.test(t),
+  };
+});
+ok('a regua olha o total geral antes da ultima linha de dados',
+   regua.tfootPrimeiro, JSON.stringify(regua));
+
+/* e o rodape e opaco: mesmo que algo transborde, o texto dele continua legivel */
+const rodOpaco = await pagina.evaluate(async () => {
+  relDesenha();
+  await new Promise(r => setTimeout(r, 120));
+  relMontaImpressao();
+  const rod = document.querySelector('#relPrint .rel-rod');
+  const c = rod ? getComputedStyle(rod) : null;
+  const r = c ? { bg:c.backgroundColor, z:c.zIndex, pos:c.position } : null;
+  relDesmontaImpressao();
+  return r;
+});
+ok('o rodape do papel e opaco e fica por cima',
+   !!rodOpaco && rodOpaco.bg === 'rgb(255, 255, 255)' && rodOpaco.z !== 'auto',
+   JSON.stringify(rodOpaco));
+
 console.log('\n=== 6. O CAMINHO DA IMPRESSAO CONTINUA INTEIRO ===');
 const caminho = await pagina.evaluate(() => ({
   monta: typeof relMontaImpressao === 'function',
