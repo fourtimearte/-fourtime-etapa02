@@ -212,7 +212,68 @@ ok('a escala e a barra fixa sumiram, e nao ficaram mortas por perto',
    separado.semEscala === true && separado.semBarraFixa === true,
    'escala=' + separado.semEscala + ' barra=' + separado.semBarraFixa);
 
-console.log('\n=== 5. O CAMINHO DA IMPRESSAO CONTINUA INTEIRO ===');
+console.log('\n=== 5. IMPRIMINDO DE VERDADE, SO A FOLHA SAI ===');
+/* A REGRESSAO QUE ESTA SECAO EXISTE PARA IMPEDIR (v3.365 -> v3.366).
+
+   Ate a v3.364 o visualizador era `.rel-palco`, e havia uma regra so para
+   ele: `body.rel-imprimindo .rel-palco{display:none}`. A v3.365 trocou o
+   visualizador por outra coisa e NAO trocou a regra. A lista da tela
+   passou a sair impressa junto com as folhas, e o papel dobrou de altura.
+
+   As suites de entao olhavam o HTML das folhas montadas, e por isso nao
+   viram nada: as folhas continuavam certas. O que estava errado era o que
+   estava AO LADO delas na hora de imprimir.
+
+   Entao esta secao imprime de verdade: liga a midia `print`, poe a classe
+   `rel-imprimindo`, e mede o que sobrou visivel. */
+await pagina.emulateMedia({ media: 'print' });
+const papel = await pagina.evaluate(async () => {
+  const pg = document.getElementById('relPage');
+  pg.hidden = false;
+  relDesenha();
+  await new Promise(r => setTimeout(r, 400));
+  const altura = pg.scrollHeight;         /* antes de imprimir */
+  document.body.classList.add('rel-imprimindo');
+  const folhas = relMontaImpressao();
+  await new Promise(r => setTimeout(r, 200));
+  const vis = e => { const c = getComputedStyle(e);
+    return c.display !== 'none' && c.visibility !== 'hidden'
+      && e.getBoundingClientRect().height > 0; };
+  const sobrou = [...pg.children]
+    .filter(e => !e.classList.contains('rel-print') && vis(e))
+    .map(e => e.className || e.tagName);
+  const cx = document.getElementById('relPrint');
+  const r = {
+    folhas,
+    /* NADA da tela pode estar visivel ao lado das folhas */
+    sobrouNaFolha: sobrou,
+    /* e a pagina inteira tem de medir o mesmo que as folhas: se medir
+       mais, e porque tem coisa impressa embaixo delas */
+    alturaPagina: Math.round(pg.scrollHeight),
+    alturaFolhas: Math.round(cx ? cx.scrollHeight : 0),
+    /* a folha comeca na margem zero: recuo de tela nao vaza para o papel */
+    recuoFolha: Math.round(cx.querySelector('.folha').getBoundingClientRect().left
+                           - pg.getBoundingClientRect().left),
+    recuoPagina: getComputedStyle(pg).padding,
+    /* e a tela, sem imprimir, continua com o recuo dela */
+    alturaTela: Math.round(altura),
+  };
+  document.body.classList.remove('rel-imprimindo');
+  relDesmontaImpressao();
+  return r;
+});
+await pagina.emulateMedia({ media: 'screen' });
+ok('nenhuma peca da tela sobra visivel no papel',
+   papel.sobrouNaFolha.length === 0, JSON.stringify(papel.sobrouNaFolha));
+ok('  e a pagina impressa mede exatamente o que as folhas medem',
+   papel.alturaPagina === papel.alturaFolhas,
+   papel.alturaPagina + ' vs ' + papel.alturaFolhas);
+ok('a folha comeca na margem zero do papel', papel.recuoFolha === 0,
+   String(papel.recuoFolha));
+ok('  porque o recuo da tela nao vale na impressao',
+   papel.recuoPagina === '0px', papel.recuoPagina);
+
+console.log('\n=== 6. O CAMINHO DA IMPRESSAO CONTINUA INTEIRO ===');
 const caminho = await pagina.evaluate(() => ({
   monta: typeof relMontaImpressao === 'function',
   desmonta: typeof relDesmontaImpressao === 'function',
