@@ -408,6 +408,70 @@ ok('  e continua se explicando no passar do mouse',
    /sublimação junto de outra técnica/i.test(mistos.dica)
    && /Sublimação \+ Silk/.test(mistos.dica), mistos.dica);
 
+console.log('\n=== 8a. OS DOIS BOTOES DA LINHA, E A ORDEM DAS COLUNAS ===');
+/* A REGRESSAO QUE ESTA SECAO EXISTE PARA IMPEDIR (v3.370 -> v3.371).
+
+   `.rel-x` e `.rel-abrir` eram os botoes da linha, e o desenho deles
+   morava no bloco da FOLHA IMPRESSA, porque ate a v3.364 a tela ERA a
+   folha. A v3.370 trocou aquele bloco inteiro pela folha nova, que nao
+   tem botao nenhum (papel nao clica), e levou os dois junto.
+
+   Sem CSS, um `<button>` volta ao desenho padrao do navegador: caixa
+   cinza com borda `2px outset` e fonte de 13.33px. Era essa a caixa em
+   volta do nome do cliente. E o X, sem `svg{width}`, virou um botao de
+   4px, que e o mesmo que sumir.
+
+   Por isso a conferencia mede o COMPUTADO: a existencia da regra nao diz
+   nada quando o problema e a AUSENCIA dela. */
+const botoes = await pagina.evaluate(async () => {
+  const pg = document.getElementById('relPage');
+  pg.hidden = false;
+  relDesenha();
+  await new Promise(r => setTimeout(r, 350));
+  const lin = pg.querySelector('.rv-lin[data-id]');
+  const ler = e => { if (!e) return null; const c = getComputedStyle(e);
+    const r = e.getBoundingClientRect();
+    return { existe:true, borda:c.borderStyle, larguraBorda:c.borderTopWidth,
+      fundo:c.backgroundColor, tam:c.fontSize, peso:c.fontWeight, cor:c.color,
+      w:Math.round(r.width), h:Math.round(r.height),
+      display:c.display };
+  };
+  const bt = lin.querySelector('.cli .rv-abrir');
+  const x = lin.querySelector('.rv-x');
+  const svg = x ? x.querySelector('svg') : null;
+  return {
+    abrir: ler(bt), cel: ler(lin.querySelector('.cli')), xis: ler(x),
+    xisSvg: svg ? { w:Math.round(svg.getBoundingClientRect().width),
+                    h:Math.round(svg.getBoundingClientRect().height) } : null,
+    colunas: [...pg.querySelectorAll('.rv-cabc > *')].map(e => e.textContent.trim()),
+    /* e nenhum nome da folha impressa sobrou solto na tela */
+    restosDaFolha: pg.querySelectorAll('.rel-abrir, .rel-x').length,
+  };
+});
+ok('o nome do cliente nao tem caixa nem borda de botao',
+   botoes.abrir && botoes.abrir.borda === 'none'
+   && botoes.abrir.fundo === 'rgba(0, 0, 0, 0)',
+   JSON.stringify(botoes.abrir));
+ok('  e usa a fonte da celula, e nao a do navegador',
+   !!botoes.abrir && botoes.abrir.tam === botoes.cel.tam
+   && botoes.abrir.peso === botoes.cel.peso && botoes.abrir.cor === botoes.cel.cor,
+   botoes.abrir ? (botoes.abrir.tam + '/' + botoes.abrir.peso + ' vs '
+     + botoes.cel.tam + '/' + botoes.cel.peso) : 'botao ausente');
+ok('o X de tirar da conta esta la, do tamanho de um botao',
+   botoes.xis && botoes.xis.w >= 20 && botoes.xis.h >= 20,
+   JSON.stringify(botoes.xis));
+ok('  com o icone desenhado dentro dele',
+   botoes.xisSvg && botoes.xisSvg.w >= 10 && botoes.xisSvg.h >= 10,
+   JSON.stringify(botoes.xisSvg));
+ok('nenhum nome da folha impressa sobrou na tela',
+   botoes.restosDaFolha === 0, String(botoes.restosDaFolha));
+/* A ORDEM DAS COLUNAS (v3.371, a pedido): o numero do pedido e o que se
+   procura primeiro numa lista de pedidos, e fica ao lado do cliente. */
+ok('a ordem e Pedido, Dia, Cliente, Vendedor',
+   JSON.stringify(botoes.colunas.slice(0, 5))
+     === JSON.stringify(['', 'Pedido', 'Dia', 'Cliente', 'Vendedor']),
+   JSON.stringify(botoes.colunas.slice(0, 5)));
+
 console.log('\n=== 8. O RECUO LATERAL, EM VARIAS ALTURAS DE JANELA ===');
 /* A REGRESSAO QUE ESTA SECAO EXISTE PARA IMPEDIR (v3.368).
 
@@ -470,8 +534,9 @@ console.log('\n=== 8b. A ESCADA DE PESO DAS DUAS TABELAS ===');
    dois motivos que so aparecem medindo celula por celula:
 
    1. O NOME DO CLIENTE nao ficava em negrito no Relatorio. A classe pedia
-      600, mas quem carrega o texto e o botao `.rel-abrir`, que e da FOLHA
-      IMPRESSA e traz `font-weight:500` escrito na mao.
+      600, mas quem carrega o texto e um botao, e o botao dela era o
+      `.rel-abrir` da FOLHA IMPRESSA, com `font-weight:500` na mao. Desde a
+      v3.371 o botao e `.rv-abrir` e mora com o resto da tela.
 
    2. A COLUNA PEDIDO da Atividade perdia o monoespacado. `.atv-linha
       .abre` traz `font-family:inherit`, `font-size:inherit` e
@@ -491,13 +556,13 @@ const escada = await pagina.evaluate(async () => {
   await new Promise(r => setTimeout(r, 350));
   const ler = e => { if (!e) return null; const c = getComputedStyle(e);
     return { peso: +c.fontWeight, tam: c.fontSize,
-      mono: /Mono|mono/.test(c.fontFamily), cor: c.color }; };
+      mono: /Mono|mono/.test(c.fontFamily), cor: c.color, fam: c.fontFamily }; };
   const lin = pg.querySelector('.rv-lin[data-id]');
   const rel = {
     vend: ler(lin.querySelector('.vend')),
     dia: ler(lin.querySelector('.dt')),
     cliCelula: ler(lin.querySelector('.cli')),
-    cliBotao: ler(lin.querySelector('.cli .rel-abrir')),
+    cliBotao: ler(lin.querySelector('.cli .rv-abrir')),
     ped: ler(lin.querySelector('.ped')),
     valor: ler(lin.querySelector('.n.v')),
     total: ler(lin.querySelector('.n.forte')),
@@ -557,6 +622,14 @@ ok('o total sobe para 700, acima das duas tecnicas',
 ok('as duas tabelas usam o MESMO tom forte',
    escada.rel.cliCelula.cor === escada.atv.nome.cor,
    escada.rel.cliCelula.cor + ' vs ' + escada.atv.nome.cor);
+/* O NOME DO CLIENTE E A MESMA COISA NAS DUAS PAGINAS (v3.371, a pedido).
+   A Atividade e a referencia: e dela que sai a medida. */
+ok('  e o nome do cliente sai identico nas duas: tamanho, peso e cor',
+   escada.rel.cliBotao.tam === escada.atv.nome.tam
+   && escada.rel.cliBotao.peso === escada.atv.nome.peso
+   && escada.rel.cliBotao.cor === escada.atv.nome.cor,
+   escada.rel.cliBotao.tam + '/' + escada.rel.cliBotao.peso + '/' + escada.rel.cliBotao.cor
+   + '  vs  ' + escada.atv.nome.tam + '/' + escada.atv.nome.peso + '/' + escada.atv.nome.cor);
 
 console.log('\n=== 9. A IMPRESSAO NAO FOI TOCADA ===');
 /* A folha nao mora mais na tela: quem a monta e relFolhaFonte(), desde a
