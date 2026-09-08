@@ -91,6 +91,11 @@ const SUITES = [
   /* v3.362 - a ordem do painel de relatorio e a busca que deixou de ser
      so cliente: agora varre pedido, vendedor e nome do arquivo. */
   'teste_rel_painel_ordem',
+  /* v3.363 - o cabecalho unico e grudado da Atividade, o encolhimento sem
+     tremedeira (a lista nao anda um pixel), o cinza que so existe grudado
+     nos dois temas, e a linha de titulo que faltava na barra fixa do
+     Relatorio de Pedidos. Cobra tambem que a impressao ficou intocada. */
+  'teste_topo_grudado',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
