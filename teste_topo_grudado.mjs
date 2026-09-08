@@ -377,7 +377,64 @@ ok('  e com as do subtotal', JSON.stringify(rel.sub) === JSON.stringify(rel.lin)
 ok('  na mesma margem esquerda', rel.esqCab === rel.esqLin, rel.esqCab + ' vs ' + rel.esqLin);
 ok('nenhuma celula corta o proprio conteudo', rel.cortadas === 0, String(rel.cortadas));
 
-console.log('\n=== 8. A IMPRESSAO NAO FOI TOCADA ===');
+console.log('\n=== 8. O RECUO LATERAL, EM VARIAS ALTURAS DE JANELA ===');
+/* A REGRESSAO QUE ESTA SECAO EXISTE PARA IMPEDIR (v3.368).
+
+   O cartao encostava no menu e na borda direita. As margens estavam
+   certas no CSS da pagina: quem as anulava era
+   `.rel-page{padding-left:0;padding-right:0}`, sobra do tempo em que o
+   que morava ali era a folha A4, e que vem no fim do arquivo, vencendo.
+
+   E o motivo de nenhuma suite ter visto: logo acima existia
+   `@media (max-height:900px){ .rel-page{padding:0 22px ... !important} }`,
+   tambem do layout antigo, que DEVOLVIA o recuo em telas baixas. Todas as
+   suites rodavam em 900px ou menos de altura, exatamente dentro da faixa
+   onde o defeito nao aparecia.
+
+   Por isso esta secao mede em VARIAS alturas, e nao numa so. Medida numa
+   janela so nao e medida de layout, e sorte. */
+const ALTURAS = [768, 900, 901, 1000, 1080];
+const recuos = [];
+for (const alt of ALTURAS) {
+  await pagina.setViewportSize({ width: 1600, height: alt });
+  await pagina.waitForTimeout(200);
+  await pagina.evaluate(() => { relDesenha(); });
+  await pagina.waitForTimeout(320);
+  const m = await pagina.evaluate(() => {
+    const medir = (pgSel, cartaoSel) => {
+      const pg = document.querySelector(pgSel);
+      const c = pg && pg.querySelector(cartaoSel);
+      if (!pg || !c) return null;
+      const a = pg.getBoundingClientRect(), b = c.getBoundingClientRect();
+      return { esq: Math.round(b.left - a.left), dir: Math.round(a.right - b.right) };
+    };
+    const pgAtv = document.getElementById('atvPage');
+    const eraAtv = pgAtv.hidden;
+    pgAtv.hidden = false;
+    const atv = medir('#atvPage', '.atv-flut');
+    pgAtv.hidden = eraAtv;
+    return { rel: medir('#relPage', '.rv-cart'), relTopo: medir('#relPage', '.rv-flut'), atv };
+  });
+  recuos.push({ alt, ...m });
+}
+await pagina.setViewportSize({ width: 1600, height: 820 });
+await pagina.waitForTimeout(200);
+console.log('     ' + JSON.stringify(recuos));
+ok('o Relatorio tem recuo dos dois lados em TODA altura de janela',
+   recuos.every(r => r.rel && r.rel.esq >= 16 && r.rel.dir >= 16),
+   JSON.stringify(recuos.map(r => r.alt + ':' + (r.rel ? r.rel.esq + '/' + r.rel.dir : 'sem'))));
+ok('  e o mesmo recuo em todas elas, sem depender da altura',
+   new Set(recuos.map(r => r.rel.esq + '|' + r.rel.dir)).size === 1,
+   JSON.stringify(recuos.map(r => r.rel.esq + '|' + r.rel.dir)));
+ok('  o cabecalho grudado comeca na mesma margem que os cartoes',
+   recuos.every(r => r.relTopo && r.relTopo.esq === r.rel.esq
+                     && r.relTopo.dir === r.rel.dir),
+   JSON.stringify(recuos.map(r => r.relTopo.esq + '|' + r.relTopo.dir)));
+ok('a Atividade tem o MESMO recuo do Relatorio, em toda altura',
+   recuos.every(r => r.atv && r.atv.esq === r.rel.esq && r.atv.dir === r.rel.dir),
+   JSON.stringify(recuos.map(r => r.alt + ':' + (r.atv ? r.atv.esq + '/' + r.atv.dir : 'sem'))));
+
+console.log('\n=== 9. A IMPRESSAO NAO FOI TOCADA ===');
 /* A folha nao mora mais na tela: quem a monta e relFolhaFonte(), desde a
    v3.364. E dela que o papel sai, e e ela que tem de continuar inteira. */
 const imp = await pagina.evaluate(() => {
