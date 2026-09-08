@@ -88,6 +88,9 @@ const SUITES = [
      botoes; cada mes continua guardado sozinho no seu .ftr e o combinado
      nunca vira arquivo. */
   'teste_relatorio_meses',
+  /* v3.362 - a ordem do painel de relatorio e a busca que deixou de ser
+     so cliente: agora varre pedido, vendedor e nome do arquivo. */
+  'teste_rel_painel_ordem',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor
