@@ -258,84 +258,153 @@ ok('as dez colunas continuam com os mesmos nomes',
 ok('os seis dias e as trinta linhas continuam desenhados',
    velho.dias === 6 && velho.linhas === 30, velho.dias + ' dias, ' + velho.linhas + ' linhas');
 
-console.log('\n=== 7. A BARRA FIXA DO RELATORIO DE PEDIDOS ===');
+console.log('\n=== 7. O RELATORIO DE PEDIDOS GANHOU O MESMO CABECALHO ===');
+/* Ate a v3.364 esta pagina mostrava a FOLHA IMPRESSA reduzida por
+   transform:scale(), e por isso nao podia receber a maquete: transform
+   anula position:sticky, e o cabecalho precisava de uma barra a parte.
+   Desde que a impressao se soltou da tela (v3.364), a tela e livre. */
 const rel = await pagina.evaluate(async () => {
   const pg = document.getElementById('relPage');
   pg.hidden = false;
   REL.periodos = { anos: [2026], meses: [8,9], comMovimento: [8,9] };
   REL.sel = { ano: 2026, meses: [8,9], mes: 8, dia: 0 };
-  const it = (id,mes,dia) => ({ id:'R'+id, dia, mes, ano:2026, cliente:'CLIENTE '+id,
-    pedido:'PD004'+id, vendedor:'Lucas', arquivo:'a'+id+'.json',
-    subPecas:10, subValor:1000, perPecas:5, perValor:500, mistos:[] });
-  REL.dados = { ano:2026, meses:[8,9], mes:8, dia:0, geradoEm:new Date().toISOString(),
-    itens: [...Array(24)].map((_,i) => it(i+1, i < 12 ? 8 : 9, (i % 12) + 1)), falhas: [] };
+  REL.filtro = { vendedor:'', cliente:'', dia:0, tipo:'' };
+  const it = (i,mes,dia) => ({ id:'R'+i, dia, mes, ano:2026,
+    cliente:'CLIENTE DE NOME BEM COMPRIDO '+i, pedido:'PD004'+(100+i),
+    vendedor:['Lucas','Dani','Kev','Alam','Fabricio'][i%5], arquivo:'a'+i+'.ft',
+    subPecas:80+i, subValor:6000+i*90, perPecas:30+i, perValor:2500+i*70, mistos:[] });
+  REL.dados = { ano:2026, meses:[8,9], mes:8, dia:0, geradoEm:'2026-08-30T02:36:00Z',
+    itens: [...Array(60)].map((_,i) => it(i+1, i<30?8:9, (i%28)+1)), falhas:[] };
   REL.fora = new Set();
   relDesenha();
-  await new Promise(r => setTimeout(r, 350));
-  if (typeof relSincronizaFixo === 'function') relSincronizaFixo();
-  await new Promise(r => setTimeout(r, 200));
-  const fixo = document.getElementById('relFixo');
-  const tit = fixo.querySelector('.rel-fx-tit');
-  const cx = fixo.querySelector('.cx');
+  await new Promise(r => setTimeout(r, 500));
+  const topo = pg.querySelector('.rv-topo');
+  const esp = () => new Promise(r => setTimeout(r, 260));
+  const medir = () => ({
+    titulo: parseFloat(getComputedStyle(topo.querySelector('.rv-cab h2')).fontSize),
+    valor: parseFloat(getComputedStyle(topo.querySelector('.rv-m .v')).fontSize),
+    colunas: parseFloat(getComputedStyle(topo.querySelector('.rv-cabc')).fontSize),
+    flut: getComputedStyle(topo.querySelector('.rv-flut')).backgroundColor,
+    nums: getComputedStyle(topo.querySelector('.rv-nums')).backgroundColor,
+    alto: Math.round(topo.getBoundingClientRect().height),
+  });
+  pg.scrollTop = 0; await esp(); const parado = medir();
+  pg.scrollTop = 400; await esp(); const grudado = medir();
+  pg.scrollTop = 0; await esp();
+
+  /* a tremedeira, medida do mesmo jeito que na Atividade */
+  const esp2 = () => new Promise(r => requestAnimationFrame(
+    () => requestAnimationFrame(() => setTimeout(r, 40))));
+  let trocas = 0, ant = topo.classList.contains('grudado');
+  const mo = new MutationObserver(() => {
+    const v = topo.classList.contains('grudado');
+    if (v !== ant) { trocas++; ant = v; } });
+  mo.observe(topo, { attributes:true, attributeFilter:['class'] });
+  const marco = () => Math.round(pg.querySelector('.rv-lin[data-id]').getBoundingClientRect().top);
+  let base = null; const desvios = []; let grampeou = 0;
+  for (const y of [0,1,2,4,8,12,16,20,24,32,64,120,220,120,64,32,24,20,16,12,8,4,2,1,0]) {
+    pg.scrollTop = y; await esp2();
+    if (pg.scrollTop !== y) grampeou++;
+    const v = marco() + pg.scrollTop;
+    if (base === null) base = v; else desvios.push(Math.abs(v - base));
+  }
+  mo.disconnect();
+  pg.scrollTop = 0; await esp2();
+
+  const larg = sel => [...document.querySelector(sel).children]
+    .map(e => Math.round(e.getBoundingClientRect().width));
+  const esq = sel => Math.round(document.querySelector(sel).getBoundingClientRect().left);
   return {
-    escondida: fixo.hidden,
-    posicao: getComputedStyle(fixo).position,
-    altura: getComputedStyle(fixo).height,
-    temTitulo: !!tit,
-    titulo: tit ? (tit.querySelector('b') || {}).textContent : '',
-    periodo: (document.getElementById('relFxPer') || {}).textContent || '',
-    fundo: getComputedStyle(cx).backgroundColor,
-    cartoes: fixo.querySelectorAll('.rel-fx-card').length,
-    colunas: fixo.querySelectorAll('.rel-fx-cols span').length,
-    grupos: fixo.querySelectorAll('.rel-fx-grupos span').length,
-    /* o recuo do titulo acompanha o dos cartoes: as duas linhas comecam no
-       mesmo x que a tabela da folha */
-    recuoIgual: tit ? tit.style.paddingLeft === fixo.querySelector('.rel-fx-cards').style.paddingLeft : false,
+    parado, grudado, trocas, maiorDesvio: Math.max(...desvios), grampeou,
+    cartoes: pg.querySelectorAll('.rv-cart').length,
+    linhas: pg.querySelectorAll('.rv-lin[data-id]').length,
+    subtotais: pg.querySelectorAll('.rv-sub').length,
+    meses: [...pg.querySelectorAll('.rv-grp .ms')].map(e => e.textContent),
+    cabc: larg('.rv-cabc'), lin: larg('.rv-lin[data-id]'), sub: larg('.rv-sub'),
+    esqCab: esq('.rv-cabc'), esqLin: esq('.rv-lin[data-id]'),
+    cortadas: [...pg.querySelectorAll('.rv-lin > *')]
+      .filter(e => e.scrollWidth > e.clientWidth + 1).length,
+    semFolha: !pg.querySelector('.rel-folha'),
+    semBarraFixa: !pg.querySelector('.rel-fixo'),
+    espelho: !!pg.querySelector('.rel-topo #relAno'),
+    espelhoEscondido: getComputedStyle(pg.querySelector('.rel-topo')).display,
   };
 });
-ok('a barra existe e e grudada', rel.escondida === false && rel.posicao === 'sticky',
-   rel.posicao + ' escondida=' + rel.escondida);
-ok('  e continua de altura zero, sem empurrar nada', rel.altura === '0px', rel.altura);
-ok('a barra agora traz o nome do relatorio', rel.titulo === 'Relatório de Pedidos', rel.titulo);
-ok('  e o periodo, que era o que sumia ao rolar',
-   rel.periodo === 'Agosto a Setembro de 2026', rel.periodo);
-ok('  alinhado com os cartoes', rel.recuoIgual === true);
-ok('  num tom cinza, e nao branco sobre a folha branca',
-   luz(rel.fundo) < 250 && luz(rel.fundo) > 200, rel.fundo + ' luz=' + luz(rel.fundo).toFixed(0));
-ok('os quatro totais, os grupos e as colunas continuam la',
-   rel.cartoes === 4 && rel.grupos === 4 && rel.colunas === 11,
-   rel.cartoes + ' / ' + rel.grupos + ' / ' + rel.colunas);
+ok('a folha saiu da tela', rel.semFolha === true);
+ok('  e a barra fixa foi junto', rel.semBarraFixa === true);
+ok('  mas o espelho escondido dos filtros ficou',
+   rel.espelho === true && rel.espelhoEscondido === 'none', rel.espelhoEscondido);
+/* 60 pedidos, dias 1 a 28, dois meses: cinco semanas em cada mes, mais o
+   cartao do total geral fechando a lista */
+ok('a semana virou cartao, como o dia da Atividade',
+   rel.cartoes === 11 && rel.subtotais === 11,
+   rel.cartoes + ' cartoes, ' + rel.subtotais + ' subtotais');
+ok('  com as 60 linhas dentro', rel.linhas === 60, String(rel.linhas));
+ok('  e o mes na frente da semana, porque sao dois meses somados',
+   rel.meses.length === 10 && rel.meses[0] === 'Agosto'
+   && rel.meses[rel.meses.length-1] === 'Setembro', JSON.stringify(rel.meses));
+ok('o titulo diminui ao grudar', rel.grudado.titulo < rel.parado.titulo,
+   rel.parado.titulo + ' -> ' + rel.grudado.titulo);
+ok('o numero diminui ao grudar', rel.grudado.valor < rel.parado.valor,
+   rel.parado.valor + ' -> ' + rel.grudado.valor);
+ok('a fileira de colunas NAO encolhe', rel.grudado.colunas === rel.parado.colunas,
+   rel.parado.colunas + ' -> ' + rel.grudado.colunas);
+ok('o cabecalho fica mais baixo', rel.grudado.alto < rel.parado.alto,
+   rel.parado.alto + ' -> ' + rel.grudado.alto);
+ok('o cinza so aparece grudado', rel.grudado.flut !== rel.parado.flut
+   && luz(rel.grudado.flut) < luz(rel.parado.flut) - 4,
+   rel.parado.flut + ' -> ' + rel.grudado.flut);
+ok('  e a faixa dos numeros escurece mais que o corpo',
+   luz(rel.grudado.nums) < luz(rel.grudado.flut),
+   luz(rel.grudado.flut).toFixed(0) + ' / ' + luz(rel.grudado.nums).toFixed(0));
+ok('a lista nao se move NENHUM pixel', rel.maiorDesvio === 0, String(rel.maiorDesvio));
+ok('  sem grampear a rolagem', rel.grampeou === 0, String(rel.grampeou));
+ok('  e com duas trocas de estado, o minimo possivel', rel.trocas === 2, String(rel.trocas));
+ok('as colunas do cabecalho batem com as da linha',
+   JSON.stringify(rel.cabc) === JSON.stringify(rel.lin),
+   JSON.stringify(rel.cabc) + ' vs ' + JSON.stringify(rel.lin));
+ok('  e com as do subtotal', JSON.stringify(rel.sub) === JSON.stringify(rel.lin),
+   JSON.stringify(rel.sub));
+ok('  na mesma margem esquerda', rel.esqCab === rel.esqLin, rel.esqCab + ' vs ' + rel.esqLin);
+ok('nenhuma celula corta o proprio conteudo', rel.cortadas === 0, String(rel.cortadas));
 
 console.log('\n=== 8. A IMPRESSAO NAO FOI TOCADA ===');
+/* A folha nao mora mais na tela: quem a monta e relFolhaFonte(), desde a
+   v3.364. E dela que o papel sai, e e ela que tem de continuar inteira. */
 const imp = await pagina.evaluate(() => {
-  const folha = document.querySelector('#relPage .rel-folha');
-  const cab = folha ? folha.querySelector('.rel-cab') : null;
-  const tab = folha ? folha.querySelector('.rel-tab') : null;
+  const folha = relFolhaFonte();
+  const tab = folha && folha.querySelector('.rel-tab');
   return {
-    /* a folha do relatorio continua sendo o desenho impresso, intocado */
-    folha: !!folha, cabFolha: !!cab, tabela: !!tab,
+    folha: !!folha,
+    cabFolha: !!(folha && folha.querySelector('.rel-cab')),
+    rodFolha: !!(folha && folha.querySelector('.rel-rod')),
+    tabela: !!tab,
     colunasTabela: tab ? tab.querySelectorAll('thead tr:last-child th').length : 0,
     cardsFolha: folha ? folha.querySelectorAll('.rel-cards .rel-card').length : 0,
-    /* a barra fixa nao existe no papel */
-    fixoNoPapel: [...document.styleSheets].some(() => false) || null,
-    /* e a atividade imprime de uma estrutura propria, montada a parte */
-    montaImpressao: typeof atvMontaImpressao === 'function',
+    /* nenhuma peca da tela nova pode ter vazado para dentro da folha */
+    semTelaDentro: folha ? folha.querySelectorAll('.rv-topo,.rv-cart,.rv-lin').length === 0 : false,
+    montaAtividade: typeof atvMontaImpressao === 'function',
+    montaRelatorio: typeof relMontaImpressao === 'function',
   };
 });
 ok('a folha do relatorio continua inteira',
-   imp.folha && imp.cabFolha && imp.tabela, JSON.stringify(imp));
+   imp.folha && imp.cabFolha && imp.rodFolha && imp.tabela, JSON.stringify(imp));
 ok('  com as onze colunas de sempre', imp.colunasTabela === 11, String(imp.colunasTabela));
 ok('  e os quatro cartoes da folha', imp.cardsFolha === 4, String(imp.cardsFolha));
-ok('a atividade continua imprimindo de estrutura propria', imp.montaImpressao === true);
+ok('  sem nada da tela nova dentro dela', imp.semTelaDentro === true);
+ok('as duas montagens de papel continuam la',
+   imp.montaAtividade && imp.montaRelatorio, JSON.stringify(imp));
 const regras = await pagina.evaluate(() => {
-  const txt = [...document.querySelectorAll('style')].map(s => s.textContent).join('\n');
+  const txt = [...document.querySelectorAll('style')].map(s => s.textContent).join('\n')
+    .replace(/\s+/g, ' ');
   return {
-    fixoSaiNoPapel: /@media print\{\s*\.rel-fixo\{display:none/.test(txt.replace(/\s+/g,' ').replace(/@media print \{ /g,'@media print{')),
-    paginaSaiNoPapel: /body\.atv-imprimindo \.atv-page\{display:none/.test(txt.replace(/\s+/g,' ')),
+    atvSaiNoPapel: /body\.atv-imprimindo \.atv-page\{display:none/.test(txt),
+    semEscalaNoPapel: /transform:none !important;width:var\(--rel-natural/.test(txt),
   };
 });
-ok('a barra fixa continua fora do papel', regras.fixoSaiNoPapel === true);
-ok('e a pagina de tela da atividade tambem', regras.paginaSaiNoPapel === true);
+ok('a pagina de tela da atividade fica fora do papel', regras.atvSaiNoPapel === true);
+ok('a folha impressa continua em tamanho real, sem escala',
+   regras.semEscalaNoPapel === true);
 
 console.log('\n' + feitas + ' conferencias, ' + falhas + ' falha(s)');
 if (erros.length) { console.log('  erros de pagina: ' + erros.slice(0,3).join(' // ')); falhas++; }

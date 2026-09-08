@@ -111,8 +111,10 @@ const um = await pagina.evaluate(async () => {
   relDesenha(); await new Promise(r=>setTimeout(r,250));
   const fd = document.getElementById('relDia');
   return {
-    titulo: (document.querySelector('.rel-tit p')||{}).textContent||'',
-    semanas: [...document.querySelectorAll('.rel-tab .sem-cab')].map(t=>t.textContent.trim()),
+    /* v3.365: o periodo mora no cabecalho grudado da tela, e a semana
+       virou cartao. A folha continua existindo, mas so na impressao. */
+    titulo: (document.querySelector('.rv-cab .per')||{}).textContent||'',
+    semanas: [...document.querySelectorAll('.rv-grp')].map(t=>t.textContent.trim()),
     dias: fd ? [...fd.options].map(o=>o.text) : []
   };
 });
@@ -136,21 +138,21 @@ const varios = await pagina.evaluate(async () => {
     ], falhas:[]};
   relDesenha(); await new Promise(r=>setTimeout(r,250));
   const out = {
-    titulo: (document.querySelector('.rel-tit p')||{}).textContent||'',
-    semanas: [...document.querySelectorAll('.rel-tab .sem-cab')].map(t=>t.textContent.trim()),
-    linhas: document.querySelectorAll('.rel-tab tbody tr[data-id]').length,
+    titulo: (document.querySelector('.rv-cab .per')||{}).textContent||'',
+    semanas: [...document.querySelectorAll('.rv-grp')].map(t=>t.textContent.trim()),
+    linhas: document.querySelectorAll('.rv-lin[data-id]').length,
     somaPecas: relSomas().tp,
     dias: [...document.getElementById('relDia').options].map(o=>o.value+'|'+o.text)
   };
   /* o dia 3 existe nos DOIS meses: filtrar pelo de setembro deixa só um */
   REL.filtro.dia = '9-3'; relDesenha(); await new Promise(r=>setTimeout(r,200));
-  out.filtrado = [...document.querySelectorAll('.rel-tab tbody tr[data-id] .cli')].map(e=>e.textContent);
+  out.filtrado = [...document.querySelectorAll('.rv-lin[data-id] .cli')].map(e=>e.textContent.trim());
   REL.filtro.dia = 0; relDesenha();
   return out;
 });
 ok('o título vira a faixa de meses',
    /Agosto a Setembro de 2026$/.test(varios.titulo), varios.titulo);
-ok('as quatro linhas entram na mesma tabela', varios.linhas === 4, String(varios.linhas));
+ok('as quatro linhas entram na mesma lista', varios.linhas === 4, String(varios.linhas));
 ok('a soma junta os dois meses', varios.somaPecas === 39, String(varios.somaPecas));
 ok('cada semana diz de que mês é',
    varios.semanas.length === 4

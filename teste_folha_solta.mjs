@@ -85,9 +85,11 @@ const monta = async cen => await pagina.evaluate(async c => {
   const htmlA = (document.getElementById('relPrint') || {}).outerHTML || '';
   relDesmontaImpressao();
 
-  /* B: com o visualizador ARRANCADO do documento */
-  const palco = pg.querySelector('.rel-palco');
-  if (palco) palco.remove();
+  /* B: com a PAGINA INTEIRA esvaziada. Desde a v3.365 a tela nem
+     desenha mais uma folha, entao arrancar so o palco ja nao provaria
+     nada: o que se prova aqui e que a impressao nao precisa de NADA do
+     que esta no visualizador. */
+  pg.innerHTML = '';
   const semFolhaNaTela = !pg.querySelector('.rel-folha');
   const nB = relMontaImpressao();
   const cx = document.getElementById('relPrint');
@@ -170,22 +172,45 @@ ok('  e nao virou entidade HTML pelo caminho', m.temEntidade === false);
 ok('o vendedor sai preenchido', m.primeiroVend === 'Lucas', m.primeiroVend);
 ok('e o numero do pedido tambem', m.primeiroPed === 'PD004100', m.primeiroPed);
 
-console.log('\n=== 4. A TELA E O PAPEL AINDA SAO O MESMO DESENHO, HOJE ===');
-/* Hoje os dois chamam o mesmo gerador. Esta conferencia registra isso: no
-   dia em que a tela mudar, ela FALHA de proposito, e quem mudar vai ler
-   aqui que o papel nao mudou junto e que isso e o esperado. */
-const espelho = await pagina.evaluate(async () => {
+console.log('\n=== 4. A TELA NAO E MAIS O PAPEL ===');
+/* Na v3.364 esta conferencia dizia o contrario: a tela e o papel eram a
+   MESMA string, e havia um aviso de que no dia em que a tela mudasse ela
+   falharia de proposito. O dia chegou na v3.365. Agora ela cobra a
+   separacao, que e o que se queria desde o comeco. */
+const separado = await pagina.evaluate(async () => {
   const pg = document.getElementById('relPage');
   relDesenha();
-  await new Promise(r => setTimeout(r, 350));
-  const naTela = pg.querySelector('.rel-folha');
+  await new Promise(r => setTimeout(r, 400));
   const fonte = relFolhaFonte();
-  const limpa = e => e.innerHTML.replace(/\s+/g, ' ').trim();
-  return { igual: limpa(naTela) === limpa(fonte),
-           tamTela: limpa(naTela).length, tamFonte: limpa(fonte).length };
+  return {
+    /* a tela: uma lista, com cabecalho grudado e cartoes de semana */
+    telaTemFolha: !!pg.querySelector('.rel-folha'),
+    telaTemTopo: !!pg.querySelector('.rv-topo'),
+    telaTemCartoes: pg.querySelectorAll('.rv-cart').length > 0,
+    telaTemLinhas: pg.querySelectorAll('.rv-lin[data-id]').length,
+    /* a folha: continua sendo a folha, montada a parte */
+    fonteTemCab: !!fonte.querySelector('.rel-cab'),
+    fonteTemCards: fonte.querySelectorAll('.rel-cards .rel-card').length,
+    fonteTemTabela: !!fonte.querySelector('.rel-tab'),
+    fonteTemTopoDaTela: !!fonte.querySelector('.rv-topo'),
+    /* e a escala e a barra fixa, que so existiam por causa do transform,
+       nao estao mais em lugar nenhum */
+    semEscala: typeof relAjustaEscala === 'undefined',
+    semBarraFixa: typeof relSincronizaFixo === 'undefined' && !pg.querySelector('.rel-fixo'),
+  };
 });
-ok('a folha da tela e a folha do papel sao a mesma, por enquanto',
-   espelho.igual === true, espelho.tamTela + ' vs ' + espelho.tamFonte);
+ok('a tela nao desenha mais a folha', separado.telaTemFolha === false);
+ok('  ela e uma lista, com cabecalho grudado', separado.telaTemTopo === true);
+ok('  e cartoes de semana com linhas dentro',
+   separado.telaTemCartoes === true && separado.telaTemLinhas === 140,
+   String(separado.telaTemLinhas));
+ok('a folha continua inteira, montada a parte',
+   separado.fonteTemCab && separado.fonteTemTabela && separado.fonteTemCards === 4,
+   JSON.stringify(separado));
+ok('  e nada da tela vazou para dentro dela', separado.fonteTemTopoDaTela === false);
+ok('a escala e a barra fixa sumiram, e nao ficaram mortas por perto',
+   separado.semEscala === true && separado.semBarraFixa === true,
+   'escala=' + separado.semEscala + ' barra=' + separado.semBarraFixa);
 
 console.log('\n=== 5. O CAMINHO DA IMPRESSAO CONTINUA INTEIRO ===');
 const caminho = await pagina.evaluate(() => ({
