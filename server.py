@@ -5735,9 +5735,11 @@ async def cli_devolver(codigo: str, request: Request):
                     atuais.pop(t, None)
                 total += q
             L["tamanhos"] = atuais
-            # a lista: so nos layouts que o vendedor marcou
-            if L.get("nomeNum"):
-                bruta = p.get("lista") or []
+            # a lista: no layout que o vendedor marcou, e em qualquer outro
+            # em que o proprio cliente abriu uma (v3.377). Lista que chega
+            # num layout sem marca liga a marca: o vendedor ve o botao Nº.
+            bruta = p.get("lista") or []
+            if L.get("nomeNum") or bruta:
                 if not isinstance(bruta, list) or len(bruta) > _CLI_MAX_LINHAS:
                     raise HTTPException(status_code=400, detail="Lista de nomes inválida.")
                 for k, x in enumerate(bruta):
@@ -5757,6 +5759,8 @@ async def cli_devolver(codigo: str, request: Request):
                         raise HTTPException(status_code=400, detail=(
                             "Layout %d, linha %d: escolha o tamanho." % (n, k + 1)))
                 L["lista"] = _cli_lista_limpa(bruta)
+                if L["lista"]:
+                    L["nomeNum"] = True
         link["estado"] = "devolvido"
         link["devolvidoEm"] = _cli_agora()
         link["pecas"] = total

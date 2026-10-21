@@ -340,7 +340,7 @@ function guardaRascunho(){
   if(TRAVADO)return;
   try{
     var r={quando:Date.now(), m:{}};
-    M.forEach(function(x){ if(!x.L.info) r.m[x.n]={tam:x.tam, lista:x.lista, outra:x.outra}; });
+    M.forEach(function(x){ if(!x.L.info) r.m[x.n]={tam:x.tam, lista:x.lista, outra:x.outra, nn:x.nn}; });
     localStorage.setItem(CHAVE, JSON.stringify(r));
   }catch(_){}
 }
@@ -393,10 +393,13 @@ function monta(d){
     var x={n:L.n, L:L, tam:tam, lista:(L.lista||[]).map(function(r){ return {nome:r.nome||'',num:r.num||'',gen:r.gen||'',tam:r.tam||''}; }), outra:false};
     var outraGrade = TAM[L.grade==='infantil'?'adulto':'infantil'];
     x.outra = outraGrade.some(function(t){ return tam[t]; });
+    /* a lista aparece no layout que o vendedor marcou, e em qualquer outro
+       em que o proprio cliente tocar em "Adicionar nomes e numeros" */
+    x.nn = !!L.nomeNum || x.lista.length>0;
     if(rasc && rasc.m && rasc.m[L.n]){
-      var g=rasc.m[L.n]; x.tam=g.tam||{}; x.lista=Array.isArray(g.lista)?g.lista:x.lista; x.outra=!!g.outra||x.outra; recuperou=true;
+      var g=rasc.m[L.n]; x.tam=g.tam||{}; x.lista=Array.isArray(g.lista)?g.lista:x.lista; x.outra=!!g.outra||x.outra; x.nn=x.nn||!!g.nn; recuperou=true;
     }
-    if(L.nomeNum && !x.lista.length) x.lista=[linhaVazia()];
+    if(x.nn && !x.lista.length) x.lista=[linhaVazia()];
     return x;
   });
   desenhaTudo();
@@ -421,7 +424,7 @@ function desenhaModelo(x){
   topo.appendChild(el('span','mod-selo','L-'+String(x.n).padStart(2,'0')));
   topo.appendChild(el('span','mod-nome', L.info ? 'Informação' : (L.ref||'Modelo '+x.n)));
   if(L.genero && !L.info) topo.appendChild(el('span','chip '+L.genero, L.genero.charAt(0).toUpperCase()+L.genero.slice(1)));
-  if(L.nomeNum) topo.appendChild(el('span','chip nn','Nome e número'));
+  if(x.nn) topo.appendChild(el('span','chip nn','Nome e número'));
   c.appendChild(topo);
 
   /* sem imagem, a caixa vazia nao aparece: ela so empurrava a grade para
@@ -473,7 +476,19 @@ function desenhaModelo(x){
   desenhaGrade(x);
 
   /* a lista de nomes */
-  if(L.nomeNum){
+  if(!x.nn){
+    /* layout sem lista: o cliente pode abrir uma, se esta peca levar nome */
+    var sa=el('div','secao so-edicao');
+    var bn=el('button','bt','+ Adicionar nomes e números'); bn.type='button'; bn.style.alignSelf='flex-start';
+    bn.addEventListener('click',function(){
+      x.nn=true; if(!x.lista.length)x.lista=[linhaVazia()];
+      redesenhaModelo(x); agendaGuarda(); focaLinha(x,0);
+    });
+    sa.appendChild(bn);
+    sa.appendChild(el('p','nn-ajuda','Toque aqui se as camisas deste modelo levam nome e número.'));
+    c.appendChild(sa);
+  }
+  if(x.nn){
     var sn=el('div','secao');
     var stn=el('div','secao-topo');
     stn.appendChild(el('h3',null,'Nomes e números'));
@@ -489,12 +504,34 @@ function desenhaModelo(x){
     ba.addEventListener('click',function(){ x.lista.push(linhaVazia()); desenhaLista(x); focaLinha(x,x.lista.length-1); agendaGuarda(); });
     var bc=el('button','bt','Colar do Excel'); bc.type='button';
     bc.addEventListener('click',function(){ abreColar(x); });
-    ac.appendChild(ba); ac.appendChild(bc); sn.appendChild(ac);
+    ac.appendChild(ba); ac.appendChild(bc);
+    if(!L.nomeNum){
+      /* aberta pelo cliente: ele pode desistir */
+      var bt0=el('button','bt leve','Este modelo não leva nome'); bt0.type='button';
+      /* com nomes ja digitados, o primeiro toque so pergunta (sem caixa do
+         navegador): o segundo apaga */
+      bt0.addEventListener('click',function(){
+        if(x.lista.some(linhaUsada) && bt0.dataset.certeza!=='1'){
+          bt0.dataset.certeza='1'; bt0.textContent='Toque de novo para apagar a lista';
+          setTimeout(function(){ bt0.dataset.certeza=''; bt0.textContent='Este modelo não leva nome'; },4000);
+          return;
+        }
+        x.nn=false; x.lista=[]; redesenhaModelo(x); agendaGuarda();
+      });
+      ac.appendChild(bt0);
+    }
+    sn.appendChild(ac);
     var conf=el('div','conf'); x.elConf=conf; sn.appendChild(conf);
     c.appendChild(sn);
     desenhaLista(x);
   }
   return c;
+}
+
+function redesenhaModelo(x){
+  var velho=$('modelo-'+x.n); var novo=desenhaModelo(x);
+  if(velho)velho.replaceWith(novo);
+  atualizaTotais();
 }
 
 function tamanhosVisiveis(x){
@@ -519,7 +556,7 @@ function desenhaGrade(x){
       v=String(v).replace(/\D/g,'').replace(/^0+(?=\d)/,'').slice(0,5);
       if(v==='0')v='';
       inp.value=v; if(v)x.tam[t]=v; else delete x.tam[t];
-      cel.classList.toggle('cheio',!!v); atualizaTotais(); if(x.L.nomeNum)confere(x); agendaGuarda();
+      cel.classList.toggle('cheio',!!v); atualizaTotais(); if(x.nn)confere(x); agendaGuarda();
     }
     inp.addEventListener('input',function(){ poe(inp.value); });
     menos.addEventListener('click',function(){ poe(Math.max(0,(parseInt(inp.value,10)||0)-1)); });
@@ -751,7 +788,7 @@ $('btEnviar').addEventListener('click',function(){
   var tot=atualizaTotais();
   var problemas=[];
   M.forEach(function(x){
-    if(!x.L.nomeNum)return;
+    if(!x.nn)return;
     x.mostraErros=true; confere(x);
     x.lista.forEach(function(r,i){ var p=problemaLinha(r); if(p)problemas.push({x:x,i:i,p:p}); });
   });
@@ -770,14 +807,14 @@ $('btEnviar').addEventListener('click',function(){
     var tr=el('tr');
     var nome='L-'+String(x.n).padStart(2,'0')+'  '+(x.L.ref||'Modelo '+x.n);
     tr.appendChild(el('td',null,nome));
-    var nomes=x.L.nomeNum ? x.lista.filter(linhaUsada).length : null;
+    var nomes=x.nn ? x.lista.filter(linhaUsada).length : null;
     tr.appendChild(el('td','num', pecas(x.soma||0) + (nomes!=null ? ' · '+fmt(nomes)+(nomes===1?' nome':' nomes') : '')));
     t.appendChild(tr);
   });
   var trT=el('tr'); var a1=el('td'); a1.innerHTML='<b>Total</b>'; var a2=el('td','num'); a2.innerHTML='<b>'+pecas(tot)+'</b>';
   trT.appendChild(a1); trT.appendChild(a2); t.appendChild(trT);
   c.appendChild(t);
-  var difs=M.filter(function(x){ return x.L.nomeNum && x.diferencas && x.diferencas.length; });
+  var difs=M.filter(function(x){ return x.nn && x.diferencas && x.diferencas.length; });
   if(difs.length){
     var f=el('div','faixa at'); f.innerHTML=IC_AT;
     var s=el('div');
@@ -799,7 +836,7 @@ $('confEnviar').addEventListener('click',function(){
     var tam={}; tamanhosVisiveis(x).forEach(function(t){ tam[t]=x.tam[t]||''; });
     Object.keys(x.tam).forEach(function(t){ tam[t]=x.tam[t]; });
     var o={n:x.n, tamanhos:tam};
-    if(x.L.nomeNum) o.lista=x.lista.filter(linhaUsada).map(function(r){ return {nome:(r.nome||'').trim(),num:r.num||'',gen:r.gen,tam:r.tam}; });
+    if(x.nn) o.lista=x.lista.filter(linhaUsada).map(function(r){ return {nome:(r.nome||'').trim(),num:r.num||'',gen:r.gen,tam:r.tam}; });
     return o;
   })};
   fetch('/api/cliente/devolver/'+encodeURIComponent(CODIGO),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)})
@@ -830,7 +867,7 @@ function quando(iso){
 function mostraTravado(iso, agora){
   TRAVADO=true;
   document.body.classList.add('travado');
-  M.forEach(function(x){ if(x.L.info)return; desenhaGrade(x); if(x.L.nomeNum){ x.lista=x.lista.filter(linhaUsada); desenhaLista(x); } });
+  M.forEach(function(x){ if(x.L.info)return; desenhaGrade(x); if(x.nn){ x.lista=x.lista.filter(linhaUsada); desenhaLista(x); } });
   var f=$('faixaEstado'); f.className='faixa ok'; f.innerHTML=IC_OK;
   var s=el('div');
   var b=el('b',null, agora ? 'Pronto! Recebido pela Fourtime' : 'Este pedido já foi enviado para a Fourtime');

@@ -135,7 +135,8 @@ checa("grade 2: tamanho novo sem preco", f["layouts"][1]["tamanhos"]["GG"], {"q"
 checa("lista do layout 1, sem a linha vazia e com o espaco arrumado",
       f["layouts"][0]["lista"], [{"nome": "Ana Souza", "num": "7", "gen": "feminino", "tam": "M"},
                                   {"nome": "Beto", "num": "10", "gen": "masculino", "tam": "G"}])
-checa("layout 2 nao foi marcado: a lista nao entra", f["layouts"][1]["lista"], [])
+checa("layout 2 sem marca: a lista que o cliente abriu entra (v3.377)", len(f["layouts"][1]["lista"]), 2)
+checa("  e liga a marca, para o vendedor ver o botao", f["layouts"][1]["nomeNum"], True)
 checa("o modulo de informacao nao ganhou grade", f["layouts"][2]["tamanhos"], {})
 checa("o .ft diz devolvido", f["cliente"]["estado"], "devolvido")
 checa("o ajuste continua la", f["ajustes"], DOC["ajustes"])

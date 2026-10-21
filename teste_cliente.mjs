@@ -55,7 +55,7 @@ try {
   pv.on('pageerror', e => erros.push('editor: ' + e.message));
   await pv.goto(BASE + '/');
   await esperaPronto(pv);
-  diz('a versão nova', await pv.evaluate(() => FT_EDITOR), '3.376');
+  diz('a versão nova', await pv.evaluate(() => FT_EDITOR), '3.377');
   await pv.evaluate(() => {
     const p = (k, v) => { const e = document.querySelector('[data-h="' + k + '"]'); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); };
     p('cliente', 'ACME ESPORTES'); p('pedido', 'PD004900'); p('vendedor', 'Dani');
@@ -85,6 +85,7 @@ try {
   const link = await pv.inputValue('#lcLink');
   diz('o link aponta para a página do cliente', /^http:\/\/127\.0\.0\.1:\d+\/cliente\/[A-Za-z0-9_-]{32}$/.test(link), true);
   diz('o menu diz aguardando', (await pv.textContent('#miClienteRotulo')).trim(), 'Aguardando cliente');
+  diz('com o link no ar, a janela ainda mostra os layouts para marcar', await pv.locator('#lcLayoutsCx').isVisible(), true);
   diz('  com o ponto âmbar', await pv.getAttribute('#miClienteSelo', 'class'), 'mi-cli-selo aguardando');
   await pv.screenshot({ path: '/tmp/cliente-a-link.png' });
   await pv.click('#lcFechar');
@@ -134,6 +135,13 @@ try {
   diz('o Excel entrou certo, com o "M" lido como gênero', linhas, ['Ana Souza|7|Feminino|M', 'Beto Lima|10|Masculino|G', 'Caio|9|Masculino|G', 'Dani|11|Feminino|P']);
   diz('a conferência avisa que não bate', await m1.locator('.conf.at').count(), 1);
   await pc.locator('#modelo-2 #q-2-P').fill('5');
+  /* v3.377: o L-02 não foi marcado pelo vendedor, mas o cliente abre a lista */
+  diz('o modelo sem marca oferece abrir a lista', await pc.locator('#modelo-2 button:text-is("+ Adicionar nomes e números")').count(), 1);
+  await pc.locator('#modelo-2 button:text-is("+ Adicionar nomes e números")').tap();
+  diz('  e a tabela aparece', await pc.locator('#modelo-2 .nn-linha').count(), 1);
+  const l2 = pc.locator('#modelo-2 .nn-linha').first();
+  await l2.locator('input').first().fill('Zeca'); await l2.locator('input').nth(1).fill('5');
+  await l2.locator('.seg .m').tap(); await l2.locator('select').selectOption('P');
   diz('o total geral', (await pc.textContent('#totalGeral')).trim(), '10');
   await pc.screenshot({ path: '/tmp/cliente-b-celular.png', fullPage: true });
 
@@ -143,6 +151,7 @@ try {
   await pc.waitForSelector('#telaPrincipal:not(.oculto)');
   diz('depois de recarregar, a grade continua', await pc.locator('#q-1-M').inputValue(), '3');
   diz('e a lista também', await pc.locator('#modelo-1 .nn-linha').count(), 4);
+  diz('e a lista que o cliente abriu no L-02', await pc.locator('#modelo-2 .nn-linha').count(), 1);
 
   /* uma linha sem tamanho segura o envio */
   await pc.locator('#modelo-1 button:text-is("+ Adicionar linha")').tap();
@@ -187,6 +196,8 @@ try {
   const doc2 = await pv.evaluate(() => coletaEstado());
   diz('a grade do cliente chegou', doc2.layouts[0].tamanhos.M && doc2.layouts[0].tamanhos.M.q, '3');
   diz('  e o preço do L-02 continua lá', doc2.layouts[1].tamanhos.P, { q: '5', u: '71,50' });
+  diz('a lista que o cliente abriu no L-02 chegou', doc2.layouts[1].lista.map(r => r.nome + '/' + r.num), ['Zeca/5']);
+  diz('  e o L-02 ganhou a marca', doc2.layouts[1].nomeNum, true);
   diz('a lista chegou', doc2.layouts[0].lista.map(r => r.nome + '/' + r.num + '/' + r.gen + '/' + r.tam),
     ['Ana Souza/7/feminino/M', 'Beto Lima/10/masculino/G', 'Caio/9/masculino/G', 'Dani/11/feminino/P']);
   diz('o Nº ganha o ponto de "não bate"', await pv.locator('.area-paginas .lay-modulo').first().locator('.lay-nn-bt.difere').count(), 1);
@@ -210,7 +221,7 @@ try {
     visivel: getComputedStyle(document.querySelector('.folha-nomes')).display
   }));
   diz('uma folha de nomes', fn.folhas, 1);
-  diz('com as 4 linhas', fn.linhas, 4);
+  diz('com as 5 linhas (4 do L-01 e 1 do L-02)', fn.linhas, 5);
   diz('o resumo marca o tamanho que não bate', fn.dif, true);
   diz('aparece no papel', fn.visivel, 'block');
   await pv.locator('.folha-nomes').screenshot({ path: '/tmp/cliente-e-folha-nomes.png' });
@@ -228,8 +239,8 @@ try {
     nnTiraFolhas(); m._lista = antes; return r;
   });
   diz('90 nomes em 3 folhas', muitas.folhas, 3);
-  diz('  todas as linhas', muitas.linhas, 90);
-  diz('  um resumo, junto de linhas', muitas.resumos + '/' + muitas.resumoComLinha, '1/true');
+  diz('  todas as linhas (mais a do L-02)', muitas.linhas, 91);
+  diz('  um resumo por layout, sempre junto de linhas', muitas.resumos + '/' + muitas.resumoComLinha, '2/true');
 
   /* ---------------------------------------------------------------- */
   secao('F. o HTML do Trello');
@@ -244,7 +255,7 @@ try {
   await pt.setContent(html, { waitUntil: 'load' });
   await pt.waitForTimeout(500);
   diz('o link está na observação do L-01', await pt.locator('.lay-modulo').first().locator('.lay-area .nn-link').count(), 1);
-  diz('  e não no L-02', await pt.locator('.lay-modulo').nth(1).locator('.nn-link').count(), 0);
+  diz('  e no L-02, a que o cliente abriu', await pt.locator('.lay-modulo').nth(1).locator('.nn-link').count(), 1);
   await pt.locator('.nn-link').first().click();
   await pt.waitForSelector('.nnr-fundo.on');
   diz('a janela mostra as 4 linhas', await pt.locator('.nnr-tab tbody tr').count(), 4);
