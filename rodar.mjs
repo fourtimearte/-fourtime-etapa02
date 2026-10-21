@@ -104,6 +104,11 @@ const SUITES = [
   /* v3.372 - o clique de cor separado do de tecido, a margem zero do @page
      do relatorio (a folha ja tem a dela) e a coluna Aviso da Atividade. */
   'teste_aviso_e_tecido',
+  /* v3.376 - o orcamento que o cliente preenche: o link, a pagina do
+     cliente no celular e no computador, a lista de nomes e numeros, o
+     aviso, a folha de nomes e o link no HTML do Trello. A do servidor
+     cobra as rotas sem login com o Drive de mentira. */
+  'teste_cliente_servidor', 'teste_cliente',
 ];
 const EXTRA = ['verifica_trello', 'cmp_a4_chave',
   /* o Relatório de Atividade ainda é maquete, não faz parte do editor

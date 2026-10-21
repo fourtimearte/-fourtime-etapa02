@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#C6161B">
+<title>Fourtime · Seu orçamento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<!--
+  A PAGINA DO CLIENTE (v3.376)
+
+  O cliente abre pelo link que o vendedor mandou, preenche a quantidade de
+  cada tamanho e, nos modelos marcados, a lista de nomes e numeros, e
+  devolve para a Fourtime. Nao tem login e nao carrega o editor: o
+  servidor manda so o que pode ser mostrado (nenhum valor em R$).
+
+  Nada aqui confia no navegador: o servidor confere tudo de novo.
+-->
+<style>
+  :root{
+    --vm:#C6161B; --vm-esc:#A51217; --vm-suave:#FDF1F1; --vm-borda:#F3C9CB;
+    --tx:#161A20; --tx-2:#4B525C; --tx-3:#6B727C;
+    --bd:#DCE0E6; --bd-2:#C7CDD5;
+    --sf:#FFFFFF; --sf-2:#F6F7F9; --fundo:#EEF0F3;
+    --ok:#17803D; --ok-suave:#EAF6EE; --ok-borda:#B9E0C6;
+    --at:#9A5B00; --at-suave:#FFF6E5; --at-borda:#F2D49B;
+    --masc:#2563EB; --masc-suave:#E3EEFB; --fem:#DB2777; --fem-suave:#FCE7F1; --inf:#0F766E; --inf-suave:#E4F3EC;
+    --r-sm:7px; --r:10px; --r-lg:14px;
+    --sombra:0 1px 2px rgba(16,20,26,.05),0 4px 14px rgba(16,20,26,.05);
+    --fonte:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --barra-h:68px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-text-size-adjust:100%;}
+  body{font-family:var(--fonte);background:var(--fundo);color:var(--tx);font-size:15px;line-height:1.45;min-height:100vh;}
+  button,input,select,textarea{font:inherit;color:inherit;}
+  button{cursor:pointer;}
+  :focus-visible{outline:2px solid var(--vm);outline-offset:2px;}
+  .oculto{display:none !important;}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+
+  /* ---------- topo ---------- */
+  .topo{background:var(--sf);border-bottom:1px solid var(--bd);}
+  .topo-in{max-width:980px;margin:0 auto;padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .marca{font-weight:700;letter-spacing:.16em;color:var(--vm);font-size:19px;}
+  .topo-dados{flex:1;min-width:200px;display:flex;flex-direction:column;}
+  .topo-dados .t1{font-weight:600;font-size:16px;}
+  .topo-dados .t2{color:var(--tx-3);font-size:13px;}
+
+  /* ---------- barra de envio ---------- */
+  .barra{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border-bottom:1px solid var(--bd);}
+  .barra-in{max-width:980px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:14px;}
+  .barra-total{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .barra-total .rot{white-space:nowrap;}
+  .barra-total .rot{font-size:12px;color:var(--tx-3);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
+  .barra-total .val{font-size:20px;font-weight:700;}
+  .bt{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:var(--r);border:1px solid var(--bd-2);background:var(--sf);font-weight:600;font-size:14.5px;transition:background-color .15s,border-color .15s,transform .15s;}
+  .bt:hover{border-color:var(--tx-3);}
+  .bt:active{transform:scale(.98);}
+  .bt.primario{background:var(--vm);border-color:var(--vm);color:#fff;}
+  .bt.primario:hover{background:var(--vm-esc);border-color:var(--vm-esc);}
+  .bt.leve{border-color:transparent;background:transparent;color:var(--vm);padding:0 10px;}
+  .bt.leve:hover{background:var(--vm-suave);}
+  .bt:disabled{opacity:.55;cursor:not-allowed;transform:none;}
+  .bt svg{width:18px;height:18px;flex:0 0 auto;}
+
+  /* ---------- corpo ---------- */
+  main{max-width:980px;margin:0 auto;padding:20px 20px 120px;display:flex;flex-direction:column;gap:16px;}
+  .cartao{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r-lg);box-shadow:var(--sombra);}
+  .intro{padding:16px 18px;display:flex;flex-direction:column;gap:6px;}
+  .intro h1{font-size:18px;}
+  .intro p{color:var(--tx-2);font-size:14px;}
+  .faixa{padding:12px 16px;border-radius:var(--r);font-size:14px;display:flex;gap:10px;align-items:flex-start;}
+  .faixa svg{width:20px;height:20px;flex:0 0 auto;margin-top:1px;}
+  .faixa.ok{background:var(--ok-suave);border:1px solid var(--ok-borda);color:#0F5A2B;}
+  .faixa.at{background:var(--at-suave);border:1px solid var(--at-borda);color:#6B4000;}
+  .faixa.vm{background:var(--vm-suave);border:1px solid var(--vm-borda);color:#8E1216;}
+  .obs-geral{white-space:pre-wrap;}
+
+  /* ---------- modelo ---------- */
+  .modelo{overflow:hidden;}
+  .mod-topo{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--bd);flex-wrap:wrap;}
+  .mod-selo{font-family:var(--mono);font-weight:600;font-size:13px;background:var(--tx);color:#fff;border-radius:var(--r-sm);padding:3px 8px;}
+  .mod-nome{font-weight:600;font-size:16px;flex:1;min-width:160px;}
+  .chip{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;border:1px solid var(--bd);color:var(--tx-2);background:var(--sf-2);}
+  .chip.masculino{background:var(--masc-suave);border-color:#B9CFF3;color:#1E4FBF;}
+  .chip.feminino{background:var(--fem-suave);border-color:#F2B9D3;color:#A61E5B;}
+  .chip.infantil{background:var(--inf-suave);border-color:#B5DCCB;color:#0B5A53;}
+  .chip.nn{background:var(--vm-suave);border-color:var(--vm-borda);color:var(--vm-esc);}
+  .mod-corpo{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:18px;padding:16px;}
+  .mod-corpo.sem-img{grid-template-columns:1fr;}
+  .mod-corpo:empty{display:none;}
+  .mod-img{background:var(--sf-2);border:1px solid var(--bd);border-radius:var(--r);display:flex;align-items:center;justify-content:center;min-height:180px;overflow:hidden;}
+  .mod-img img{max-width:100%;max-height:420px;display:block;cursor:zoom-in;}
+  .mod-img .sem{color:var(--tx-3);font-size:13px;}
+  .mod-info{display:flex;flex-direction:column;gap:12px;min-width:0;}
+  .rot{font-size:11.5px;font-weight:600;color:var(--tx-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+  .tec-linha{font-size:14px;}
+  .tec-linha b{font-weight:600;}
+  .pilulas{display:flex;flex-wrap:wrap;gap:6px;}
+  .obs{white-space:pre-wrap;font-size:14px;color:var(--tx-2);}
+
+  /* ---------- grade ---------- */
+  .secao{padding:16px;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:12px;}
+  .secao-topo{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .secao-topo h3{font-size:15px;flex:1;}
+  .secao-topo .soma{font-size:14px;color:var(--tx-2);}
+  .secao-topo .soma b{color:var(--tx);font-size:16px;}
+  .grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:8px;}
+  .tam{border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);display:flex;flex-direction:column;align-items:stretch;overflow:hidden;transition:border-color .15s;}
+  .tam.cheio{border-color:var(--tx-3);}
+  .tam.inf .tam-rot{background:var(--inf-suave);color:#0B5A53;}
+  .tam-rot{text-align:center;font-weight:600;font-size:13px;padding:5px 0;background:var(--sf-2);border-bottom:1px solid var(--bd);}
+  .tam-ctl{display:flex;align-items:center;}
+  .tam input{width:100%;min-width:0;border:0;background:transparent;text-align:center;font-family:var(--mono);font-size:17px;font-weight:600;padding:9px 2px;height:44px;}
+  .tam input:focus{outline:none;background:var(--vm-suave);}
+  .tam .passo{display:none;width:44px;height:44px;border:0;background:transparent;color:var(--tx-2);font-size:22px;line-height:1;flex:0 0 auto;}
+  .tam .passo:hover{background:var(--sf-2);color:var(--vm);}
+  .outra-grade{align-self:flex-start;}
+
+  /* ---------- nomes ---------- */
+  .nn-ajuda{font-size:13.5px;color:var(--tx-2);}
+  .nn-tabela{width:100%;border-collapse:separate;border-spacing:0;}
+  .nn-tabela th{font-size:11.5px;font-weight:600;color:var(--tx-3);text-transform:uppercase;letter-spacing:.06em;text-align:left;padding:0 6px 6px;}
+  .nn-tabela td{padding:4px 6px;vertical-align:middle;}
+  .nn-tabela td.n{width:34px;color:var(--tx-3);font-family:var(--mono);font-size:13px;text-align:right;}
+  .nn-tabela .c-num{width:96px;}
+  .nn-tabela .c-gen{width:196px;}
+  .nn-tabela .c-tam{width:110px;}
+  .nn-tabela .c-x{width:44px;}
+  .campo{width:100%;height:44px;border:1px solid var(--bd-2);border-radius:var(--r);padding:0 12px;background:var(--sf);font-size:15px;}
+  .campo:focus{outline:none;border-color:var(--vm);box-shadow:0 0 0 3px rgba(198,22,27,.12);}
+  .campo.mono{font-family:var(--mono);font-weight:600;text-align:center;}
+  .campo.erro,.seg.erro{border-color:var(--vm);background:var(--vm-suave);}
+  select.campo{appearance:none;-webkit-appearance:none;padding-right:30px;cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234B525C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center;background-size:16px;}
+  .seg{display:flex;border:1px solid var(--bd-2);border-radius:var(--r);overflow:hidden;height:44px;background:var(--sf);}
+  .seg button{flex:1;border:0;background:transparent;font-size:13.5px;font-weight:600;color:var(--tx-2);min-width:0;padding:0 6px;}
+  .seg button+button{border-left:1px solid var(--bd-2);}
+  .seg button[aria-pressed="true"].m{background:var(--masc-suave);color:#1E4FBF;}
+  .seg button[aria-pressed="true"].f{background:var(--fem-suave);color:#A61E5B;}
+  .x{width:44px;height:44px;border:0;background:transparent;border-radius:var(--r);color:var(--tx-3);display:flex;align-items:center;justify-content:center;}
+  .x:hover{background:var(--vm-suave);color:var(--vm);}
+  .x svg{width:18px;height:18px;}
+  .nn-acoes{display:flex;gap:10px;flex-wrap:wrap;}
+  .nn-linha.erro td{background:var(--vm-suave);}
+  .nn-linha.erro td:first-child{border-radius:var(--r) 0 0 var(--r);}
+  .nn-linha.erro td:last-child{border-radius:0 var(--r) var(--r) 0;}
+  .conf{border-radius:var(--r);padding:12px 14px;font-size:14px;display:flex;flex-direction:column;gap:8px;}
+  .conf.ok{background:var(--ok-suave);border:1px solid var(--ok-borda);color:#0F5A2B;}
+  .conf.at{background:var(--at-suave);border:1px solid var(--at-borda);color:#6B4000;}
+  .conf-tab{border-collapse:collapse;font-size:13.5px;align-self:flex-start;}
+  .conf-tab th,.conf-tab td{padding:3px 12px 3px 0;text-align:left;}
+  .conf-tab td.num,.conf-tab th.num{text-align:right;}
+  .conf-tab tr.dif td{font-weight:700;}
+
+  /* ---------- modal ---------- */
+  .fundo{position:fixed;inset:0;z-index:100;background:rgba(12,14,17,.55);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;visibility:hidden;transition:opacity .2s,visibility 0s linear .2s;}
+  .fundo.on{opacity:1;visibility:visible;transition:opacity .2s;}
+  .caixa{background:var(--sf);border-radius:18px;width:100%;max-width:620px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 56px rgba(12,14,17,.32);transform:translateY(10px);transition:transform .2s;}
+  .fundo.on .caixa{transform:none;}
+  .caixa-topo{padding:18px 20px 10px;font-weight:700;font-size:17px;}
+  .caixa-corpo{padding:4px 20px 14px;overflow:auto;display:flex;flex-direction:column;gap:12px;font-size:14.5px;}
+  .caixa-pe{padding:12px 20px 18px;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;border-top:1px solid var(--bd);}
+  .resumo{border-collapse:collapse;width:100%;font-size:14px;}
+  .resumo td{padding:7px 0;border-bottom:1px solid var(--bd);}
+  .resumo td.num{text-align:right;white-space:nowrap;padding-left:12px;}
+  textarea.colar{width:100%;min-height:180px;border:1px solid var(--bd-2);border-radius:var(--r);padding:10px 12px;font-family:var(--mono);font-size:13.5px;resize:vertical;}
+  textarea.colar:focus{outline:none;border-color:var(--vm);box-shadow:0 0 0 3px rgba(198,22,27,.12);}
+  .zoom{position:fixed;inset:0;z-index:110;background:rgba(12,14,17,.9);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out;}
+  .zoom img{max-width:100%;max-height:100%;border-radius:8px;background:#fff;}
+
+  /* ---------- estados da pagina ---------- */
+  .tela{max-width:520px;margin:12vh auto 0;padding:28px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;}
+  .tela h2{font-size:20px;}
+  .tela p{color:var(--tx-2);}
+  .girando{width:40px;height:40px;border:3px solid var(--bd);border-top-color:var(--vm);border-radius:50%;animation:gira .9s linear infinite;}
+  @keyframes gira{to{transform:rotate(360deg);}}
+  .selo-ok{width:64px;height:64px;border-radius:50%;background:var(--ok-suave);color:var(--ok);display:flex;align-items:center;justify-content:center;}
+  .selo-ok svg{width:34px;height:34px;}
+  .aviso-flut{position:fixed;left:50%;bottom:calc(var(--barra-h) + 20px);transform:translateX(-50%) translateY(10px);background:var(--tx);color:#fff;border-radius:var(--r);padding:10px 16px;font-size:14px;opacity:0;transition:opacity .2s,transform .2s;z-index:120;max-width:calc(100% - 32px);text-align:center;pointer-events:none;}
+  .aviso-flut.on{opacity:1;transform:translateX(-50%);}
+  body.travado .tam input,body.travado .campo,body.travado .seg button{pointer-events:none;background:var(--sf-2);}
+  body.travado .so-edicao{display:none !important;}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important;}}
+
+  /* ---------- celular ---------- */
+  @media (max-width:700px){
+    body{font-size:15.5px;}
+    .topo-in{padding:14px 16px;}
+    main{padding:14px 12px 140px;gap:12px;}
+    .barra{position:fixed;top:auto;bottom:0;left:0;right:0;border-top:1px solid var(--bd);border-bottom:0;padding-bottom:env(safe-area-inset-bottom);}
+    .barra-in{padding:10px 14px;}
+    .barra-total{flex:0 0 auto;}
+    .barra .bt.primario{flex:1 1 auto;padding:0 12px;font-size:14px;line-height:1.2;}
+    .mod-corpo{grid-template-columns:1fr;padding:12px;}
+    .mod-img img{max-height:300px;}
+    .secao{padding:14px 12px;}
+    .grade{grid-template-columns:1fr;gap:6px;}
+    .tam{flex-direction:row;align-items:center;}
+    .tam-rot{width:64px;border-bottom:0;border-right:1px solid var(--bd);align-self:stretch;display:flex;align-items:center;justify-content:center;font-size:15px;}
+    .tam-ctl{flex:1;}
+    .tam .passo{display:block;}
+    /* a tabela de nomes vira um cartao por linha */
+    .nn-tabela thead{display:none;}
+    .nn-tabela,.nn-tabela tbody{display:block;}
+    .nn-tabela tr{display:grid;grid-template-columns:1fr 92px 44px;grid-template-areas:"nome num x" "gen tam tam";gap:8px;border:1px solid var(--bd);border-radius:var(--r);padding:10px;margin-bottom:8px;background:var(--sf);}
+    .nn-tabela tr.erro{border-color:var(--vm);background:var(--vm-suave);}
+    .nn-linha.erro td{background:transparent;}
+    .nn-tabela td{padding:0;display:block;width:auto !important;}
+    .nn-tabela td.n{display:none;}
+    .nn-tabela td.c-nome{grid-area:nome;}
+    .nn-tabela td.c-num{grid-area:num;}
+    .nn-tabela td.c-gen{grid-area:gen;}
+    .nn-tabela td.c-tam{grid-area:tam;}
+    .nn-tabela td.c-x{grid-area:x;}
+    .caixa{max-height:92vh;border-radius:16px;}
+    .fundo{padding:10px;align-items:flex-end;}
+  }
+  @media print{.barra,.so-edicao,.fundo{display:none !important;} body{background:#fff;}}
+</style>
+</head>
+<body>
+
+<div id="telaCarregando" class="tela">
+  <div class="girando" aria-hidden="true"></div>
+  <h2>Carregando o seu orçamento</h2>
+  <p id="carregandoTexto">Na primeira vez pode levar até 1 minuto. Não feche esta página.</p>
+</div>
+
+<div id="telaErro" class="tela oculto">
+  <h2 id="erroTitulo">Não foi possível abrir</h2>
+  <p id="erroTexto"></p>
+  <button class="bt primario" id="erroDeNovo" type="button">Tentar de novo</button>
+</div>
+
+<div id="telaPrincipal" class="oculto">
+  <header class="topo">
+    <div class="topo-in">
+      <div class="marca">FOURTIME</div>
+      <div class="topo-dados">
+        <span class="t1" id="topoCliente"></span>
+        <span class="t2" id="topoPedido"></span>
+      </div>
+    </div>
+  </header>
+  <div class="barra" id="barra">
+    <div class="barra-in">
+      <div class="barra-total"><span class="rot">Total de peças</span><span class="val num" id="totalGeral">0</span></div>
+      <button class="bt primario so-edicao" id="btEnviar" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
+        <span>Pedido pronto, enviar para a Fourtime</span>
+      </button>
+    </div>
+  </div>
+  <main id="principal">
+    <section class="cartao intro" id="intro">
+      <h1>Preencha o seu pedido</h1>
+      <p>Coloque a quantidade de cada tamanho em cada modelo. Nos modelos marcados com <b>nome e número</b>, preencha também a lista de nomes.</p>
+      <p>O que você digita fica guardado neste aparelho até você enviar. Quando terminar, toque em <b>Pedido pronto, enviar para a Fourtime</b>.</p>
+    </section>
+    <div id="faixaEstado" class="faixa ok oculto"></div>
+    <div id="obsGeral" class="cartao intro oculto"><div class="rot">Observações do orçamento</div><div class="obs-geral" id="obsGeralTexto"></div></div>
+    <div id="modelos" style="display:flex;flex-direction:column;gap:16px;"></div>
+  </main>
+</div>
+
+<div class="fundo" id="fundoConfirma" role="dialog" aria-modal="true" aria-labelledby="confTitulo">
+  <div class="caixa">
+    <div class="caixa-topo" id="confTitulo">Confira antes de enviar</div>
+    <div class="caixa-corpo" id="confCorpo"></div>
+    <div class="caixa-pe">
+      <button class="bt" id="confVoltar" type="button">Voltar e corrigir</button>
+      <button class="bt primario" id="confEnviar" type="button">Está certo, enviar</button>
+    </div>
+  </div>
+</div>
+
+<div class="fundo" id="fundoColar" role="dialog" aria-modal="true" aria-labelledby="colarTitulo">
+  <div class="caixa">
+    <div class="caixa-topo" id="colarTitulo">Colar a lista do Excel</div>
+    <div class="caixa-corpo">
+      <p>No Excel, selecione as colunas <b>Nome</b>, <b>Número</b>, <b>Gênero</b> e <b>Tamanho</b>, copie e cole aqui embaixo. A ordem das colunas não importa.</p>
+      <textarea class="colar" id="colarTexto" placeholder="Ana Souza&#9;7&#9;Feminino&#9;M&#10;Beto Lima&#9;10&#9;Masculino&#9;G"></textarea>
+      <div id="colarPrevia" class="nn-ajuda"></div>
+    </div>
+    <div class="caixa-pe">
+      <button class="bt" id="colarCancelar" type="button">Cancelar</button>
+      <button class="bt" id="colarSubstituir" type="button">Substituir a lista</button>
+      <button class="bt primario" id="colarAdicionar" type="button">Adicionar à lista</button>
+    </div>
+  </div>
+</div>
+
+<div class="aviso-flut" id="avisoFlut" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+var CODIGO = (location.pathname.split('/').filter(Boolean)[1] || '').replace(/[^A-Za-z0-9_-]/g,'');
+var CHAVE = 'ft-cliente-' + CODIGO;
+var D = null;                 /* o que o servidor mandou */
+var M = [];                   /* o estado de cada modelo: {n, L, tam:{T:'q'}, lista:[...], outra:false} */
+var TRAVADO = false;
+var TAM = {adulto:['PP','P','M','G','GG','XG','G1','G2','G3','G4'], infantil:['2A','4A','6A','8A','10A','12A','14A']};
+var TODOS = {};
+TAM.adulto.concat(TAM.infantil).forEach(function(t){ TODOS[t]=1; });
+
+function $(id){ return document.getElementById(id); }
+function el(tag, cls, txt){ var e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
+function fmt(n){ return Number(n||0).toLocaleString('pt-BR'); }
+function pecas(n){ return fmt(n) + (n===1?' peça':' peças'); }
+var IC_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+var IC_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+var IC_AT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
+
+var _avisoT = null;
+function avisa(txt){
+  var a=$('avisoFlut'); a.textContent=txt; a.classList.add('on');
+  clearTimeout(_avisoT); _avisoT=setTimeout(function(){ a.classList.remove('on'); },2600);
+}
+function tela(qual){
+  ['telaCarregando','telaErro','telaPrincipal'].forEach(function(id){ $(id).classList.toggle('oculto', id!==qual); });
+}
+function erro(titulo, texto, podeTentar){
+  $('erroTitulo').textContent=titulo; $('erroTexto').textContent=texto;
+  $('erroDeNovo').classList.toggle('oculto', !podeTentar);
+  tela('telaErro');
+}
+
+/* ---------------- guardar no aparelho ---------------- */
+function guardaRascunho(){
+  if(TRAVADO)return;
+  try{
+    var r={quando:Date.now(), m:{}};
+    M.forEach(function(x){ if(!x.L.info) r.m[x.n]={tam:x.tam, lista:x.lista, outra:x.outra}; });
+    localStorage.setItem(CHAVE, JSON.stringify(r));
+  }catch(_){}
+}
+var _guardaT=null;
+function agendaGuarda(){ clearTimeout(_guardaT); _guardaT=setTimeout(guardaRascunho,400); }
+function leRascunho(){ try{ var s=localStorage.getItem(CHAVE); return s?JSON.parse(s):null; }catch(_){ return null; } }
+function apagaRascunho(){ try{ localStorage.removeItem(CHAVE); }catch(_){} }
+
+/* ---------------- carregar ---------------- */
+function carrega(tentativa){
+  tela('telaCarregando');
+  if(!CODIGO){ erro('Link incompleto','Confira o link com o seu vendedor.',false); return; }
+  var ctl = ('AbortController' in window) ? new AbortController() : null;
+  var prazo = setTimeout(function(){ if(ctl)ctl.abort(); }, 90000);
+  if(tentativa>0)$('carregandoTexto').textContent='O servidor está acordando. Mais um instante...';
+  fetch('/api/cliente/ver/'+encodeURIComponent(CODIGO),{cache:'no-store',signal:ctl?ctl.signal:undefined})
+    .then(function(r){
+      clearTimeout(prazo);
+      return r.json().catch(function(){ return {}; }).then(function(d){ return {r:r,d:d}; });
+    })
+    .then(function(x){
+      if(x.r.ok && x.d && x.d.ok){ monta(x.d); return; }
+      if(x.r.status===404||x.r.status===410){
+        erro(x.r.status===410?'Orçamento finalizado':'Link inválido', x.d.detail||'Fale com o seu vendedor.', false); return;
+      }
+      if((x.r.status>=500||x.r.status===429) && tentativa<2){ setTimeout(function(){ carrega(tentativa+1); },4000); return; }
+      erro('Não foi possível abrir', x.d.detail||'Tente de novo em alguns minutos.', true);
+    })
+    .catch(function(){
+      clearTimeout(prazo);
+      if(tentativa<2){ setTimeout(function(){ carrega(tentativa+1); },3000); return; }
+      erro('Sem conexão com a Fourtime','Confira a sua internet e tente de novo.', true);
+    });
+}
+$('erroDeNovo').addEventListener('click',function(){ carrega(0); });
+
+function monta(d){
+  D=d;
+  if(d.tamanhos){ TAM=d.tamanhos; TODOS={}; TAM.adulto.concat(TAM.infantil).forEach(function(t){ TODOS[t]=1; }); }
+  $('topoCliente').textContent = d.cliente || 'Seu orçamento';
+  var t2=[]; if(d.pedido)t2.push('Pedido '+d.pedido); if(d.vendedor)t2.push('Vendedor: '+d.vendedor);
+  $('topoPedido').textContent = t2.join(' · ');
+  document.title = 'Fourtime · ' + (d.pedido ? 'Pedido '+d.pedido : 'Seu orçamento');
+  if(d.obs){ $('obsGeral').classList.remove('oculto'); $('obsGeralTexto').textContent=d.obs; }
+  TRAVADO = d.estado==='devolvido';
+  var rasc = TRAVADO ? null : leRascunho();
+  var recuperou=false;
+  M = (d.layouts||[]).map(function(L){
+    var tam={}; Object.keys(L.tamanhos||{}).forEach(function(t){ tam[t]=String(L.tamanhos[t]); });
+    var x={n:L.n, L:L, tam:tam, lista:(L.lista||[]).map(function(r){ return {nome:r.nome||'',num:r.num||'',gen:r.gen||'',tam:r.tam||''}; }), outra:false};
+    var outraGrade = TAM[L.grade==='infantil'?'adulto':'infantil'];
+    x.outra = outraGrade.some(function(t){ return tam[t]; });
+    if(rasc && rasc.m && rasc.m[L.n]){
+      var g=rasc.m[L.n]; x.tam=g.tam||{}; x.lista=Array.isArray(g.lista)?g.lista:x.lista; x.outra=!!g.outra||x.outra; recuperou=true;
+    }
+    if(L.nomeNum && !x.lista.length) x.lista=[linhaVazia()];
+    return x;
+  });
+  desenhaTudo();
+  tela('telaPrincipal');
+  if(TRAVADO) mostraTravado(d.devolvidoEm);
+  else if(recuperou) avisa('Recuperamos o que você já tinha digitado.');
+}
+
+function linhaVazia(){ return {nome:'',num:'',gen:'',tam:''}; }
+
+/* ---------------- desenhar ---------------- */
+function desenhaTudo(){
+  var box=$('modelos'); box.innerHTML='';
+  M.forEach(function(x){ box.appendChild(desenhaModelo(x)); });
+  atualizaTotais();
+}
+
+function desenhaModelo(x){
+  var L=x.L;
+  var c=el('section','cartao modelo'); c.id='modelo-'+x.n;
+  var topo=el('div','mod-topo');
+  topo.appendChild(el('span','mod-selo','L-'+String(x.n).padStart(2,'0')));
+  topo.appendChild(el('span','mod-nome', L.info ? 'Informação' : (L.ref||'Modelo '+x.n)));
+  if(L.genero && !L.info) topo.appendChild(el('span','chip '+L.genero, L.genero.charAt(0).toUpperCase()+L.genero.slice(1)));
+  if(L.nomeNum) topo.appendChild(el('span','chip nn','Nome e número'));
+  c.appendChild(topo);
+
+  /* sem imagem, a caixa vazia nao aparece: ela so empurrava a grade para
+     baixo, e no celular isso e meia tela */
+  var corpo=el('div','mod-corpo'+(L.img?'':' sem-img'));
+  if(L.img){
+    var im=el('div','mod-img');
+    var img=document.createElement('img'); img.src=L.img; img.alt='Arte do modelo '+x.n; img.loading='lazy';
+    img.addEventListener('click',function(){ ampliar(L.img); });
+    im.appendChild(img);
+    corpo.appendChild(im);
+  }
+  var info=el('div','mod-info');
+  if(!L.info){
+    if(L.tecidos && L.tecidos.length){
+      var bt=el('div'); bt.appendChild(el('div','rot','Tecido e cor'));
+      L.tecidos.forEach(function(t){
+        var l=el('div','tec-linha'); var b=el('b',null,t.tecido||'Tecido'); l.appendChild(b);
+        if(t.cor){ l.appendChild(document.createTextNode(' · '+t.cor)); }
+        bt.appendChild(l);
+      });
+      info.appendChild(bt);
+    }
+    if(L.design && L.design.length){
+      var bd=el('div'); bd.appendChild(el('div','rot','Acabamento'));
+      var p=el('div','pilulas'); L.design.forEach(function(t){ p.appendChild(el('span','chip',t)); });
+      bd.appendChild(p); info.appendChild(bd);
+    }
+  }
+  if(L.obs){ var bo=el('div'); bo.appendChild(el('div','rot','Observação')); bo.appendChild(el('div','obs',L.obs)); info.appendChild(bo); }
+  if(info.children.length) corpo.appendChild(info);
+  c.appendChild(corpo);
+  if(L.info) return c;
+
+  /* a grade */
+  var sg=el('div','secao');
+  var st=el('div','secao-topo');
+  st.appendChild(el('h3',null,'Quantidade por tamanho'));
+  var soma=el('span','soma'); soma.innerHTML='Total deste modelo: <b class="num">0</b>'; x.elSoma=soma.querySelector('b');
+  st.appendChild(soma); sg.appendChild(st);
+  var grade=el('div','grade'); x.elGrade=grade;
+  sg.appendChild(grade);
+  var outraNome = L.grade==='infantil' ? 'adulto' : 'infantil';
+  var bo2=el('button','bt leve outra-grade so-edicao'); bo2.type='button';
+  x.elOutra=bo2;
+  bo2.addEventListener('click',function(){ x.outra=!x.outra; desenhaGrade(x); agendaGuarda(); });
+  sg.appendChild(bo2);
+  c.appendChild(sg);
+  desenhaGrade(x);
+
+  /* a lista de nomes */
+  if(L.nomeNum){
+    var sn=el('div','secao');
+    var stn=el('div','secao-topo');
+    stn.appendChild(el('h3',null,'Nomes e números'));
+    var cont=el('span','soma'); x.elContNomes=cont; stn.appendChild(cont);
+    sn.appendChild(stn);
+    sn.appendChild(el('p','nn-ajuda so-edicao','Uma linha por camisa. O número aceita só algarismos. O gênero é o corte da peça: escolha o que a pessoa vai usar, mesmo que seja diferente do modelo.'));
+    var tb=el('table','nn-tabela');
+    tb.innerHTML='<thead><tr><th></th><th>Nome</th><th>Número</th><th>Gênero</th><th>Tamanho</th><th class="so-edicao"></th></tr></thead>';
+    var tbody=document.createElement('tbody'); tb.appendChild(tbody); x.elLista=tbody;
+    sn.appendChild(tb);
+    var ac=el('div','nn-acoes so-edicao');
+    var ba=el('button','bt','+ Adicionar linha'); ba.type='button';
+    ba.addEventListener('click',function(){ x.lista.push(linhaVazia()); desenhaLista(x); focaLinha(x,x.lista.length-1); agendaGuarda(); });
+    var bc=el('button','bt','Colar do Excel'); bc.type='button';
+    bc.addEventListener('click',function(){ abreColar(x); });
+    ac.appendChild(ba); ac.appendChild(bc); sn.appendChild(ac);
+    var conf=el('div','conf'); x.elConf=conf; sn.appendChild(conf);
+    c.appendChild(sn);
+    desenhaLista(x);
+  }
+  return c;
+}
+
+function tamanhosVisiveis(x){
+  var base=TAM[x.L.grade==='infantil'?'infantil':'adulto'];
+  var outra=TAM[x.L.grade==='infantil'?'adulto':'infantil'];
+  return x.outra ? (x.L.grade==='infantil' ? outra.concat(base) : base.concat(outra)) : base;
+}
+
+function desenhaGrade(x){
+  var g=x.elGrade; g.innerHTML='';
+  var inf={}; TAM.infantil.forEach(function(t){ inf[t]=1; });
+  tamanhosVisiveis(x).forEach(function(t){
+    var cel=el('div','tam'+(inf[t]?' inf':''));
+    var id='q-'+x.n+'-'+t;
+    var rot=el('label','tam-rot',t); rot.htmlFor=id;
+    var ctl=el('div','tam-ctl');
+    var menos=el('button','passo so-edicao','−'); menos.type='button'; menos.setAttribute('aria-label','Menos um '+t);
+    var inp=document.createElement('input'); inp.id=id; inp.inputMode='numeric'; inp.autocomplete='off'; inp.maxLength=5;
+    inp.setAttribute('aria-label','Quantidade do tamanho '+t); inp.value=x.tam[t]||''; inp.readOnly=TRAVADO;
+    var mais=el('button','passo so-edicao','+'); mais.type='button'; mais.setAttribute('aria-label','Mais um '+t);
+    function poe(v){
+      v=String(v).replace(/\D/g,'').replace(/^0+(?=\d)/,'').slice(0,5);
+      if(v==='0')v='';
+      inp.value=v; if(v)x.tam[t]=v; else delete x.tam[t];
+      cel.classList.toggle('cheio',!!v); atualizaTotais(); if(x.L.nomeNum)confere(x); agendaGuarda();
+    }
+    inp.addEventListener('input',function(){ poe(inp.value); });
+    menos.addEventListener('click',function(){ poe(Math.max(0,(parseInt(inp.value,10)||0)-1)); });
+    mais.addEventListener('click',function(){ poe((parseInt(inp.value,10)||0)+1); });
+    ctl.appendChild(menos); ctl.appendChild(inp); ctl.appendChild(mais);
+    cel.appendChild(rot); cel.appendChild(ctl);
+    cel.classList.toggle('cheio',!!inp.value);
+    g.appendChild(cel);
+  });
+  var outraNome = x.L.grade==='infantil' ? 'adulto' : 'infantil';
+  x.elOutra.textContent = x.outra ? 'Esconder os tamanhos '+(outraNome==='infantil'?'infantis':'adultos')
+                                  : 'Precisa de tamanho '+(outraNome==='infantil'?'infantil':'adulto')+'?';
+  var temOutra = TAM[outraNome].some(function(t){ return x.tam[t]; });
+  x.elOutra.disabled = x.outra && temOutra;
+  x.elOutra.title = x.elOutra.disabled ? 'Apague as quantidades desses tamanhos para esconder' : '';
+  atualizaTotais();
+}
+
+function opcoesTamanho(x, sel){
+  var s=document.createElement('select'); s.className='campo';
+  var o0=document.createElement('option'); o0.value=''; o0.textContent='Tam.'; s.appendChild(o0);
+  var base=x.L.grade==='infantil'?'infantil':'adulto';
+  [[base,TAM[base]],[base==='adulto'?'infantil':'adulto',TAM[base==='adulto'?'infantil':'adulto']]].forEach(function(par,i){
+    var grupo=document.createElement('optgroup'); grupo.label=par[0]==='adulto'?'Adulto':'Infantil';
+    par[1].forEach(function(t){ var o=document.createElement('option'); o.value=t; o.textContent=t; grupo.appendChild(o); });
+    s.appendChild(grupo);
+  });
+  s.value=sel||'';
+  return s;
+}
+
+function desenhaLista(x){
+  var tb=x.elLista; tb.innerHTML='';
+  x.lista.forEach(function(r,i){
+    var tr=el('tr','nn-linha');
+    tr.appendChild(el('td','n',String(i+1)));
+    var tdN=el('td','c-nome'); var iN=document.createElement('input'); iN.className='campo'; iN.maxLength=40; iN.value=r.nome; iN.placeholder='Nome'; iN.autocomplete='off'; iN.setAttribute('aria-label','Nome da linha '+(i+1));
+    iN.addEventListener('input',function(){ r.nome=iN.value; confere(x); agendaGuarda(); });
+    iN.addEventListener('paste',function(e){ colaDireto(e,x,i); });
+    tdN.appendChild(iN); tr.appendChild(tdN);
+    var tdU=el('td','c-num'); var iU=document.createElement('input'); iU.className='campo mono'; iU.inputMode='numeric'; iU.maxLength=3; iU.value=r.num; iU.placeholder='Nº'; iU.autocomplete='off'; iU.setAttribute('aria-label','Número da linha '+(i+1));
+    iU.addEventListener('input',function(){ var v=iU.value.replace(/\D/g,'').slice(0,3); if(v!==iU.value){ iU.value=v; avisa('O número aceita só algarismos.'); } r.num=v; confere(x); agendaGuarda(); });
+    iU.addEventListener('paste',function(e){ colaDireto(e,x,i); });
+    tdU.appendChild(iU); tr.appendChild(tdU);
+    var tdG=el('td','c-gen'); var sg=el('div','seg'); sg.setAttribute('role','group'); sg.setAttribute('aria-label','Gênero da linha '+(i+1));
+    [['masculino','Masculino','m'],['feminino','Feminino','f']].forEach(function(o){
+      var b=el('button',o[2],o[1]); b.type='button'; b.setAttribute('aria-pressed', r.gen===o[0]?'true':'false');
+      b.addEventListener('click',function(){ if(TRAVADO)return; r.gen=o[0]; sg.querySelectorAll('button').forEach(function(z){ z.setAttribute('aria-pressed', z===b?'true':'false'); }); confere(x); agendaGuarda(); });
+      sg.appendChild(b);
+    });
+    tdG.appendChild(sg); tr.appendChild(tdG);
+    var tdT=el('td','c-tam'); var sT=opcoesTamanho(x,r.tam); sT.setAttribute('aria-label','Tamanho da linha '+(i+1)); sT.disabled=TRAVADO;
+    sT.addEventListener('change',function(){ r.tam=sT.value; confere(x); agendaGuarda(); });
+    tdT.appendChild(sT); tr.appendChild(tdT);
+    var tdX=el('td','c-x so-edicao'); var bx=el('button','x'); bx.type='button'; bx.innerHTML=IC_X; bx.setAttribute('aria-label','Apagar a linha '+(i+1));
+    bx.addEventListener('click',function(){ x.lista.splice(i,1); if(!x.lista.length)x.lista.push(linhaVazia()); desenhaLista(x); agendaGuarda(); });
+    tdX.appendChild(bx); tr.appendChild(tdX);
+    if(TRAVADO){ iN.readOnly=true; iU.readOnly=true; }
+    tb.appendChild(tr);
+  });
+  confere(x);
+}
+function focaLinha(x,i){ var tr=x.elLista.children[i]; if(tr){ var a=tr.querySelector('input'); if(a)a.focus(); } }
+
+/* ---------------- a conferencia: grade contra lista ---------------- */
+function linhaUsada(r){ return !!((r.nome||'').trim() || (r.num||'').trim()); }
+function problemaLinha(r){
+  if(!linhaUsada(r)) return '';
+  if(!r.gen) return 'falta o gênero';
+  if(!r.tam || !TODOS[r.tam]) return 'falta o tamanho';
+  return '';
+}
+function confere(x){
+  if(!x.elConf) return;
+  var porTam={}, nomes=0;
+  x.lista.forEach(function(r,i){
+    var tr=x.elLista.children[i];
+    var p=problemaLinha(r);
+    if(tr) tr.classList.toggle('erro', !!(p && x.mostraErros));
+    if(linhaUsada(r)){ nomes++; if(r.tam) porTam[r.tam]=(porTam[r.tam]||0)+1; }
+  });
+  x.elContNomes.innerHTML = 'Na lista: <b class="num">'+fmt(nomes)+'</b>';
+  var gradeTot=0, tams={};
+  Object.keys(x.tam).forEach(function(t){ var q=parseInt(x.tam[t],10)||0; gradeTot+=q; if(q)tams[t]=1; });
+  Object.keys(porTam).forEach(function(t){ tams[t]=1; });
+  var ordem=TAM.adulto.concat(TAM.infantil).filter(function(t){ return tams[t]; });
+  var difs=ordem.filter(function(t){ return (parseInt(x.tam[t],10)||0)!==(porTam[t]||0); });
+  var c=x.elConf; c.innerHTML='';
+  x.diferencas = difs.map(function(t){ return {t:t, grade:parseInt(x.tam[t],10)||0, lista:porTam[t]||0}; });
+  if(!nomes && !gradeTot){ c.className='conf oculto'; return; }
+  if(!difs.length){
+    c.className='conf ok';
+    c.innerHTML='<div class="faixa" style="padding:0">'+IC_OK+'<span>A lista bate com a grade: '+pecas(gradeTot)+'.</span></div>';
+    return;
+  }
+  c.className='conf at';
+  var cab=el('div','faixa'); cab.style.padding='0'; cab.innerHTML=IC_AT;
+  cab.appendChild(el('span',null,'A lista tem '+fmt(nomes)+(nomes===1?' nome':' nomes')+' e a grade tem '+pecas(gradeTot)+'. Confira se está certo: pode haver peças sem nome, mas confirme antes de enviar.'));
+  c.appendChild(cab);
+  var t=el('table','conf-tab');
+  t.innerHTML='<thead><tr><th>Tamanho</th><th class="num">Na grade</th><th class="num">Na lista</th></tr></thead>';
+  var tb=document.createElement('tbody');
+  ordem.forEach(function(tm){
+    var g=parseInt(x.tam[tm],10)||0, l=porTam[tm]||0;
+    var tr=el('tr', g!==l?'dif':'');
+    tr.appendChild(el('td',null,tm)); tr.appendChild(el('td','num',fmt(g))); tr.appendChild(el('td','num',fmt(l)));
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); c.appendChild(t);
+}
+
+function atualizaTotais(){
+  var tot=0;
+  M.forEach(function(x){
+    if(x.L.info)return;
+    var s=0; Object.keys(x.tam).forEach(function(t){ s+=parseInt(x.tam[t],10)||0; });
+    x.soma=s; if(x.elSoma)x.elSoma.textContent=fmt(s); tot+=s;
+  });
+  $('totalGeral').textContent=fmt(tot);
+  return tot;
+}
+
+/* ---------------- colar do Excel ---------------- */
+var GEN = {M:'masculino',MASC:'masculino',MASCULINO:'masculino',MASCULINA:'masculino',H:'masculino',HOMEM:'masculino',
+           F:'feminino',FEM:'feminino',FEMININO:'feminino',FEMININA:'feminino',MULHER:'feminino',BABYLOOK:'feminino','BABY LOOK':'feminino'};
+function semAcento(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function interpreta(texto){
+  var linhas=String(texto||'').replace(/\r/g,'').split('\n').filter(function(l){ return l.trim(); });
+  if(!linhas.length) return [];
+  var sep = linhas.some(function(l){ return l.indexOf('\t')>=0; }) ? '\t' : (linhas.some(function(l){ return l.indexOf(';')>=0; }) ? ';' : null);
+  var cel = function(l){ return sep ? l.split(sep) : [l]; };
+  var mapa=null, ini=0;
+  var cab=cel(linhas[0]).map(function(c){ return semAcento(c).trim().toUpperCase(); });
+  if(cab.some(function(c){ return /^NOME/.test(c); }) || cab.some(function(c){ return /^(NUMERO|N[O°º.]?)$/.test(c); })){
+    mapa={}; ini=1;
+    cab.forEach(function(c,i){
+      if(/^NOME/.test(c))mapa.nome=i;
+      else if(/^(NUMERO|NUM|N[O°º.]?)$/.test(c))mapa.num=i;
+      else if(/^(GENERO|SEXO|CORTE|MODELO)/.test(c))mapa.gen=i;
+      else if(/^(TAMANHO|TAM)/.test(c))mapa.tam=i;
+    });
+  }
+  var fora=[];
+  for(var k=ini;k<linhas.length;k++){
+    var cs=cel(linhas[k]).map(function(c){ return c.trim(); });
+    var r=linhaVazia();
+    if(mapa){
+      if(mapa.nome!=null)r.nome=cs[mapa.nome]||'';
+      if(mapa.num!=null)r.num=(cs[mapa.num]||'').replace(/\D/g,'').slice(0,3);
+      if(mapa.gen!=null)r.gen=GEN[semAcento(cs[mapa.gen]).toUpperCase().replace(/\s+/g,' ')]||'';
+      if(mapa.tam!=null){ var tt=(cs[mapa.tam]||'').toUpperCase().replace(/\s+/g,''); r.tam=TODOS[tt]?tt:''; }
+    } else {
+      /* sem cabecalho: cada celula diz o que e. "M" e o caso dificil (genero
+         ou tamanho): so vira genero se a linha ja tiver outro tamanho. */
+      var resto=[], tamanhos=[], ms=0;
+      cs.forEach(function(c){
+        var u=semAcento(c).toUpperCase().replace(/\s+/g,' ');
+        var us=u.replace(/\s+/g,'');
+        if(!u)return;
+        if(u==='M'){ ms++; return; }
+        if(u!=='F'&&TODOS[us]){ tamanhos.push(us); return; }
+        if(GEN[u]&&!r.gen){ r.gen=GEN[u]; return; }
+        if(/^\d{1,3}$/.test(u)&&!r.num){ r.num=u; return; }
+        resto.push(c);
+      });
+      for(var z=0;z<ms;z++){
+        if(!r.gen && (tamanhos.length || z<ms-1)) r.gen='masculino';
+        else if(!tamanhos.length) tamanhos.push('M');
+      }
+      r.tam=tamanhos[0]||'';
+      r.nome=resto.join(' ').replace(/\s+/g,' ').trim();
+    }
+    r.nome=(r.nome||'').slice(0,40);
+    if(linhaUsada(r)) fora.push(r);
+  }
+  return fora;
+}
+var _colarAlvo=null;
+function abreColar(x){
+  _colarAlvo=x; $('colarTexto').value=''; $('colarPrevia').textContent='';
+  abre('fundoColar'); setTimeout(function(){ $('colarTexto').focus(); },50);
+}
+$('colarTexto').addEventListener('input',function(){
+  var r=interpreta(this.value);
+  var sem=r.filter(function(z){ return !z.gen||!z.tam; }).length;
+  $('colarPrevia').textContent = r.length ? (fmt(r.length)+(r.length===1?' linha encontrada':' linhas encontradas')+(sem?'. '+fmt(sem)+' sem gênero ou tamanho: complete depois na lista.':'.')) : '';
+});
+function aplicaColagem(substituir){
+  var x=_colarAlvo; if(!x)return;
+  var r=interpreta($('colarTexto').value);
+  if(!r.length){ avisa('Nada para colar. Copie as linhas no Excel e cole na caixa.'); return; }
+  var atuais=x.lista.filter(linhaUsada);
+  x.lista = substituir ? r : atuais.concat(r);
+  fecha('fundoColar'); desenhaLista(x); agendaGuarda();
+  avisa(fmt(r.length)+(r.length===1?' linha colada.':' linhas coladas.'));
+}
+$('colarAdicionar').addEventListener('click',function(){ aplicaColagem(false); });
+$('colarSubstituir').addEventListener('click',function(){ aplicaColagem(true); });
+$('colarCancelar').addEventListener('click',function(){ fecha('fundoColar'); });
+/* colar varias linhas direto num campo da tabela tambem funciona */
+function colaDireto(e,x,i){
+  var t=(e.clipboardData||window.clipboardData);
+  t=t?t.getData('text'):'';
+  if(!t || (t.indexOf('\n')<0 && t.indexOf('\t')<0)) return;
+  e.preventDefault();
+  var r=interpreta(t); if(!r.length)return;
+  var antes=x.lista.slice(0,i), depois=x.lista.slice(i+1).filter(linhaUsada);
+  if(linhaUsada(x.lista[i])) antes.push(x.lista[i]);
+  x.lista=antes.concat(r,depois);
+  desenhaLista(x); agendaGuarda();
+  avisa(fmt(r.length)+(r.length===1?' linha colada.':' linhas coladas.'));
+}
+
+/* ---------------- modais ---------------- */
+var _aberto=null, _antesFoco=null;
+function abre(id){ _antesFoco=document.activeElement; _aberto=id; $(id).classList.add('on'); }
+function fecha(id){ $(id).classList.remove('on'); if(_aberto===id)_aberto=null; if(_antesFoco&&_antesFoco.focus)try{_antesFoco.focus();}catch(_){} }
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&_aberto)fecha(_aberto); });
+['fundoConfirma','fundoColar'].forEach(function(id){ $(id).addEventListener('mousedown',function(e){ if(e.target===this)fecha(id); }); });
+function ampliar(src){
+  var z=el('div','zoom'); var i=document.createElement('img'); i.src=src; i.alt='Arte ampliada'; z.appendChild(i);
+  z.addEventListener('click',function(){ z.remove(); });
+  document.body.appendChild(z);
+}
+
+/* ---------------- enviar ---------------- */
+$('btEnviar').addEventListener('click',function(){
+  if(TRAVADO)return;
+  var tot=atualizaTotais();
+  var problemas=[];
+  M.forEach(function(x){
+    if(!x.L.nomeNum)return;
+    x.mostraErros=true; confere(x);
+    x.lista.forEach(function(r,i){ var p=problemaLinha(r); if(p)problemas.push({x:x,i:i,p:p}); });
+  });
+  if(problemas.length){
+    var p=problemas[0];
+    var tr=p.x.elLista.children[p.i];
+    if(tr){ tr.scrollIntoView({behavior:'smooth',block:'center'}); }
+    avisa('Modelo L-'+String(p.x.n).padStart(2,'0')+', linha '+(p.i+1)+': '+p.p+'.');
+    return;
+  }
+  if(!tot){ avisa('Preencha a quantidade de pelo menos um tamanho.'); var a=document.querySelector('.tam input'); if(a)a.focus(); return; }
+  var c=$('confCorpo'); c.innerHTML='';
+  var t=el('table','resumo');
+  M.forEach(function(x){
+    if(x.L.info)return;
+    var tr=el('tr');
+    var nome='L-'+String(x.n).padStart(2,'0')+'  '+(x.L.ref||'Modelo '+x.n);
+    tr.appendChild(el('td',null,nome));
+    var nomes=x.L.nomeNum ? x.lista.filter(linhaUsada).length : null;
+    tr.appendChild(el('td','num', pecas(x.soma||0) + (nomes!=null ? ' · '+fmt(nomes)+(nomes===1?' nome':' nomes') : '')));
+    t.appendChild(tr);
+  });
+  var trT=el('tr'); var a1=el('td'); a1.innerHTML='<b>Total</b>'; var a2=el('td','num'); a2.innerHTML='<b>'+pecas(tot)+'</b>';
+  trT.appendChild(a1); trT.appendChild(a2); t.appendChild(trT);
+  c.appendChild(t);
+  var difs=M.filter(function(x){ return x.L.nomeNum && x.diferencas && x.diferencas.length; });
+  if(difs.length){
+    var f=el('div','faixa at'); f.innerHTML=IC_AT;
+    var s=el('div');
+    s.appendChild(el('div',null,'A lista de nomes não bate com a grade em '+(difs.length===1?'um modelo':difs.length+' modelos')+':'));
+    difs.forEach(function(x){
+      s.appendChild(el('div',null,'L-'+String(x.n).padStart(2,'0')+': '+x.diferencas.map(function(d){ return d.t+' (grade '+d.grade+', lista '+d.lista+')'; }).join(', ')));
+    });
+    s.appendChild(el('div',null,'Se está certo assim, pode enviar.'));
+    f.appendChild(s); c.appendChild(f);
+  }
+  c.appendChild(el('p',null,'Depois de enviar, o pedido fica travado. Se precisar mudar alguma coisa, fale com o seu vendedor.'));
+  $('confEnviar').textContent = difs.length ? 'Está certo assim, enviar' : 'Está certo, enviar';
+  abre('fundoConfirma');
+});
+$('confVoltar').addEventListener('click',function(){ fecha('fundoConfirma'); });
+$('confEnviar').addEventListener('click',function(){
+  var b=this; b.disabled=true; b.textContent='Enviando...';
+  var corpo={layouts:M.filter(function(x){ return !x.L.info; }).map(function(x){
+    var tam={}; tamanhosVisiveis(x).forEach(function(t){ tam[t]=x.tam[t]||''; });
+    Object.keys(x.tam).forEach(function(t){ tam[t]=x.tam[t]; });
+    var o={n:x.n, tamanhos:tam};
+    if(x.L.nomeNum) o.lista=x.lista.filter(linhaUsada).map(function(r){ return {nome:(r.nome||'').trim(),num:r.num||'',gen:r.gen,tam:r.tam}; });
+    return o;
+  })};
+  fetch('/api/cliente/devolver/'+encodeURIComponent(CODIGO),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)})
+    .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return {r:r,d:d}; }); })
+    .then(function(x){
+      b.disabled=false; b.textContent='Está certo, enviar';
+      if(x.r.ok && x.d.ok){
+        fecha('fundoConfirma'); apagaRascunho(); TRAVADO=true;
+        mostraTravado(x.d.devolvidoEm, true);
+        window.scrollTo({top:0,behavior:'smooth'});
+        return;
+      }
+      fecha('fundoConfirma');
+      avisa(x.d.detail || 'Não foi possível enviar. Tente de novo.');
+      if(x.r.status===409||x.r.status===410) setTimeout(function(){ carrega(0); },2600);
+    })
+    .catch(function(){
+      b.disabled=false; b.textContent='Está certo, enviar';
+      fecha('fundoConfirma'); avisa('Sem conexão. O que você digitou continua guardado: tente de novo.');
+    });
+});
+
+function quando(iso){
+  if(!iso)return '';
+  var d=new Date(iso); if(isNaN(d))return '';
+  return d.toLocaleDateString('pt-BR')+' às '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+}
+function mostraTravado(iso, agora){
+  TRAVADO=true;
+  document.body.classList.add('travado');
+  M.forEach(function(x){ if(x.L.info)return; desenhaGrade(x); if(x.L.nomeNum){ x.lista=x.lista.filter(linhaUsada); desenhaLista(x); } });
+  var f=$('faixaEstado'); f.className='faixa ok'; f.innerHTML=IC_OK;
+  var s=el('div');
+  var b=el('b',null, agora ? 'Pronto! Recebido pela Fourtime' : 'Este pedido já foi enviado para a Fourtime');
+  s.appendChild(b);
+  var w=quando(iso);
+  s.appendChild(document.createTextNode((w?' em '+w:'')+'. O seu vendedor vai conferir e falar com você. Se precisar mudar alguma coisa, fale com ele.'));
+  f.appendChild(s);
+  $('intro').classList.add('oculto');
+}
+
+carrega(0);
+})();
+</script>
+</body>
+</html>

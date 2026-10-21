@@ -113,7 +113,11 @@ FT_PAPEL_VENDE = {"admin", "vendedor"}
 # padrão — o servidor subiu a v258 ainda aceitando gravação da v257. Uma trava
 # de segurança que depende de alguém lembrar de editar um painel não é trava.
 # Agora o código impõe o piso, e a variável só pode ser usada para SUBIR.
-FT_EDITOR_PISO = "3.258"
+# v3.376: subiu para 3.376. O .ft ganhou a lista de nomes e numeros de cada
+# layout e o vinculo com o link do cliente. Um editor mais velho abre o
+# arquivo, nao conhece esses campos e, ao salvar, grava o orcamento SEM eles:
+# a lista que o cliente preencheu sumiria em silencio.
+FT_EDITOR_PISO = "3.376"
 # o piso é aplicado logo depois de _versao_num() existir (ver abaixo)
 FT_EDITOR_MINIMO = os.environ.get("FT_EDITOR_MINIMO", FT_EDITOR_PISO).strip() or FT_EDITOR_PISO
 DB_PATH  = os.environ.get("FT_DB_PATH", os.path.join(os.path.dirname(__file__), "fourtime.db"))
@@ -2051,8 +2055,7 @@ def _orc_dentro(fid, profundidade=8):
     _orc_arvore_cache[fid] = ok
     return ok
 
-@app.post("/api/ft/salvar")
-async def ft_salvar(request: Request):
+async def _ft_salvar(request: Request):
     exige_token(request)
     exige_editor_atual(request)
     exige_orcamentos()
@@ -2067,12 +2070,13 @@ async def ft_salvar(request: Request):
     if not nome.lower().endswith(".ft"):
         nome += ".ft"
     nome = re.sub(r'[\\/:*?"<>|]+', "-", nome)
-    texto = json.dumps(conteudo, ensure_ascii=False, indent=1)
-
     # destino: "trabalho" (rascunho, direto) | "organizado" (ano/mês pela data)
     destino = (corpo.get("destino") or "trabalho").strip().lower()
     if destino != "organizado":
         destino = "trabalho"
+    # o link do cliente (v3.376): confere antes de gravar, encerra depois
+    _cli_antes_de_salvar(request, conteudo, destino)
+    texto = json.dumps(conteudo, ensure_ascii=False, indent=1)
     ano = mes = dia = None
     if destino == "organizado":
         dia, mes, ano = _orc_dia_mes_ano(nome)
@@ -5213,6 +5217,554 @@ PAGINA_LOGIN = """<!DOCTYPE html><html lang="pt-BR"><head>
   });
 })();
 </script></body></html>"""
+
+
+# =====================================================================
+# O ORCAMENTO QUE O CLIENTE PREENCHE (v3.376)
+#
+# Ate aqui o cliente recebia o PDF sem a grade, preenchia uma planilha
+# e mandava de volta, e alguem digitava tudo no editor. Agora o vendedor
+# gera um LINK: o cliente abre, preenche as quantidades da grade e, nos
+# layouts marcados, a lista de nomes e numeros, e devolve. O orcamento
+# volta preenchido para a Pasta de Trabalho e o vendedor e avisado.
+#
+# O QUE O CLIENTE ALCANCA, E SO ISSO:
+#   GET  /cliente/{codigo}               a pagina (um arquivo estatico)
+#   GET  /api/cliente/ver/{codigo}       o orcamento DAQUELE codigo, sem
+#                                        valor nenhum (montado aqui, campo a
+#                                        campo, por lista de permissao)
+#   POST /api/cliente/devolver/{codigo}  as quantidades e a lista
+# Nada mais abre sem login. O codigo tem 192 bits de acaso: nao se
+# adivinha, e nao diz nada sobre o pedido.
+#
+# ONDE MORA: um indice so, "links-do-cliente.ftc", na pasta Relatorios
+# gerados (que o Abrir do editor nao mostra). codigo -> arquivo, estado,
+# quem gerou, quando voltou. O .ft guarda o mesmo codigo em "cliente",
+# para quem abrir o orcamento saber em que pe esta o link.
+#
+# OS ESTADOS: aguardando (o cliente pode enviar) -> devolvido (travado;
+# o vendedor pode liberar de novo) -> encerrado (o orcamento foi salvo
+# em Organizados: o link morre).
+# =====================================================================
+FT_CLI_INDICE = "links-do-cliente.ftc"
+_CLI_TRAVA = threading.Lock()
+_CLI_MEMORIA = {}         # {"doc":..., "fid":..., "mod":...}
+_CLI_FREIO = {}           # (ip, tipo) -> [instantes]
+_CLI_FREIO_TRAVA = threading.Lock()
+_CLI_TAM_ADULTO = ["PP", "P", "M", "G", "GG", "XG", "G1", "G2", "G3", "G4"]
+_CLI_TAM_INFANTIL = ["2A", "4A", "6A", "8A", "10A", "12A", "14A"]
+_CLI_TAMANHOS = set(_CLI_TAM_ADULTO + _CLI_TAM_INFANTIL)
+_CLI_GENEROS = {"masculino", "feminino"}
+_CLI_MAX_LINHAS = 1000            # por layout
+_CLI_MAX_CORPO = 2 * 1024 * 1024  # a devolucao nao leva imagem: 2 MB sobra
+_CLI_DIAS_GUARDA = 120            # links encerrados somem do indice depois disso
+
+
+def _cli_agora():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _cli_codigo_ok(codigo):
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]{24,64}", str(codigo or "")))
+
+
+def _cli_ip(request):
+    """O IP de quem pediu. No Render a conexao chega pela borda, entao o IP
+       de verdade vem no cabecalho."""
+    for cab in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip"):
+        v = request.headers.get(cab, "")
+        if v:
+            return v.split(",")[0].strip()[:64]
+    return (request.client.host if request.client else "") or "?"
+
+
+def _cli_freio(request, tipo, maximo, janela=60):
+    """Limite por IP para as rotas sem login. Nao e a protecao do link (o
+       codigo e que e); e o que impede alguem de martelar o servidor."""
+    chave = (_cli_ip(request), tipo)
+    agora = time.time()
+    with _CLI_FREIO_TRAVA:
+        marcas = [t for t in _CLI_FREIO.get(chave, []) if agora - t < janela]
+        if len(marcas) >= maximo:
+            _CLI_FREIO[chave] = marcas
+            raise HTTPException(status_code=429, detail=(
+                "Muitas tentativas seguidas. Espere um minuto e tente de novo."))
+        marcas.append(agora)
+        _CLI_FREIO[chave] = marcas
+        if len(_CLI_FREIO) > 5000:          # memoria nao cresce sem fim
+            for k in [k for k, v in _CLI_FREIO.items() if not v or agora - v[-1] > janela]:
+                _CLI_FREIO.pop(k, None)
+
+
+def _cli_indice_vazio():
+    return {"_formato": "fourtime-links-cliente", "_versao": 1,
+            "versao": 0, "salvoEm": "", "links": {}}
+
+
+def _cli_indice_le(usar_memoria=True):
+    """O indice e (fid, mod). Mesmo molde do .ftx: memoria de processo
+       validada pelo modifiedTime do Drive."""
+    pid = _rel_pasta()
+    achados = _drive_get("/files", {
+        "q": ("'%s' in parents and trashed = false and name = '%s'" % (pid, FT_CLI_INDICE)),
+        "fields": "files(id,name,modifiedTime)", "pageSize": "5",
+        "includeItemsFromAllDrives": "true", "supportsAllDrives": "true"}).get("files", [])
+    if not achados:
+        return _cli_indice_vazio(), None, ""
+    fid = achados[0]["id"]
+    mod = achados[0].get("modifiedTime") or ""
+    g = _CLI_MEMORIA
+    if usar_memoria and g.get("mod") == mod and g.get("fid") == fid and g.get("doc"):
+        return json.loads(json.dumps(g["doc"])), fid, mod
+    bruto, _ = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"},
+                          binario=True)
+    doc = json.loads(bruto.decode("utf-8"))
+    if not isinstance(doc.get("links"), dict):
+        doc["links"] = {}
+    _CLI_MEMORIA.update({"doc": json.loads(json.dumps(doc)), "fid": fid, "mod": mod})
+    return doc, fid, mod
+
+
+def _cli_indice_grava(doc, fid):
+    doc["_formato"] = "fourtime-links-cliente"
+    doc["_versao"] = 1
+    doc["versao"] = int(doc.get("versao") or 0) + 1
+    doc["salvoEm"] = _cli_agora()
+    # faxina: link encerrado ha muito tempo nao precisa mais morar aqui
+    limite = (datetime.now(timezone.utc) - timedelta(days=_CLI_DIAS_GUARDA)).isoformat()
+    for c in [c for c, l in doc["links"].items()
+              if l.get("estado") == "encerrado" and (l.get("encerradoEm") or "") < limite]:
+        doc["links"].pop(c, None)
+    texto = json.dumps(doc, ensure_ascii=False)
+    if not fid:
+        try:
+            fid = _orc_acha_arquivo(FT_CLI_INDICE, _rel_pasta())
+        except Exception:
+            fid = None
+    if fid:
+        _orc_grava_por_id(fid, texto.encode("utf-8"))
+    elif FT_SCRIPT_ORCAMENTOS:
+        r = _script_post({"acao": "salvar", "nome": FT_CLI_INDICE, "conteudo": texto,
+                          "destino": "relatorio", "pastaRelatorios": FT_PASTA_RELATORIOS})
+        fid = r.get("id")
+    if not fid:
+        raise HTTPException(status_code=502,
+            detail="Não consegui gravar o índice dos links: sem cota para criar arquivo.")
+    mod = ""
+    try:
+        mod = _drive_get("/files/" + fid, {"fields": "modifiedTime",
+                                           "supportsAllDrives": "true"}).get("modifiedTime") or ""
+    except Exception:
+        pass
+    _CLI_MEMORIA.update({"doc": json.loads(json.dumps(doc)), "fid": fid, "mod": mod})
+    return fid
+
+
+def _cli_le_ft(fid):
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", str(fid or "")):
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado.")
+    try:
+        bruto, _ = _drive_get("/files/" + fid, {"alt": "media", "supportsAllDrives": "true"},
+                              binario=True)
+        doc = json.loads(bruto.decode("utf-8"))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502,
+            detail="Não consegui abrir o orçamento agora. Tente de novo em alguns minutos.")
+    if not isinstance(doc, dict) or not isinstance(doc.get("layouts"), list):
+        raise HTTPException(status_code=502, detail="O orçamento guardado não é um .ft válido.")
+    return doc
+
+
+def _cli_grava_ft(fid, doc):
+    _orc_grava_por_id(fid, json.dumps(doc, ensure_ascii=False, indent=1).encode("utf-8"))
+
+
+def _cli_texto(html_):
+    """HTML do editor (div, br, span, font, b, a) -> texto puro. O cliente
+       recebe TEXTO: nenhuma marcacao do editor chega a pagina dele."""
+    import html as _h
+    t = str(html_ or "")
+    t = re.sub(r"(?i)<\s*br\s*/?>", "\n", t)
+    t = re.sub(r"(?i)</\s*(div|p|li)\s*>", "\n", t)
+    t = re.sub(r"<[^>]*>", "", t)
+    t = _h.unescape(t).replace("\xa0", " ")
+    t = "\n".join(l.strip() for l in t.split("\n"))
+    return re.sub(r"\n{3,}", "\n\n", t).strip()[:4000]
+
+
+def _cli_q(v):
+    """Quantidade em texto do editor ("40", "1.200", "") -> inteiro."""
+    d = re.sub(r"\D", "", str(v or ""))
+    return int(d) if d else 0
+
+
+def _cli_lista_limpa(lista):
+    """A lista como ela pode morar no .ft: so os quatro campos, so valores
+       validos. Usada na leitura (o que vai para a pagina) e na gravacao."""
+    fora = []
+    for x in (lista if isinstance(lista, list) else [])[:_CLI_MAX_LINHAS]:
+        if not isinstance(x, dict):
+            continue
+        nome = re.sub(r"\s+", " ", str(x.get("nome") or "")).strip()[:40]
+        num = re.sub(r"\D", "", str(x.get("num") or ""))[:3]
+        gen = str(x.get("gen") or "").strip().lower()
+        tam = str(x.get("tam") or "").strip().upper()
+        if not (nome or num):
+            continue
+        fora.append({"nome": nome, "num": num,
+                     "gen": gen if gen in _CLI_GENEROS else "",
+                     "tam": tam if tam in _CLI_TAMANHOS else ""})
+    return fora
+
+
+def _cli_visao(doc, link):
+    """O que a pagina do cliente recebe. LISTA DE PERMISSAO: cada campo e
+       copiado de proposito. Preco unitario, ajuste, total em R$, anotacao,
+       contato, pagamento: nada disso esta aqui, e nada que for acrescentado
+       ao .ft no futuro aparece sem ser escrito nesta funcao."""
+    h = doc.get("header") or {}
+    layouts = []
+    for i, L in enumerate(doc.get("layouts") or []):
+        if not isinstance(L, dict):
+            continue
+        tecidos = L.get("tecidos") or []
+        cores = L.get("cores") or []
+        tec = []
+        for k, t in enumerate(tecidos if isinstance(tecidos, list) else []):
+            nome_t = str(t or "").strip()
+            cor = str((cores[k] if k < len(cores) else "") or (L.get("cor") if k == 0 else "") or "").strip()
+            if nome_t or cor:
+                tec.append({"tecido": nome_t[:80], "cor": cor[:80]})
+        tams = {}
+        for t, v in (L.get("tamanhos") or {}).items():
+            if t in _CLI_TAMANHOS and isinstance(v, dict):
+                q = _cli_q(v.get("q"))
+                if q:
+                    tams[t] = q
+        img = L.get("img")
+        layouts.append({
+            "n": i + 1,
+            "ref": str(L.get("ref") or "").strip()[:160],
+            "genero": str(L.get("genero") or ""),
+            "tecidos": tec,
+            "design": [str((d or {}).get("tag") or "")[:40] for d in (L.get("design") or [])
+                       if isinstance(d, dict) and (d or {}).get("tag")],
+            "grade": "infantil" if L.get("grade") == "infantil" else "adulto",
+            "tamanhos": tams,
+            "obs": _cli_texto(L.get("obs")),
+            "img": img if isinstance(img, str) and img.startswith("data:image/") else None,
+            "info": bool(L.get("info")),
+            "nomeNum": bool(L.get("nomeNum")),
+            "lista": _cli_lista_limpa(L.get("lista")) if L.get("nomeNum") else [],
+        })
+    vendedor = str(h.get("vendedor") or "").lstrip("*").strip()
+    return {
+        "ok": True,
+        "estado": link.get("estado") or "aguardando",
+        "devolvidoEm": link.get("devolvidoEm") or "",
+        "cliente": _cli_texto(h.get("cliente") or h.get("nomedoc") or "")[:120],
+        "pedido": _cli_texto(h.get("pedido") or "")[:30],
+        "vendedor": _cli_texto(vendedor)[:60],
+        "obs": _cli_texto(h.get("obs")),
+        "layouts": layouts,
+        "tamanhos": {"adulto": _CLI_TAM_ADULTO, "infantil": _CLI_TAM_INFANTIL},
+    }
+
+
+def _cli_marca_no_ft(doc, codigo, link):
+    """O espelho do link dentro do .ft (para o editor mostrar o selo)."""
+    doc["cliente"] = {"codigo": codigo, "estado": link.get("estado") or "aguardando",
+                      "geradoEm": link.get("criadoEm") or "",
+                      "devolvidoEm": link.get("devolvidoEm") or ""}
+    return doc["cliente"]
+
+
+def _cli_antes_de_salvar(request, conteudo, destino):
+    """Chamado pelo /api/ft/salvar ANTES de gravar.
+
+       1. Se o cliente ja devolveu e o editor ainda acha que esta
+          "aguardando", gravar agora apagaria o que o cliente preencheu:
+          recusa com 409 e manda abrir de novo.
+       2. Salvar em Organizados encerra o link (o envelope da rota fecha o
+          indice depois que a gravacao deu certo)."""
+    cli = conteudo.get("cliente") if isinstance(conteudo, dict) else None
+    if not isinstance(cli, dict) or not _cli_codigo_ok(cli.get("codigo")):
+        return
+    try:
+        idx, _f, _m = _cli_indice_le()
+    except Exception:
+        return                      # indice fora do ar nao impede salvar o orcamento
+    link = idx["links"].get(cli["codigo"])
+    if not link:
+        return
+    if link.get("estado") == "devolvido" and cli.get("estado") == "aguardando":
+        raise HTTPException(status_code=409, detail=(
+            "O cliente já preencheu e devolveu este orçamento. Abra o arquivo de novo "
+            "para ver o que ele enviou; estas mudanças não foram salvas."))
+    if destino == "organizado" and link.get("estado") != "encerrado":
+        cli["estado"] = "encerrado"
+        request.state.cli_encerrar = cli["codigo"]
+
+
+def _cli_encerra(codigo):
+    try:
+        with _CLI_TRAVA:
+            idx, fid, _ = _cli_indice_le(False)
+            link = idx["links"].get(codigo)
+            if link and link.get("estado") != "encerrado":
+                link["estado"] = "encerrado"
+                link["encerradoEm"] = _cli_agora()
+                _cli_indice_grava(idx, fid)
+    except Exception:
+        pass                        # o orcamento ja foi salvo; o link morre na proxima
+
+
+@app.post("/api/ft/salvar")
+async def ft_salvar(request: Request):
+    r = await _ft_salvar(request)
+    cod = getattr(request.state, "cli_encerrar", "")
+    if cod and isinstance(r, dict) and r.get("ok"):
+        _cli_encerra(cod)
+    return r
+
+
+@app.post("/api/cliente/link")
+async def cli_link(request: Request):
+    """Gera (ou devolve o que ja existe) o link de um orcamento que esta na
+       Pasta de Trabalho."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON inválido.")
+    fid = str(corpo.get("driveId") or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{10,}", fid):
+        raise HTTPException(status_code=400, detail="Salve o orçamento antes de enviar.")
+    if not _orc_dentro(fid):
+        raise HTTPException(status_code=403, detail="Arquivo fora da pasta de orçamentos.")
+    try:
+        na_trabalho = _sob_pasta(fid, _orc_raiz_destino("trabalho"))
+    except Exception:
+        na_trabalho = False
+    if not na_trabalho:
+        raise HTTPException(status_code=409, detail=(
+            "O link só pode ser gerado para um orçamento da Pasta de Trabalho."))
+    eu = None if FT_LOGIN_DESLIGADO else usuario_da_req(request)
+    nome_arq = ""
+    try:
+        nome_arq = _drive_get("/files/" + fid, {"fields": "name",
+                                                "supportsAllDrives": "true"}).get("name") or ""
+    except Exception:
+        pass
+    with _CLI_TRAVA:
+        idx, ifid, _ = _cli_indice_le(False)
+        doc = _cli_le_ft(fid)
+        atual = (doc.get("cliente") or {}).get("codigo") if isinstance(doc.get("cliente"), dict) else ""
+        link = idx["links"].get(atual) if _cli_codigo_ok(atual) else None
+        if link and (link.get("id") != fid or link.get("estado") == "encerrado"):
+            link, atual = None, ""
+        novo = not link
+        if novo:
+            atual = secrets.token_urlsafe(24)
+            link = {"id": fid, "estado": "aguardando", "criadoEm": _cli_agora(),
+                    "criadoPor": (eu or {}).get("u", ""),
+                    "criadoPorNome": (eu or {}).get("nome", "")}
+            idx["links"][atual] = link
+        link["nome"] = re.sub(r"\.ft$", "", nome_arq, flags=re.I) or link.get("nome", "")
+        cli = _cli_marca_no_ft(doc, atual, link)
+        _cli_grava_ft(fid, doc)
+        _cli_indice_grava(idx, ifid)
+    return {"ok": True, "codigo": atual, "novo": novo, "cliente": cli,
+            "caminho": "/cliente/" + atual}
+
+
+@app.post("/api/cliente/liberar")
+async def cli_liberar(request: Request):
+    """O cliente precisa corrigir: o mesmo link volta a aceitar uma
+       devolucao. O que ele ja mandou continua no orcamento e aparece
+       preenchido para ele."""
+    exige_token(request)
+    exige_editor_atual(request)
+    exige_orcamentos()
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    codigo = str(corpo.get("codigo") or "")
+    if not _cli_codigo_ok(codigo):
+        raise HTTPException(status_code=400, detail="Código inválido.")
+    with _CLI_TRAVA:
+        idx, ifid, _ = _cli_indice_le(False)
+        link = idx["links"].get(codigo)
+        if not link or link.get("estado") == "encerrado":
+            raise HTTPException(status_code=410, detail="Este link já foi encerrado.")
+        doc = _cli_le_ft(link["id"])
+        link["estado"] = "aguardando"
+        link["liberadoEm"] = _cli_agora()
+        link.pop("devolvidoEm", None)
+        cli = _cli_marca_no_ft(doc, codigo, link)
+        _cli_grava_ft(link["id"], doc)
+        _cli_indice_grava(idx, ifid)
+    return {"ok": True, "cliente": cli}
+
+
+@app.get("/api/cliente/novidades")
+def cli_novidades(request: Request):
+    """Os orcamentos que os clientes devolveram e ainda nao foram para
+       Organizados. A tela pergunta de tempos em tempos e avisa quem gerou."""
+    exige_token(request)
+    exige_orcamentos()
+    try:
+        idx, _f, _m = _cli_indice_le()
+    except Exception:
+        return JSONResponse({"ok": False, "itens": []}, headers={"Cache-Control": "no-store"})
+    itens = []
+    for c, l in idx["links"].items():
+        if l.get("estado") in ("devolvido", "aguardando"):
+            itens.append({"codigo": c, "id": l.get("id"), "nome": l.get("nome", ""),
+                          "estado": l.get("estado"), "devolvidoEm": l.get("devolvidoEm", ""),
+                          "criadoEm": l.get("criadoEm", ""),
+                          "criadoPor": l.get("criadoPor", ""),
+                          "criadoPorNome": l.get("criadoPorNome", ""),
+                          "pecas": l.get("pecas", 0)})
+    itens.sort(key=lambda x: x.get("devolvidoEm") or x.get("criadoEm") or "", reverse=True)
+    return JSONResponse({"ok": True, "itens": itens[:200]}, headers={"Cache-Control": "no-store"})
+
+
+_CLI_PAGINA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cliente", "pagina.html")
+
+
+@app.get("/cliente/{codigo}")
+def cli_pagina(codigo: str, request: Request):
+    _cli_freio(request, "pagina", 60)
+    if not os.path.exists(_CLI_PAGINA):
+        raise HTTPException(status_code=404, detail="Página indisponível.")
+    return FileResponse(_CLI_PAGINA, media_type="text/html; charset=utf-8", headers={
+        "Cache-Control": "no-cache, max-age=0",
+        "X-Robots-Tag": "noindex, nofollow",
+        "Referrer-Policy": "no-referrer",
+        "X-Frame-Options": "DENY"})
+
+
+@app.get("/api/cliente/ver/{codigo}")
+def cli_ver(codigo: str, request: Request):
+    _cli_freio(request, "ver", 30)
+    if not _cli_codigo_ok(codigo):
+        raise HTTPException(status_code=404, detail="Link inválido. Confira com o seu vendedor.")
+    exige_orcamentos()
+    idx, _f, _m = _cli_indice_le()
+    link = idx["links"].get(codigo)
+    if not link:
+        raise HTTPException(status_code=404, detail="Link inválido. Confira com o seu vendedor.")
+    if link.get("estado") == "encerrado":
+        raise HTTPException(status_code=410, detail=(
+            "Este orçamento já foi finalizado pela Fourtime. Fale com o seu vendedor."))
+    doc = _cli_le_ft(link.get("id"))
+    return JSONResponse(_cli_visao(doc, link), headers={
+        "Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
+
+
+@app.post("/api/cliente/devolver/{codigo}")
+async def cli_devolver(codigo: str, request: Request):
+    _cli_freio(request, "devolver", 20)
+    if not _cli_codigo_ok(codigo):
+        raise HTTPException(status_code=404, detail="Link inválido.")
+    exige_orcamentos()
+    bruto = await request.body()
+    if len(bruto) > _CLI_MAX_CORPO:
+        raise HTTPException(status_code=413, detail="O envio passou do tamanho permitido.")
+    try:
+        corpo = json.loads(bruto.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Envio inválido.")
+    pedidos = corpo.get("layouts") if isinstance(corpo, dict) else None
+    if not isinstance(pedidos, list):
+        raise HTTPException(status_code=400, detail="Envio inválido.")
+    with _CLI_TRAVA:
+        idx, ifid, _ = _cli_indice_le(False)
+        link = idx["links"].get(codigo)
+        if not link:
+            raise HTTPException(status_code=404, detail="Link inválido.")
+        if link.get("estado") == "encerrado":
+            raise HTTPException(status_code=410, detail=(
+                "Este orçamento já foi finalizado pela Fourtime. Fale com o seu vendedor."))
+        if link.get("estado") == "devolvido":
+            raise HTTPException(status_code=409, detail=(
+                "Este pedido já foi enviado. Se precisar mudar, fale com o seu vendedor."))
+        doc = _cli_le_ft(link["id"])
+        layouts = doc.get("layouts") or []
+        total = 0
+        vistos = set()
+        for p in pedidos:
+            if not isinstance(p, dict):
+                raise HTTPException(status_code=400, detail="Envio inválido.")
+            try:
+                n = int(p.get("n"))
+            except Exception:
+                raise HTTPException(status_code=400, detail="Envio inválido.")
+            if n < 1 or n > len(layouts) or n in vistos or not isinstance(layouts[n - 1], dict):
+                raise HTTPException(status_code=400, detail="Envio inválido (layout).")
+            vistos.add(n)
+            L = layouts[n - 1]
+            if L.get("info"):
+                continue
+            # a grade: o que veio substitui as quantidades; o preco fica
+            tams = p.get("tamanhos") or {}
+            if not isinstance(tams, dict):
+                raise HTTPException(status_code=400, detail="Envio inválido (grade).")
+            atuais = L.get("tamanhos") if isinstance(L.get("tamanhos"), dict) else {}
+            novos = {}
+            for t, v in tams.items():
+                if t not in _CLI_TAMANHOS:
+                    raise HTTPException(status_code=400, detail="Tamanho desconhecido: %s" % str(t)[:8])
+                s = str(v if v is not None else "").strip()
+                if s and not re.fullmatch(r"\d{1,5}", s):
+                    raise HTTPException(status_code=400, detail=(
+                        "Quantidade inválida no layout %d, tamanho %s." % (n, t)))
+                novos[t] = int(s) if s else 0
+            for t in set(list(atuais.keys()) + list(novos.keys())):
+                velho = atuais.get(t) if isinstance(atuais.get(t), dict) else {}
+                q = novos.get(t, 0)
+                if q or velho.get("u"):
+                    atuais[t] = {"q": str(q) if q else "", "u": velho.get("u") or ""}
+                else:
+                    atuais.pop(t, None)
+                total += q
+            L["tamanhos"] = atuais
+            # a lista: so nos layouts que o vendedor marcou
+            if L.get("nomeNum"):
+                bruta = p.get("lista") or []
+                if not isinstance(bruta, list) or len(bruta) > _CLI_MAX_LINHAS:
+                    raise HTTPException(status_code=400, detail="Lista de nomes inválida.")
+                for k, x in enumerate(bruta):
+                    if not isinstance(x, dict):
+                        raise HTTPException(status_code=400, detail="Lista de nomes inválida.")
+                    num = str(x.get("num") or "").strip()
+                    if num and not re.fullmatch(r"\d{1,3}", num):
+                        raise HTTPException(status_code=400, detail=(
+                            "Layout %d, linha %d: o número aceita só algarismos (até 3)." % (n, k + 1)))
+                    vazio = not (str(x.get("nome") or "").strip() or num)
+                    if vazio:
+                        continue
+                    if str(x.get("gen") or "").lower() not in _CLI_GENEROS:
+                        raise HTTPException(status_code=400, detail=(
+                            "Layout %d, linha %d: escolha masculino ou feminino." % (n, k + 1)))
+                    if str(x.get("tam") or "").upper() not in _CLI_TAMANHOS:
+                        raise HTTPException(status_code=400, detail=(
+                            "Layout %d, linha %d: escolha o tamanho." % (n, k + 1)))
+                L["lista"] = _cli_lista_limpa(bruta)
+        link["estado"] = "devolvido"
+        link["devolvidoEm"] = _cli_agora()
+        link["pecas"] = total
+        link["ip"] = _cli_ip(request)
+        _cli_marca_no_ft(doc, codigo, link)
+        _cli_grava_ft(link["id"], doc)
+        _cli_indice_grava(idx, ifid)
+    return {"ok": True, "devolvidoEm": link["devolvidoEm"], "pecas": total}
 
 
 @app.get("/")

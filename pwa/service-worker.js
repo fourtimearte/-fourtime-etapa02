@@ -55,6 +55,10 @@ self.addEventListener('fetch', (e) => {
   // 1) API nunca entra no cache — dados vivos
   if (url.pathname.indexOf('/api/') === 0) return;
 
+  // 1b) a pagina do CLIENTE (v3.376) nao e o editor: nunca entra no cache,
+  //     senao ela seria guardada no lugar do editor para uso offline
+  if (url.pathname.indexOf('/cliente/') === 0) return;
+
   // 2) o EDITOR (raiz ou /?app=1) e navegações: network-first
   const ehEditor = req.mode === 'navigate' ||
                    url.pathname === '/' ||

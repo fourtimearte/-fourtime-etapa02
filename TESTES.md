@@ -83,6 +83,8 @@ animações assentarem.
 | `teste_cores_grupos` | cores de tecido por família: menu do orçamento, página do Banco e a compatibilidade (as 50 antigas, o replantio depois da mescla, o pedido antigo) |
 | `teste_freio_servidor` | o freio antiduplicação do servidor: o catálogo de fábrica declarado passa e a duplicação continua barrada |
 | `teste_painel_v291` | todo token do painel dev ainda chega ao documento |
+| `teste_cliente_servidor` | v3.376, o link do cliente no servidor (TestClient, Drive de mentira em `ft_drive_falso.py`): gerar, abrir sem nenhum valor, recusar devolução torta, devolver, travar, o 409 que protege o que o cliente mandou, liberar, encerrar em Organizados e o freio por IP |
+| `teste_cliente` | v3.376, de ponta a ponta com o servidor de verdade (`teste_cliente_srv.py`): o vendedor marca Nº e gera o link, o cliente preenche no celular (grade, lista digitada e colada do Excel, recarregar sem perder) e envia, a página trava, o aviso chega ao vendedor, a folha de nomes na impressão, o link na observação do HTML do Trello que copia o pacote FOURTIME_NOMES, e Organizados encerrando o link. Fotos em `/tmp/cliente-*.png` |
 
 As três de **resolução** podem ser puladas quando a alteração não mexe em
 responsividade — foi o combinado com o usuário.
