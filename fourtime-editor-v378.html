@@ -5116,7 +5116,7 @@
   .nn-in:focus{outline:none;border-color:var(--ft-vermelho);box-shadow:0 0 0 3px rgba(198,22,27,.13);}
   .nn-in.erro{border-color:var(--ft-vermelho);}
   .nn-num,.nn-tam{width:62px;text-align:center;font-family:var(--ft-fonte-mono);font-weight:600;}
-  .nn-seg{display:inline-flex;border:1px solid var(--ft-borda-campo);border-radius:7px;overflow:hidden;height:30px;}
+  .nn-seg{display:inline-flex;white-space:nowrap;border:1px solid var(--ft-borda-campo);border-radius:7px;overflow:hidden;height:30px;}
   .nn-g{border:0;background:var(--ft-superficie-2);padding:0 10px;font:600 12px var(--ft-fonte-ui);color:var(--ft-cinza-40);cursor:pointer;}
   .nn-g+.nn-g{border-left:1px solid var(--ft-borda-campo);}
   .nn-g[data-g="masculino"][aria-pressed="true"]{background:var(--ft-genero-masc);color:var(--ft-genero-masc-tx);}
@@ -7372,8 +7372,8 @@
     <div class="ft-txt-topo"><span class="tit" id="nnTitulo">Nomes e números</span><button class="ft-txt-bt" id="nnDesligar" type="button">Não pedir nome e número</button></div>
     <div class="nn-corpo">
       <div class="nn-conf" id="nnConf"></div>
-      <table class="nn-tab"><thead><tr><th></th><th>Nome</th><th>Número</th><th>Gênero</th><th>Tamanho</th><th></th></tr></thead><tbody id="nnCorpo"></tbody></table>
-      <div class="nn-acoes"><button class="ft-txt-bt" id="nnMais" type="button">+ Linha</button><span class="nn-dica">Cole num campo um bloco copiado do Excel (nome, número, gênero e tamanho) e ele se espalha pelas linhas.</span></div>
+      <table class="nn-tab"><thead><tr><th></th><th>Nome</th><th>Número</th><th>Modelagem</th><th>Tamanho</th><th></th></tr></thead><tbody id="nnCorpo"></tbody></table>
+      <div class="nn-acoes"><button class="ft-txt-bt" id="nnMais" type="button">+ Linha</button><span class="nn-dica">Cole num campo um bloco copiado do Excel (nome, número, modelagem e tamanho) e ele se espalha pelas linhas.</span></div>
     </div>
     <div class="ft-txt-pe"><button class="ft-txt-bt" id="nnCopiarTab" type="button">Copiar tabela</button><button class="ft-txt-bt" id="nnCopiar" type="button">Copiar para o Affinity</button><button class="ft-txt-bt principal" id="nnFechar" type="button">Pronto</button></div>
   </div>
@@ -25288,7 +25288,11 @@ window.ftTexto=ftTexto;
       da observação que abre a tabela e copia para o Affinity, como o
       botão do DTF.
    ================================================================ */
-const NN_GEN={masculino:'Masculino',feminino:'Feminino'};
+/* MODELAGEM (v3.378, pedido do Henrique): na tela, no papel e no Trello a
+   coluna se chama Modelagem e as opções Camiseta e Baby look. O DADO
+   continua masculino | feminino, como no .ft e no servidor: muda só o
+   rótulo, e nenhum arquivo já devolvido precisa ser convertido. */
+const NN_GEN={masculino:'Camiseta',feminino:'Baby look'};
 function nnTams(){ return TAMANHOS.concat(TAM_INFANTIL); }
 function nnLista(mod){ if(!Array.isArray(mod._lista))mod._lista=[]; return mod._lista; }
 function nnUsada(r){ return !!(r&&(String(r.nome||'').trim()||String(r.num||'').trim())); }
@@ -25306,7 +25310,7 @@ function nnLimpa(lista){
 }
 function nnProblema(r){
   if(!nnUsada(r))return '';
-  if(!NN_GEN[r.gen])return 'sem gênero';
+  if(!NN_GEN[r.gen])return 'sem modelagem';
   if(!nnTams().includes(String(r.tam||'').toUpperCase()))return 'sem tamanho';
   return '';
 }
@@ -25371,7 +25375,7 @@ function nnMudou(mod){
 
 /* ---------- colar do Excel (a mesma leitura da página do cliente) ---------- */
 const NN_GEN_TXT={M:'masculino',MASC:'masculino',MASCULINO:'masculino',MASCULINA:'masculino',H:'masculino',HOMEM:'masculino',
-  F:'feminino',FEM:'feminino',FEMININO:'feminino',FEMININA:'feminino',MULHER:'feminino',BABYLOOK:'feminino','BABY LOOK':'feminino'};
+  F:'feminino',FEM:'feminino',FEMININO:'feminino',FEMININA:'feminino',MULHER:'feminino',BABYLOOK:'feminino',CAMISETA:'masculino',CAMISA:'masculino',BL:'feminino','BABY LOOK':'feminino'};
 function nnSemAcento(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,''); }
 function nnInterpreta(texto){
   const tams=nnTams();
@@ -25386,7 +25390,7 @@ function nnInterpreta(texto){
     cab.forEach((c,i)=>{
       if(/^NOME/.test(c))mapa.nome=i;
       else if(/^(NUMERO|NUM|N[O°º.]?)$/.test(c))mapa.num=i;
-      else if(/^(GENERO|SEXO|CORTE|MODELO)/.test(c))mapa.gen=i;
+      else if(/^(GENERO|SEXO|CORTE|MODELO|MODELAGEM)/.test(c))mapa.gen=i;
       else if(/^(TAMANHO|TAM)/.test(c))mapa.tam=i;
     });
   }
@@ -25457,7 +25461,7 @@ function nnDesenha(){
     const tr=document.createElement('tr');
     tr.innerHTML='<td class="nn-i"></td><td><input class="nn-in nn-nome" maxlength="40" placeholder="Nome"></td>'
       +'<td><input class="nn-in nn-num" maxlength="3" inputmode="numeric" placeholder="Nº"></td>'
-      +'<td><span class="nn-seg"><button type="button" class="nn-g" data-g="masculino">Masc.</button><button type="button" class="nn-g" data-g="feminino">Fem.</button></span></td>'
+      +'<td><span class="nn-seg"><button type="button" class="nn-g" data-g="masculino">Camiseta</button><button type="button" class="nn-g" data-g="feminino">Baby look</button></span></td>'
       +'<td><input class="nn-in nn-tam" maxlength="3" placeholder="Tam."></td>'
       +'<td><button type="button" class="nn-x" title="Apagar a linha">×</button></td>';
     tr.querySelector('.nn-i').textContent=String(i+1);
@@ -25510,7 +25514,7 @@ function nnConfere(){
   }
   if(falta){
     const f=document.createElement('div'); f.className='nn-conf-falta';
-    f.textContent=falta+(falta===1?' linha sem gênero ou tamanho.':' linhas sem gênero ou tamanho.');
+    f.textContent=falta+(falta===1?' linha sem modelagem ou tamanho.':' linhas sem modelagem ou tamanho.');
     caixa.appendChild(f);
   }
 }
@@ -25526,10 +25530,10 @@ function nnPacote(mod,n){
       cor:((mod.querySelector('.tec-linha .combo-cor textarea')||{}).value||'').trim(),
       tecidos:[...mod.querySelectorAll('.combo-tecido textarea')].map(t=>t.value.trim()).filter(Boolean)},
     total:{nomes:lista.length,grade:Object.values(nnGrade(mod)).reduce((a,b)=>a+b,0),porTamanho},
-    lista:lista.map(r=>({nome:r.nome,numero:r.num,genero:r.gen,tamanho:r.tam}))};
+    lista:lista.map(r=>({nome:r.nome,numero:r.num,genero:r.gen,modelagem:NN_GEN[r.gen]||'',tamanho:r.tam}))};
 }
 function nnTsv(lista){
-  return ['Nome\tNúmero\tGênero\tTamanho'].concat(nnLimpa(lista).map(r=>[r.nome,r.num,NN_GEN[r.gen]||'',r.tam].join('\t'))).join('\n');
+  return ['Nome\tNúmero\tModelagem\tTamanho'].concat(nnLimpa(lista).map(r=>[r.nome,r.num,NN_GEN[r.gen]||'',r.tam].join('\t'))).join('\n');
 }
 function nnCopia(txt,bt,rotulo){
   const ok=()=>{ if(bt){ bt.textContent='Copiado!'; bt.classList.add('ok'); setTimeout(()=>{ bt.textContent=rotulo; bt.classList.remove('ok'); },1600); } };
@@ -25642,7 +25646,7 @@ function nnFolhas(){
       tt.textContent=nnSelo(p.b.mod)+(nnRef(p.b.mod)?'  ·  '+nnRef(p.b.mod):'')+(p.cont?'  (continuação)':'')+'  ·  '+p.b.lista.length+(p.b.lista.length===1?' nome':' nomes');
       s.appendChild(tt);
       const t=document.createElement('table'); t.className='fn-tab';
-      t.innerHTML='<thead><tr><th class="fn-n">#</th><th>Nome</th><th class="fn-c">Número</th><th class="fn-c">Gênero</th><th class="fn-c">Tamanho</th></tr></thead>';
+      t.innerHTML='<thead><tr><th class="fn-n">#</th><th>Nome</th><th class="fn-c">Número</th><th class="fn-c">Modelagem</th><th class="fn-c">Tamanho</th></tr></thead>';
       const tb=document.createElement('tbody');
       p.b.lista.slice(p.de,p.ate).forEach((r,j)=>{
         const tr=document.createElement('tr');
@@ -25660,8 +25664,8 @@ function nnFolhas(){
         const r=document.createElement('table'); r.className='fn-resumo';
         const linha=(rot,fn,cls)=>'<tr'+(cls?' class="'+cls+'"':'')+'><th>'+rot+'</th>'+ts.map(t=>'<td>'+fn(t)+'</td>').join('')+'</tr>';
         r.innerHTML='<tr class="fn-r-cab"><th>Tamanho</th>'+ts.map(t=>'<td>'+t+'</td>').join('')+'</tr>'
-          +linha('Masculino',t=>(conta[t]||{}).masculino||'')
-          +linha('Feminino',t=>(conta[t]||{}).feminino||'')
+          +linha('Camiseta',t=>(conta[t]||{}).masculino||'')
+          +linha('Baby look',t=>(conta[t]||{}).feminino||'')
           +linha('Na lista',t=>(conta[t]||{}).total||'')
           +linha('Na grade',t=>g[t]||'','fn-r-grade');
         ts.forEach((t,ci)=>{ if(((conta[t]||{}).total||0)!==(g[t]||0)){
@@ -25708,7 +25712,7 @@ function nnParaExportar(raiz){
 function _nnRuntime(){
   var D=window.FT_NOMES||{};
   if(!Object.keys(D).length)return;
-  var GEN={masculino:'Masculino',feminino:'Feminino'};
+  var GEN={masculino:'Camiseta',feminino:'Baby look'};
   var fundo=null, atual=null;
   function el(t,c,x){ var e=document.createElement(t); if(c)e.className=c; if(x!=null)e.textContent=x; return e; }
   function copia(txt,b,rot){
@@ -25724,7 +25728,7 @@ function _nnRuntime(){
     if(!fundo){
       fundo=el('div','nnr-fundo');
       fundo.innerHTML='<div class="nnr-cx" role="dialog" aria-modal="true"><div class="nnr-topo"><span class="nnr-tit"></span><button type="button" class="nnr-x" aria-label="Fechar">×</button></div>'
-        +'<div class="nnr-aviso"></div><div class="nnr-corpo"><table class="nnr-tab"><thead><tr><th>#</th><th>Nome</th><th>Nº</th><th>Gênero</th><th>Tam.</th></tr></thead><tbody></tbody></table></div>'
+        +'<div class="nnr-aviso"></div><div class="nnr-corpo"><table class="nnr-tab"><thead><tr><th>#</th><th>Nome</th><th>Nº</th><th>Modelagem</th><th>Tam.</th></tr></thead><tbody></tbody></table></div>'
         +'<div class="nnr-resumo"></div><div class="nnr-pe"><button type="button" class="nnr-bt nnr-tab-bt">Copiar tabela</button><button type="button" class="nnr-bt nnr-aff principal">Copiar para o Affinity</button></div></div>';
       document.body.appendChild(fundo);
       fundo.addEventListener('mousedown',function(e){ if(e.target===fundo)fecha(); });
@@ -25742,7 +25746,7 @@ function _nnRuntime(){
       tb.appendChild(tr);
     });
     var pt=d.pacote.total.porTamanho||{}, partes=[];
-    Object.keys(pt).forEach(function(t){ var o=pt[t]; partes.push(t+': '+o.total+(o.masculino&&o.feminino?' ('+o.masculino+' masc., '+o.feminino+' fem.)':(o.feminino?' fem.':' masc.'))); });
+    Object.keys(pt).forEach(function(t){ var o=pt[t]; partes.push(t+': '+o.total+(o.masculino&&o.feminino?' ('+o.masculino+' camiseta, '+o.feminino+' baby look)':(o.feminino?' baby look':' camiseta'))); });
     fundo.querySelector('.nnr-resumo').textContent=d.pacote.total.nomes+' nomes. '+partes.join('  ·  ');
     var av=fundo.querySelector('.nnr-aviso');
     if(d.dif&&d.dif.length){ av.style.display=''; av.textContent='A lista não bate com a grade: '+d.dif.map(function(x){ return x.t+' (grade '+x.grade+', lista '+x.lista+')'; }).join(', ')+'.'; }

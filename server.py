@@ -5754,7 +5754,7 @@ async def cli_devolver(codigo: str, request: Request):
                         continue
                     if str(x.get("gen") or "").lower() not in _CLI_GENEROS:
                         raise HTTPException(status_code=400, detail=(
-                            "Layout %d, linha %d: escolha masculino ou feminino." % (n, k + 1)))
+                            "Layout %d, linha %d: escolha a modelagem (camiseta ou baby look)." % (n, k + 1)))
                     if str(x.get("tam") or "").upper() not in _CLI_TAMANHOS:
                         raise HTTPException(status_code=400, detail=(
                             "Layout %d, linha %d: escolha o tamanho." % (n, k + 1)))

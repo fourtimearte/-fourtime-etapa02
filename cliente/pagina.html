@@ -291,8 +291,8 @@
   <div class="caixa">
     <div class="caixa-topo" id="colarTitulo">Colar a lista do Excel</div>
     <div class="caixa-corpo">
-      <p>No Excel, selecione as colunas <b>Nome</b>, <b>Número</b>, <b>Gênero</b> e <b>Tamanho</b>, copie e cole aqui embaixo. A ordem das colunas não importa.</p>
-      <textarea class="colar" id="colarTexto" placeholder="Ana Souza&#9;7&#9;Feminino&#9;M&#10;Beto Lima&#9;10&#9;Masculino&#9;G"></textarea>
+      <p>No Excel, selecione as colunas <b>Nome</b>, <b>Número</b>, <b>Modelagem</b> e <b>Tamanho</b>, copie e cole aqui embaixo. A ordem das colunas não importa.</p>
+      <textarea class="colar" id="colarTexto" placeholder="Ana Souza&#9;7&#9;Baby look&#9;M&#10;Beto Lima&#9;10&#9;Camiseta&#9;G"></textarea>
       <div id="colarPrevia" class="nn-ajuda"></div>
     </div>
     <div class="caixa-pe">
@@ -498,9 +498,9 @@ function desenhaModelo(x){
     stn.appendChild(el('h3',null,'Nomes e números'));
     var cont=el('span','soma'); x.elContNomes=cont; stn.appendChild(cont);
     sn.appendChild(stn);
-    sn.appendChild(el('p','nn-ajuda so-edicao','Uma linha por camisa. O número aceita só algarismos. O gênero é o corte da peça: escolha o que a pessoa vai usar, mesmo que seja diferente do modelo.'));
+    sn.appendChild(el('p','nn-ajuda so-edicao','Uma linha por camisa. O número aceita só algarismos. Na modelagem, escolha o corte da peça que a pessoa vai usar, camiseta ou baby look, mesmo que seja diferente do modelo.'));
     var tb=el('table','nn-tabela');
-    tb.innerHTML='<thead><tr><th></th><th>Nome</th><th>Número</th><th>Gênero</th><th>Tamanho</th><th class="so-edicao"></th></tr></thead>';
+    tb.innerHTML='<thead><tr><th></th><th>Nome</th><th>Número</th><th>Modelagem</th><th>Tamanho</th><th class="so-edicao"></th></tr></thead>';
     var tbody=document.createElement('tbody'); tb.appendChild(tbody); x.elLista=tbody;
     sn.appendChild(tb);
     var ac=el('div','nn-acoes so-edicao');
@@ -605,8 +605,8 @@ function desenhaLista(x){
     iU.addEventListener('input',function(){ var v=iU.value.replace(/\D/g,'').slice(0,3); if(v!==iU.value){ iU.value=v; avisa('O número aceita só algarismos.'); } r.num=v; confere(x); agendaGuarda(); });
     iU.addEventListener('paste',function(e){ colaDireto(e,x,i); });
     tdU.appendChild(iU); tr.appendChild(tdU);
-    var tdG=el('td','c-gen'); var sg=el('div','seg'); sg.setAttribute('role','group'); sg.setAttribute('aria-label','Gênero da linha '+(i+1));
-    [['masculino','Masculino','m'],['feminino','Feminino','f']].forEach(function(o){
+    var tdG=el('td','c-gen'); var sg=el('div','seg'); sg.setAttribute('role','group'); sg.setAttribute('aria-label','Modelagem da linha '+(i+1));
+    [['masculino','Camiseta','m'],['feminino','Baby look','f']].forEach(function(o){
       var b=el('button',o[2],o[1]); b.type='button'; b.setAttribute('aria-pressed', r.gen===o[0]?'true':'false');
       b.addEventListener('click',function(){ if(TRAVADO)return; r.gen=o[0]; sg.querySelectorAll('button').forEach(function(z){ z.setAttribute('aria-pressed', z===b?'true':'false'); }); confere(x); agendaGuarda(); });
       sg.appendChild(b);
@@ -629,7 +629,7 @@ function focaLinha(x,i){ var tr=x.elLista.children[i]; if(tr){ var a=tr.querySel
 function linhaUsada(r){ return !!((r.nome||'').trim() || (r.num||'').trim()); }
 function problemaLinha(r){
   if(!linhaUsada(r)) return '';
-  if(!r.gen) return 'falta o gênero';
+  if(!r.gen) return 'falta a modelagem';
   if(!r.tam || !TODOS[r.tam]) return 'falta o tamanho';
   return '';
 }
@@ -685,7 +685,7 @@ function atualizaTotais(){
 
 /* ---------------- colar do Excel ---------------- */
 var GEN = {M:'masculino',MASC:'masculino',MASCULINO:'masculino',MASCULINA:'masculino',H:'masculino',HOMEM:'masculino',
-           F:'feminino',FEM:'feminino',FEMININO:'feminino',FEMININA:'feminino',MULHER:'feminino',BABYLOOK:'feminino','BABY LOOK':'feminino'};
+           F:'feminino',FEM:'feminino',FEMININO:'feminino',FEMININA:'feminino',MULHER:'feminino',BABYLOOK:'feminino','BABY LOOK':'feminino',CAMISETA:'masculino',CAMISA:'masculino',BL:'feminino'};
 function semAcento(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,''); }
 function interpreta(texto){
   var linhas=String(texto||'').replace(/\r/g,'').split('\n').filter(function(l){ return l.trim(); });
@@ -699,7 +699,7 @@ function interpreta(texto){
     cab.forEach(function(c,i){
       if(/^NOME/.test(c))mapa.nome=i;
       else if(/^(NUMERO|NUM|N[O°º.]?)$/.test(c))mapa.num=i;
-      else if(/^(GENERO|SEXO|CORTE|MODELO)/.test(c))mapa.gen=i;
+      else if(/^(GENERO|SEXO|CORTE|MODELO|MODELAGEM)/.test(c))mapa.gen=i;
       else if(/^(TAMANHO|TAM)/.test(c))mapa.tam=i;
     });
   }
@@ -746,7 +746,7 @@ function abreColar(x){
 $('colarTexto').addEventListener('input',function(){
   var r=interpreta(this.value);
   var sem=r.filter(function(z){ return !z.gen||!z.tam; }).length;
-  $('colarPrevia').textContent = r.length ? (fmt(r.length)+(r.length===1?' linha encontrada':' linhas encontradas')+(sem?'. '+fmt(sem)+' sem gênero ou tamanho: complete depois na lista.':'.')) : '';
+  $('colarPrevia').textContent = r.length ? (fmt(r.length)+(r.length===1?' linha encontrada':' linhas encontradas')+(sem?'. '+fmt(sem)+' sem modelagem ou tamanho: complete depois na lista.':'.')) : '';
 });
 function aplicaColagem(substituir){
   var x=_colarAlvo; if(!x)return;

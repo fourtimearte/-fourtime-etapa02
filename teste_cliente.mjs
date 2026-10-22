@@ -124,7 +124,7 @@ try {
   await m1.locator('.nn-linha').first().locator('.seg .f').tap();
   await m1.locator('.nn-linha').first().locator('select').selectOption('M');
   await m1.locator('button:text-is("Colar do Excel")').tap();
-  await pc.fill('#colarTexto', 'Beto Lima\t10\tMasculino\tG\nCaio\t9\tM\tG\nDani\t11\tF\tP');
+  await pc.fill('#colarTexto', 'Beto Lima\t10\tCamiseta\tG\nCaio\t9\tM\tG\nDani\t11\tBaby look\tP');
   diz('a prévia conta as linhas', (await pc.textContent('#colarPrevia')).startsWith('3 linhas'), true);
   await pc.tap('#colarAdicionar');
   diz('a lista ficou com 4', await m1.locator('.nn-linha').count(), 4);
@@ -132,7 +132,7 @@ try {
     const i = tr.querySelectorAll('input'); const g = tr.querySelector('.seg [aria-pressed="true"]');
     return [i[0].value, i[1].value, g ? g.textContent : '', tr.querySelector('select').value].join('|');
   }));
-  diz('o Excel entrou certo, com o "M" lido como gênero', linhas, ['Ana Souza|7|Feminino|M', 'Beto Lima|10|Masculino|G', 'Caio|9|Masculino|G', 'Dani|11|Feminino|P']);
+  diz('o Excel entrou certo (Camiseta, Baby look e o "M" lido como modelagem)', linhas, ['Ana Souza|7|Baby look|M', 'Beto Lima|10|Camiseta|G', 'Caio|9|Camiseta|G', 'Dani|11|Baby look|P']);
   diz('a conferência avisa que não bate', await m1.locator('.conf.at').count(), 1);
   await pc.locator('#modelo-2 #q-2-P').fill('5');
   /* v3.377: o L-02 não foi marcado pelo vendedor, mas o cliente abre a lista */
@@ -285,7 +285,7 @@ try {
   diz('  por tamanho', pac.total.porTamanho.G, { masculino: 2, feminino: 0, total: 2 });
   await pt.click('.nnr-tab-bt');
   await pt.waitForTimeout(100);
-  diz('a tabela para o Excel', (await pt.evaluate(() => window.__copiado)).split('\n')[1], 'Ana Souza\t7\tFeminino\tM');
+  diz('a tabela para o Excel', (await pt.evaluate(() => window.__copiado)).split('\n')[1], 'Ana Souza\t7\tBaby look\tM');
 
   /* ---------------------------------------------------------------- */
   secao('G. Organizados encerra o link');
