@@ -55,7 +55,7 @@ try {
   pv.on('pageerror', e => erros.push('editor: ' + e.message));
   await pv.goto(BASE + '/');
   await esperaPronto(pv);
-  diz('a versão nova', await pv.evaluate(() => FT_EDITOR), '3.377');
+  diz('a versão nova', await pv.evaluate(() => FT_EDITOR), '3.378');
   await pv.evaluate(() => {
     const p = (k, v) => { const e = document.querySelector('[data-h="' + k + '"]'); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); };
     p('cliente', 'ACME ESPORTES'); p('pedido', 'PD004900'); p('vendedor', 'Dani');
@@ -202,7 +202,23 @@ try {
     ['Ana Souza/7/feminino/M', 'Beto Lima/10/masculino/G', 'Caio/9/masculino/G', 'Dani/11/feminino/P']);
   diz('o Nº ganha o ponto de "não bate"', await pv.locator('.area-paginas .lay-modulo').first().locator('.lay-nn-bt.difere').count(), 1);
   diz('a aba não ficou suja', await pv.evaluate(() => FT_DOC_SUJO), false);
-  diz('o aviso não volta', (await pv.evaluate(async () => { await ftCliVigia(); return document.querySelectorAll('.ft-aviso-cli').length; })), 0);
+  diz('o aviso de devolução não volta', (await pv.evaluate(async () => { await ftCliVigia(); return document.querySelectorAll('.ft-aviso-cli:not(.ft-aviso-nomes)').length; })), 0);
+  /* v3.378: o orçamento devolvido diz onde estão os nomes */
+  await pv.waitForSelector('.ft-aviso-nomes', { timeout: 5000 });
+  diz('o aviso diz em que layouts vieram nomes', (await pv.textContent('.ft-aviso-nomes .sub')).trim(), 'L-01: 4 nomes  ·  L-02: 1 nome');
+  await pv.screenshot({ path: '/tmp/cliente-d-aviso-nomes.png' });
+  await pv.locator('.ft-aviso-nomes .abrir').click();
+  await pv.waitForSelector('#ftNomesFundo.on');
+  diz('  e "Ver os nomes" abre a lista do primeiro', (await pv.textContent('#nnTitulo')).includes('L-01'), true);
+  await pv.click('#nnFechar');
+  await pv.click('#miCliente');
+  await pv.waitForSelector('#ftCliFundo.on');
+  diz('a janela do link lista os layouts com nomes', await pv.locator('#lcRecebidosLista .lc-lay').count(), 2);
+  await pv.screenshot({ path: '/tmp/cliente-d-janela-recebidos.png' });
+  await pv.locator('#lcRecebidosLista .lc-lay-nn').nth(1).click();
+  await pv.waitForSelector('#ftNomesFundo.on');
+  diz('  e o "Ver os nomes" do L-02 abre a lista dele', (await pv.textContent('#nnTitulo')).includes('L-02'), true);
+  await pv.click('#nnFechar');
   await pv.locator('.area-paginas .lay-modulo').first().locator('.lay-nn-bt').click();
   await pv.waitForSelector('#ftNomesFundo.on');
   diz('a janela mostra as 4 linhas', await pv.locator('#nnCorpo tr').count(), 4);
