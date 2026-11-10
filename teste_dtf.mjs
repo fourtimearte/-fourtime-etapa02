@@ -157,6 +157,23 @@ diz('o grupo vira ele mesmo', um.grupos.map(g => g.tag), ['L5']);
 diz('quatro moldes infantis', um.grupos[0].moldes.map(x => x.tamanho), ['6A', '8A', '10A', '12A']);
 diz('mas o total do pedido continua junto', um.total.pecasPedido, 111);
 
+secao('A. SUBL e SILK: o mesmo pacote, outra técnica (v3.380)');
+/* "formatação de dados igual também": o pacote de silk do ARENA CROSS
+   (todos os 14 layouts têm Silk) tem de ser o de DTF com um campo a mais,
+   e nada de diferente. Sem nenhum layout de sublimação, o de SUBL vem
+   vazio, e é o vazio que faz o botão não nascer. */
+const tecs = await pe.evaluate(e => ({
+  dtf: dtfPacote(e), silk: dtfPacote(e, 0, 'Silk'), subl: dtfPacote(e, 0, 'Subli')
+}), est);
+const semTec = o => { const c = JSON.parse(JSON.stringify(o)); delete c.tecnica; return c; };
+diz('o DTF diz que é DTF', tecs.dtf.tecnica, 'DTF');
+diz('o silk diz que é SILK', tecs.silk.tecnica, 'SILK');
+diz('e o mesmo formato', [tecs.silk.formato, tecs.silk.versao], ['FOURTIME_DTF', 1]);
+diz('as mesmas chaves, na mesma ordem', Object.keys(tecs.silk), Object.keys(tecs.dtf));
+diz('fora o campo da técnica, o silk é o DTF', JSON.stringify(semTec(tecs.silk)), JSON.stringify(semTec(tecs.dtf)));
+diz('a sublimação, sem layout, vem vazia', [tecs.subl.tecnica, tecs.subl.layouts.length, tecs.subl.grupos.length], ['SUBL', 0, 0]);
+diz('mas sabe o tamanho do pedido', tecs.subl.total.pecasPedido, 111);
+
 /* ================================================================
    B. O ARQUIVO
    ================================================================ */
@@ -209,7 +226,7 @@ secao('B. os botões, onde foram pedidos');
 const onde = await pt.evaluate(() => ({
   porLayout: document.querySelectorAll('.lay-modulo .dtf-btn').length,
   layouts: document.querySelectorAll('.lay-modulo').length,
-  naBarra: document.querySelectorAll('.ft-filtros .dtf-btn').length,
+  naBarra: document.querySelectorAll('.ft-filtros .dtf-btn[data-tec="DTF"]').length,
   filtros: document.querySelectorAll('.ft-filtros').length,
   /* abaixo da tabela quer dizer: no mesmo bloco da tabela, DEPOIS dela */
   abaixoDaTabela: [...document.querySelectorAll('.lay-modulo')].every(m => {
@@ -242,7 +259,7 @@ diz('o botão avisa que copiou',
 
 secao('B. o botão da barra copia o pedido inteiro');
 await pt.evaluate(() => { window.__copiado = null; });
-await pt.click('#ftFiltros .dtf-btn');
+await pt.click('#ftFiltros .dtf-btn[data-tec="DTF"]');
 await pt.waitForFunction(() => !!window.__copiado);
 const copTudo = JSON.parse(await pt.evaluate(() => window.__copiado));
 diz('escopo', copTudo.escopo, 'pedido');
@@ -254,6 +271,27 @@ diz('o exportado bate com o calculado',
   JSON.stringify(copTudo.grupos.map(g => [g.tag, g.pecas, g.moldes.length])),
   JSON.stringify(pac.grupos.map(g => [g.tag, g.pecas, g.moldes.length])));
 diz('as notas viajam junto', copTudo.notas.length, 3);
+
+secao('B. o SILK do topo, ao lado do DTF (v3.380)');
+const barraTec = await pt.evaluate(() =>
+  [...document.querySelectorAll('.ft-filtros')].map(b =>
+    [...b.querySelectorAll('.dtf-btn')].map(x => x.getAttribute('data-tec'))));
+diz('nas duas barras: DTF e SILK, sem SUBL (não há sublimação)', barraTec, [['DTF', 'SILK'], ['DTF', 'SILK']]);
+diz('os dois na mesma caixa', await pt.evaluate(() =>
+  document.querySelectorAll('#ftFiltros .ft-ftec > .dtf-btn').length), 2);
+await pt.evaluate(() => { window.__copiado = null; });
+await pt.click('#ftFiltros .dtf-btn[data-tec="SILK"]');
+await pt.waitForFunction(() => !!window.__copiado);
+const copSilk = JSON.parse(await pt.evaluate(() => window.__copiado));
+diz('o SILK copia o pacote de silk', [copSilk.formato, copSilk.tecnica, copSilk.escopo], ['FOURTIME_DTF', 'SILK', 'pedido']);
+diz('  com os catorze layouts', copSilk.layouts.length, 14);
+diz('  e os mesmos sete grupos', copSilk.grupos.map(g => g.tag), GRUPOS);
+diz('  e os mesmos dezessete moldes', copSilk.grupos.reduce((s, g) => s + g.moldes.length, 0), 17);
+diz('  o title diz o que ele copia', await pt.evaluate(() =>
+  document.querySelector('#ftFiltros .dtf-btn[data-tec="SILK"]').title),
+  'Copiar o silk do pedido inteiro: 14 layout(s), 111 peças');
+diz('  o rótulo é SILK', await pt.evaluate(() =>
+  document.querySelector('#ftFiltros .dtf-btn[data-tec="SILK"] span').textContent), 'SILK');
 
 secao('B. onde o botão NÃO pode aparecer');
 const antes = await pt.evaluate(() =>
@@ -284,7 +322,9 @@ const html2 = await pb.evaluate(async ({ est, artes, dequem, semDtf }) => {
     layouts: est.layouts.map((L, i) => ({
       ref: L.ref, genero: L.genero, tecidos: L.tecidos, cor: L.cor,
       design: semDtf.indexOf(i + 1) >= 0
-        ? [{ tag: 'Bordado', cores: [] }]
+        ? (i + 1 === 4 ? [{ tag: 'Subli', cores: [] }]
+          : i + 1 === 6 ? [{ tag: 'Subli', cores: [] }, { tag: 'Silk', cores: [] }]
+          : [{ tag: 'Bordado', cores: [] }])
         : L.design,
       grade: L.grade, tamanhos: L.tamanhos,
       obs: '', img: artes[dequem[i]], imgComp: true
@@ -309,7 +349,7 @@ diz('os catorze layouts continuam lá', misto.layouts, 14);
 diz('só os onze de DTF ganham botão', misto.botoes, 11);
 diz('e são exatamente esses', misto.comBotao, [1, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14]);
 await pm.evaluate(() => { window.__copiado = null; });
-await pm.click('#ftFiltros .dtf-btn');
+await pm.click('#ftFiltros .dtf-btn[data-tec="DTF"]');
 await pm.waitForFunction(() => !!window.__copiado);
 const mistoTudo = JSON.parse(await pm.evaluate(() => window.__copiado));
 diz('o botão do pedido também só leva os de DTF',
@@ -317,6 +357,39 @@ diz('o botão do pedido também só leva os de DTF',
 diz('o total do pedido continua contando os catorze', mistoTudo.total.layoutsPedido, 14);
 diz('e as 111 peças também', mistoTudo.total.pecasPedido, 111);
 diz('mas o universo de DTF encolheu', mistoTudo.total.pecas, 111 - 10 - 24 - 4);
+
+/* o mesmo pedido misto com as três técnicas: L4 só de sublimação, L6 de
+   sublimação e silk, L2 de bordado. Cada botão leva só os seus. */
+diz('a barra tem os três, nesta ordem', await pm.evaluate(() =>
+  [...document.querySelectorAll('#ftFiltros .dtf-btn')].map(b => b.getAttribute('data-tec'))),
+  ['DTF', 'SUBL', 'SILK']);
+const copia = async tec => {
+  await pm.evaluate(() => { window.__copiado = null; });
+  await pm.click('#ftFiltros .dtf-btn[data-tec="' + tec + '"]');
+  await pm.waitForFunction(() => !!window.__copiado);
+  return JSON.parse(await pm.evaluate(() => window.__copiado));
+};
+const mSubl = await copia('SUBL');
+diz('o SUBL leva só os de sublimação', [mSubl.tecnica, mSubl.layouts.map(L => L.n)], ['SUBL', [4, 6]]);
+diz('  as peças deles', mSubl.total.pecas, 24 + 4);
+diz('  e as tags pelo universo dele', mSubl.layouts.map(L => L.tag), ['L4', 'L6']);
+const mSilk = await copia('SILK');
+diz('o SILK leva só os de silk', [mSilk.tecnica, mSilk.layouts.map(L => L.n)],
+  ['SILK', [1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]]);
+diz('e o botão de cada layout continua sendo só o de DTF', await pm.evaluate(() =>
+  [...document.querySelectorAll('.lay-modulo .dtf-btn')].map(b => b.querySelector('span').textContent)
+    .every(t => t === 'Copiar DTF')), true);
+const tresBotoes = await pm.evaluate(() => [...document.querySelectorAll('.ft-filtros')].map(b => {
+  const int = b.querySelector('.ft-fint');
+  return {
+    fileiras: (getComputedStyle(int).gridTemplateRows || '').split(' ').filter(Boolean).length,
+    vaza: int.scrollWidth > int.clientWidth + 1,
+    /* os três na mesma linha e com 6px entre eles */
+    topos: new Set([...int.querySelectorAll('.dtf-btn')].map(x => Math.round(x.getBoundingClientRect().top))).size
+  };
+}));
+diz('com três botões a barra continua numa fileira só, sem vazar', tresBotoes,
+  [{ fileiras: 1, vaza: false, topos: 1 }, { fileiras: 1, vaza: false, topos: 1 }]);
 await cm.close();
 
 secao('B. nada do editor vaza para o arquivo do cliente');
