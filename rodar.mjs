@@ -84,6 +84,7 @@ const SUITES = [
   /* v3.360 - Gola Tecido e Ribana: secao propria no menu, fileira propria
      no cartao, e fora da conta de "misto" do relatorio. */
   'teste_tags_acabamento',
+  'teste_amostra_cor',       /* v3.382: a paleta do DTF, 001 preto e 012 branco */
   /* v3.361 - varios meses no relatorio. O seletor virou grade de doze
      botoes; cada mes continua guardado sozinho no seu .ftr e o combinado
      nunca vira arquivo. */
