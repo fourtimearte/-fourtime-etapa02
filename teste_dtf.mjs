@@ -226,7 +226,7 @@ secao('B. os botões, onde foram pedidos');
 const onde = await pt.evaluate(() => ({
   porLayout: document.querySelectorAll('.lay-modulo .dtf-btn').length,
   layouts: document.querySelectorAll('.lay-modulo').length,
-  naBarra: document.querySelectorAll('.ft-filtros .dtf-btn[data-tec="DTF"]').length,
+  naBarra: document.querySelectorAll('.ft-filtros .ftc-bt').length,
   filtros: document.querySelectorAll('.ft-filtros').length,
   /* abaixo da tabela quer dizer: no mesmo bloco da tabela, DEPOIS dela */
   abaixoDaTabela: [...document.querySelectorAll('.lay-modulo')].every(m => {
@@ -239,7 +239,7 @@ const onde = await pt.evaluate(() => ({
 diz('um botão por layout', onde.porLayout, onde.layouts);
 diz('quatorze layouts', onde.layouts, 14);
 diz('cada botão fica abaixo da tabela', onde.abaixoDaTabela, true);
-diz('um botão em cada barra de filtros', onde.naBarra, onde.filtros);
+diz('um botão de copiar em cada barra de filtros', onde.naBarra, onde.filtros);
 diz('duas barras de filtros (folha e barra fixa)', onde.filtros, 2);
 diz('o arquivo é o de produção', onde.soNoSemDinheiro, true);
 
@@ -258,8 +258,17 @@ diz('o botão avisa que copiou',
   await pt.locator('.lay-modulo').first().locator('.dtf-btn').evaluate(b => b.classList.contains('ok')), true);
 
 secao('B. o botão da barra copia o pedido inteiro');
+/* v3.381: a barra tem UM botão que abre o menu; o item copia */
+const doMenu = async (pg, tec) => {
+  await pg.evaluate(() => { window.__copiado = null; });
+  await pg.click('#ftFiltros .ftc-bt');
+  await pg.click('#ftFiltros .ftc-item[data-tec="' + tec + '"]');
+  await pg.waitForFunction(() => !!window.__copiado);
+  return JSON.parse(await pg.evaluate(() => window.__copiado));
+};
 await pt.evaluate(() => { window.__copiado = null; });
-await pt.click('#ftFiltros .dtf-btn[data-tec="DTF"]');
+await pt.click('#ftFiltros .ftc-bt');
+await pt.click('#ftFiltros .ftc-item[data-tec="DTF"]');
 await pt.waitForFunction(() => !!window.__copiado);
 const copTudo = JSON.parse(await pt.evaluate(() => window.__copiado));
 diz('escopo', copTudo.escopo, 'pedido');
@@ -272,26 +281,71 @@ diz('o exportado bate com o calculado',
   JSON.stringify(pac.grupos.map(g => [g.tag, g.pecas, g.moldes.length])));
 diz('as notas viajam junto', copTudo.notas.length, 3);
 
-secao('B. o SILK do topo, ao lado do DTF (v3.380)');
-const barraTec = await pt.evaluate(() =>
-  [...document.querySelectorAll('.ft-filtros')].map(b =>
-    [...b.querySelectorAll('.dtf-btn')].map(x => x.getAttribute('data-tec'))));
-diz('nas duas barras: DTF e SILK, sem SUBL (não há sublimação)', barraTec, [['DTF', 'SILK'], ['DTF', 'SILK']]);
-diz('os dois na mesma caixa', await pt.evaluate(() =>
-  document.querySelectorAll('#ftFiltros .ft-ftec > .dtf-btn').length), 2);
+secao('B. o menu de cópia da barra (v3.381)');
+await pt.waitForTimeout(800);
+const menuDe = await pt.evaluate(() => [...document.querySelectorAll('.ft-filtros')].map(b => ({
+  botoes: b.querySelectorAll('.dtf-btn').length,
+  itens: [...b.querySelectorAll('.ftc-item')].map(x => [x.getAttribute('data-tec'), x.disabled]),
+  fechado: b.querySelector('.ftc-menu').hidden
+})));
+diz('um botão só em cada barra', menuDe.map(m => m.botoes), [1, 1]);
+diz('o menu nasce fechado', menuDe.map(m => m.fechado), [true, true]);
+diz('cinco itens, na ordem pedida; sem sublimação, o SUBL fica apagado', menuDe[0].itens,
+  [['DTF', false], ['SUBL', true], ['SILK', false], ['PEDIDO', false], ['ETIQUETA', false]]);
+diz('os nomes do menu', await pt.evaluate(() =>
+  [...document.querySelectorAll('#ftFiltros .ftc-item .ftc-nome')].map(x => x.textContent)),
+  ['DTF', 'SUBLIMAÇÃO', 'SILK', 'PEDIDO INTEIRO', 'ETIQUETA']);
+diz('o item apagado diz por quê', await pt.evaluate(() =>
+  document.querySelector('#ftFiltros .ftc-item[data-tec="SUBL"] .ftc-conta').textContent), 'nenhum layout');
+diz('o item diz quanto leva', await pt.evaluate(() =>
+  document.querySelector('#ftFiltros .ftc-item[data-tec="SILK"] .ftc-conta').textContent), '14 layouts · 111 pç');
+await pt.click('#ftFiltros .ftc-bt');
+diz('clicar no botão abre', await pt.evaluate(() =>
+  [!document.querySelector('#ftFiltros .ftc-menu').hidden,
+   document.querySelector('#ftFiltros .ftc-bt').getAttribute('aria-expanded')]), [true, 'true']);
+const caixaMenu = await pt.evaluate(() => {
+  const r = document.querySelector('#ftFiltros .ftc-menu').getBoundingClientRect();
+  const b = document.querySelector('#ftFiltros .ftc-bt').getBoundingClientRect();
+  return { abaixo: r.top >= b.bottom, dentroDaTela: r.right <= innerWidth && r.left >= 0 };
+});
+diz('  embaixo do botão e dentro da tela', caixaMenu, { abaixo: true, dentroDaTela: true });
 await pt.evaluate(() => { window.__copiado = null; });
-await pt.click('#ftFiltros .dtf-btn[data-tec="SILK"]');
-await pt.waitForFunction(() => !!window.__copiado);
-const copSilk = JSON.parse(await pt.evaluate(() => window.__copiado));
-diz('o SILK copia o pacote de silk', [copSilk.formato, copSilk.tecnica, copSilk.escopo], ['FOURTIME_DTF', 'SILK', 'pedido']);
-diz('  com os catorze layouts', copSilk.layouts.length, 14);
-diz('  e os mesmos sete grupos', copSilk.grupos.map(g => g.tag), GRUPOS);
-diz('  e os mesmos dezessete moldes', copSilk.grupos.reduce((s, g) => s + g.moldes.length, 0), 17);
-diz('  o title diz o que ele copia', await pt.evaluate(() =>
-  document.querySelector('#ftFiltros .dtf-btn[data-tec="SILK"]').title),
-  'Copiar o silk do pedido inteiro: 14 layout(s), 111 peças');
-diz('  o rótulo é SILK', await pt.evaluate(() =>
-  document.querySelector('#ftFiltros .dtf-btn[data-tec="SILK"] span').textContent), 'SILK');
+await pt.click('#ftFiltros .ftc-item[data-tec="SUBL"]', { force: true });
+await pt.waitForTimeout(150);
+diz('  o item apagado não copia', await pt.evaluate(() => window.__copiado), null);
+await pt.keyboard.press('Escape');
+diz('  Esc fecha', await pt.evaluate(() => document.querySelector('#ftFiltros .ftc-menu').hidden), true);
+await pt.click('#ftFiltros .ftc-bt');
+await pt.mouse.click(5, 600);
+diz('  clicar fora fecha', await pt.evaluate(() => document.querySelector('#ftFiltros .ftc-menu').hidden), true);
+
+const copSilk = await doMenu(pt, 'SILK');
+diz('SILK copia o pacote de silk', [copSilk.formato, copSilk.tecnica, copSilk.escopo], ['FOURTIME_DTF', 'SILK', 'pedido']);
+diz('  com os catorze layouts e os sete grupos', [copSilk.layouts.length, copSilk.grupos.map(g => g.tag)], [14, GRUPOS]);
+diz('  o item marca o copiado e o menu fecha sozinho', await pt.evaluate(async () => {
+  const it = document.querySelector('#ftFiltros .ftc-item[data-tec="SILK"]');
+  const marcou = it.classList.contains('ok');
+  await new Promise(r => setTimeout(r, 900));
+  return [marcou, document.querySelector('#ftFiltros .ftc-menu').hidden];
+}), [true, true]);
+diz('  e o botão fica verde', await pt.evaluate(() =>
+  document.querySelector('#ftFiltros .ftc-bt').classList.contains('ok')), true);
+
+const copPed = await doMenu(pt, 'PEDIDO');
+diz('PEDIDO INTEIRO: mesmo formato, todos os layouts com peça', [copPed.formato, copPed.tecnica, copPed.layouts.length, copPed.total.pecas],
+  ['FOURTIME_DTF', 'PEDIDO', 14, 111]);
+diz('  e os mesmos sete grupos', copPed.grupos.map(g => g.tag), GRUPOS);
+
+const copEtq = await doMenu(pt, 'ETIQUETA');
+diz('ETIQUETA: o formato próprio', [copEtq.formato, copEtq.versao], ['FOURTIME_ETIQUETA', 1]);
+diz('  uma linha por layout', copEtq.layouts.length, 14);
+diz('  o L1 com a quantidade de cada tamanho, na ordem da grade', [copEtq.layouts[0].layout, copEtq.layouts[0].tamanhos],
+  ['L1', { P: 2, M: 12, G: 5, GG: 1 }]);
+diz('  a ordem das chaves é a da grade', Object.keys(copEtq.layouts[0].tamanhos), ['P', 'M', 'G', 'GG']);
+diz('  uma etiqueta por peça, sem multiplicar', copEtq.total.etiquetas, 111);
+diz('  a soma por tamanho bate com o total', Object.values(copEtq.total.porTamanho).reduce((a, b) => a + b, 0), 111);
+diz('  as peças de cada layout batem com a grade', copEtq.layouts.map(L => L.pecas), PECAS_POR_LAYOUT);
+diz('  nada de dinheiro no pacote', /"v"|preco|valor|R\$/.test(JSON.stringify(copEtq)), false);
 
 secao('B. onde o botão NÃO pode aparecer');
 const antes = await pt.evaluate(() =>
@@ -348,10 +402,7 @@ const misto = await pm.evaluate(() => ({
 diz('os catorze layouts continuam lá', misto.layouts, 14);
 diz('só os onze de DTF ganham botão', misto.botoes, 11);
 diz('e são exatamente esses', misto.comBotao, [1, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14]);
-await pm.evaluate(() => { window.__copiado = null; });
-await pm.click('#ftFiltros .dtf-btn[data-tec="DTF"]');
-await pm.waitForFunction(() => !!window.__copiado);
-const mistoTudo = JSON.parse(await pm.evaluate(() => window.__copiado));
+const mistoTudo = await doMenu(pm, 'DTF');
 diz('o botão do pedido também só leva os de DTF',
   mistoTudo.layouts.map(L => L.n), [1, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14]);
 diz('o total do pedido continua contando os catorze', mistoTudo.total.layoutsPedido, 14);
@@ -360,15 +411,10 @@ diz('mas o universo de DTF encolheu', mistoTudo.total.pecas, 111 - 10 - 24 - 4);
 
 /* o mesmo pedido misto com as três técnicas: L4 só de sublimação, L6 de
    sublimação e silk, L2 de bordado. Cada botão leva só os seus. */
-diz('a barra tem os três, nesta ordem', await pm.evaluate(() =>
-  [...document.querySelectorAll('#ftFiltros .dtf-btn')].map(b => b.getAttribute('data-tec'))),
-  ['DTF', 'SUBL', 'SILK']);
-const copia = async tec => {
-  await pm.evaluate(() => { window.__copiado = null; });
-  await pm.click('#ftFiltros .dtf-btn[data-tec="' + tec + '"]');
-  await pm.waitForFunction(() => !!window.__copiado);
-  return JSON.parse(await pm.evaluate(() => window.__copiado));
-};
+diz('no misto, os cinco itens acesos', await pm.evaluate(() =>
+  [...document.querySelectorAll('#ftFiltros .ftc-item')].map(b => [b.getAttribute('data-tec'), b.disabled])),
+  [['DTF', false], ['SUBL', false], ['SILK', false], ['PEDIDO', false], ['ETIQUETA', false]]);
+const copia = tec => doMenu(pm, tec);
 const mSubl = await copia('SUBL');
 diz('o SUBL leva só os de sublimação', [mSubl.tecnica, mSubl.layouts.map(L => L.n)], ['SUBL', [4, 6]]);
 diz('  as peças deles', mSubl.total.pecas, 24 + 4);
@@ -376,6 +422,10 @@ diz('  e as tags pelo universo dele', mSubl.layouts.map(L => L.tag), ['L4', 'L6'
 const mSilk = await copia('SILK');
 diz('o SILK leva só os de silk', [mSilk.tecnica, mSilk.layouts.map(L => L.n)],
   ['SILK', [1, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]]);
+const mPed = await copia('PEDIDO');
+diz('o PEDIDO INTEIRO leva os catorze, inclusive o de bordado', [mPed.layouts.map(L => L.n).length, mPed.layouts.some(L => L.n === 2)], [14, true]);
+const mEtq = await copia('ETIQUETA');
+diz('a ETIQUETA leva os catorze, qualquer técnica', [mEtq.layouts.length, mEtq.total.etiquetas], [14, 111]);
 diz('e o botão de cada layout continua sendo só o de DTF', await pm.evaluate(() =>
   [...document.querySelectorAll('.lay-modulo .dtf-btn')].map(b => b.querySelector('span').textContent)
     .every(t => t === 'Copiar DTF')), true);
@@ -384,11 +434,11 @@ const tresBotoes = await pm.evaluate(() => [...document.querySelectorAll('.ft-fi
   return {
     fileiras: (getComputedStyle(int).gridTemplateRows || '').split(' ').filter(Boolean).length,
     vaza: int.scrollWidth > int.clientWidth + 1,
-    /* os três na mesma linha e com 6px entre eles */
+    /* o botão e a barra na mesma linha */
     topos: new Set([...int.querySelectorAll('.dtf-btn')].map(x => Math.round(x.getBoundingClientRect().top))).size
   };
 }));
-diz('com três botões a barra continua numa fileira só, sem vazar', tresBotoes,
+diz('com o menu a barra continua numa fileira só, sem vazar', tresBotoes,
   [{ fileiras: 1, vaza: false, topos: 1 }, { fileiras: 1, vaza: false, topos: 1 }]);
 await cm.close();
 
@@ -745,7 +795,7 @@ const rDes = await pt.evaluate(() => {
     limpaTexto: (lim.textContent || '').trim(),
     limpaTitulo: lim.getAttribute('title') || '',
     limpaQuadrado: Math.round(lim.getBoundingClientRect().width) === Math.round(lim.getBoundingClientRect().height),
-    /* o botão do pedido é ícone mais DTF */
+    /* o botão da barra é ícone mais "Copiar" (v3.381) */
     dtfTexto: (dtf.querySelector('span') || {}).textContent || '',
     dtfTemIcone: !!dtf.querySelector('svg'),
     dtfTitulo: dtf.getAttribute('title') || '',
@@ -757,7 +807,7 @@ console.log('     ' + JSON.stringify(rDes));
 diz('o limpar não tem texto, só o X', rDes.limpaTexto, '');
 diz('  mas continua dizendo o que faz', rDes.limpaTitulo, 'Limpar filtros');
 diz('  e é quadrado', rDes.limpaQuadrado, true);
-diz('o botão do pedido é ícone mais DTF', [rDes.dtfTexto, rDes.dtfTemIcone], ['DTF', true]);
+diz('o botão da barra é ícone mais Copiar', [rDes.dtfTexto, rDes.dtfTemIcone], ['Copiar', true]);
 diz('  e o title explica o que ele copia', /pedido inteiro/.test(rDes.dtfTitulo), true);
 diz('sem filtro, o contador é só o número', rDes.contaLimpo, '14');
 await pt.selectOption('#ftFiltros .ft-fsel[data-g="inf"]', 'com');
