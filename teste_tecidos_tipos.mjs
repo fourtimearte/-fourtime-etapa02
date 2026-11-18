@@ -44,6 +44,14 @@ const DELE = {
         'TACTEL POLIESTE COM ELASTANO','TERBRIM POLIESTER'],
   ESP: ['NEOPRENE'],
 };
+/* v3.383: tres poliamidas novas, com o nome igual ao do Fourtime OS */
+{
+  const arq = process.env.FT_ARQ || editorAtual();
+  const v = +(arq.match(/v(\d+)/) || [0, 0])[1];
+  if (v >= 383) DELE.POL = ['POLIAMIDA 100%','POLIAMIDA COM ELASTANO','POLIAMIDA FLOW COM ELASTANO',
+    'POLIAMIDA FRESH','POLIAMIDA FURADINHA C/ ELASTANO LIGHT','POLIAMIDA FURADINHA C/ ELASTANO PLUS',
+    'POLIAMIDA FURADINHA COM ELASTANO','POLIAMIDA MICRO PERFURADA','POLIAMIDA SPEED'];
+}
 const TOTAL = Object.values(DELE).reduce((n, a) => n + a.length, 0);
 
 /* a lista antiga, de antes da v3.334, para cobrar a conversão */
@@ -79,7 +87,7 @@ let r = await p.evaluate(D => {
     /* a ordem dos tipos é a que ele deu, e é ela que o menu segue */
     ordem: TEC_GRUPO_ORDEM };
 }, DELE);
-checa('os 39 tecidos estão lá', r.total, TOTAL);
+checa('os ' + TOTAL + ' tecidos estão lá', r.total, TOTAL);
 checa('  cada um no tipo que ele escolheu', r.confere, true);
 if (!r.confere) console.log('     ' + JSON.stringify(r.porGrupo));
 checa('  nenhum ficou sem tipo', r.semTipo, []);
@@ -188,7 +196,7 @@ r = await p.evaluate(async () => {
 });
 console.log('     ' + JSON.stringify(r));
 checa('o menu abre agrupado', [r.abriu, r.grupos.length], [true, 10]);
-checa('  com os 39 tecidos dentro', r.itens, TOTAL);
+checa('  com os ' + TOTAL + ' tecidos dentro', r.itens, TOTAL);
 checa('  e todos os tipos recolhidos', r.recolhidos, 0);
 /* "furadinho" com O só existe nos dois dryfit; a poliamida é
    "FURADINHA", com A. É por isso que o termo é esse. */

@@ -201,8 +201,13 @@ export async function roda(F) {
   const html = await p.evaluate(() => gerarHTML());
   const ordem = [...html.matchAll(/class="hd-campo[^"]*"><span class="hd-label">([^<]+)</g)].map(m => m[1]);
   /* o Status sumiu desta lista de proposito: ele nao tem mais rotulo */
+  /* v3.383: CPF/CNPJ virou celula dividida com Telefone, como Pedido e
+     Envio, e por isso sai desta lista (que so le a celula inteira) e
+     ganha a conferencia propria logo abaixo */
   F.diz('a ordem dos rotulos no arquivo e a da tela', ordem,
-    ['CNPJ','Cliente','CPF/CNPJ','Vendedor','Departamento','Entrega','Embalagem','Pagamento','Total']);
+    ['CNPJ','Cliente','Vendedor','Departamento','Entrega','Embalagem','Pagamento','Total']);
+  F.diz('  e a celula dividida CPF/CNPJ e Telefone viaja inteira',
+    /hd-dupla-doc[\s\S]*?CPF\/CNPJ[\s\S]*?data-h="cpf"[\s\S]*?Telefone[\s\S]*?data-h="contato"/.test(html), true);
   F.diz('  e a celula do status viaja sem rotulo',
     /class="hd-campo hd-obs">\s*<div class="hd-tags-caixa"/.test(html), true);
 

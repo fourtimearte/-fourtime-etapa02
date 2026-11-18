@@ -318,7 +318,9 @@ def _chave(item):
 # Categorias que viram TABELA no Postgres/Supabase e portanto precisam de uma
 # chave primária estável desde já. Referências, tecidos e cores são listas de
 # nomes: o nome basta e acrescentar id só faria barulho.
-CATEGORIAS_COM_ID = ("clientes", "bugs")
+# FORNECEDORES (v3.383) entram igual aos clientes: ficha com campos, que se
+# renomeia e esvazia campo a campo entre maquinas, e isso so funciona por id.
+CATEGORIAS_COM_ID = ("clientes", "bugs", "fornecedores")
 
 # Como é um uuid do servidor. Serve para reconhecer, no meio do banco, o que é
 # identidade de verdade e o que é sobra de navegador (`cmsb3ge8h1`, `tmp_...`).
@@ -342,7 +344,7 @@ def _id_serve(cat, ident):
     ident = str(ident or "").strip()
     if not ident or ident.startswith("tmp_"):
         return False
-    if cat == "clientes":
+    if cat in ("clientes", "fornecedores"):
         return bool(_RE_UUID.match(ident))
     return True
 
@@ -702,7 +704,8 @@ def _guarda_cache(rev, dados):
 # entra pode gravar, porque cadastrar cliente e relatar bug e o trabalho de
 # qualquer um. Quem nao tem "banco.editar" simplesmente nao mexe nestas.
 CATEGORIAS_DO_BANCO = ("tecidos", "cores", "referencias", "fichas", "departamentos",
-                       "embalagens", "vendedores", "entregas", "pagamentos", "grupos")
+                       "embalagens", "vendedores", "entregas", "pagamentos", "grupos",
+                       "fornecedores")
 
 
 def _so_o_que_pode_gravar(dados, usuario):
