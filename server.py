@@ -117,7 +117,10 @@ FT_PAPEL_VENDE = {"admin", "vendedor"}
 # layout e o vinculo com o link do cliente. Um editor mais velho abre o
 # arquivo, nao conhece esses campos e, ao salvar, grava o orcamento SEM eles:
 # a lista que o cliente preencheu sumiria em silencio.
-FT_EDITOR_PISO = "3.376"
+# v3.384: subiu para 3.384. A grade infantil ganhou o 16A. Um editor mais
+# velho abre o .ft, nao desenha a linha do 16A e, ao salvar, grava o
+# orcamento sem a quantidade do 16A: as pecas sumiriam em silencio.
+FT_EDITOR_PISO = "3.384"
 # o piso é aplicado logo depois de _versao_num() existir (ver abaixo)
 FT_EDITOR_MINIMO = os.environ.get("FT_EDITOR_MINIMO", FT_EDITOR_PISO).strip() or FT_EDITOR_PISO
 DB_PATH  = os.environ.get("FT_DB_PATH", os.path.join(os.path.dirname(__file__), "fourtime.db"))
@@ -5255,7 +5258,7 @@ _CLI_MEMORIA = {}         # {"doc":..., "fid":..., "mod":...}
 _CLI_FREIO = {}           # (ip, tipo) -> [instantes]
 _CLI_FREIO_TRAVA = threading.Lock()
 _CLI_TAM_ADULTO = ["PP", "P", "M", "G", "GG", "XG", "G1", "G2", "G3", "G4"]
-_CLI_TAM_INFANTIL = ["2A", "4A", "6A", "8A", "10A", "12A", "14A"]
+_CLI_TAM_INFANTIL = ["2A", "4A", "6A", "8A", "10A", "12A", "14A", "16A"]
 _CLI_TAMANHOS = set(_CLI_TAM_ADULTO + _CLI_TAM_INFANTIL)
 _CLI_GENEROS = {"masculino", "feminino"}
 _CLI_MAX_LINHAS = 1000            # por layout

@@ -31,7 +31,7 @@ from ft_drive_falso import ARQ, poe, le, _fake_acha, instala
 instala(S)
 
 cli = TestClient(S.app, base_url="https://testserver")
-ED = {"X-FT-Editor": "3.376"}
+ED = {"X-FT-Editor": "3.384"}
 
 DOC = {
     "_formato": "FOURTIME_ORCAMENTO", "_versao": 2,
@@ -65,6 +65,8 @@ r = cli.post("/api/cliente/link", json={"driveId": "ft-trab-0001"})
 checa("editor que nao diz a versao: 426", r.status_code, 426)
 r = cli.post("/api/cliente/link", json={"driveId": "ft-trab-0001"}, headers={"X-FT-Editor": "3.375"})
 checa("editor 3.375 (abaixo do piso novo): 426", r.status_code, 426)
+r = cli.post("/api/cliente/link", json={"driveId": "ft-trab-0001"}, headers={"X-FT-Editor": "3.383"})
+checa("editor 3.383 (abaixo do piso do 16A): 426", r.status_code, 426)
 r = cli.post("/api/cliente/link", json={"driveId": "ft-trab-0001"}, headers=ED)
 checa("gerou: 200", r.status_code, 200)
 d = r.json()

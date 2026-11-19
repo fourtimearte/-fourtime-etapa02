@@ -87,6 +87,7 @@ const SUITES = [
   'teste_amostra_cor',       /* v3.382: a paleta do DTF, 001 preto e 012 branco */
   'teste_tecidos_novos',     /* v3.383: SPEED e FURADINHA C/ ELASTANO LIGHT e PLUS */
   'teste_fornecedor',        /* v3.383: fornecedor do tecido, Banco Fornecedores e telefone */
+  'teste_16a',               /* v3.384: o 16A no fim da grade infantil */
   /* v3.361 - varios meses no relatorio. O seletor virou grade de doze
      botoes; cada mes continua guardado sozinho no seu .ftr e o combinado
      nunca vira arquivo. */
