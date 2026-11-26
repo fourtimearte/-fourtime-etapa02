@@ -100,9 +100,11 @@ let L = await linhas();
 console.log('\n[2] as linhas');
 checa('4 pedidos de DTF, Sublimação fora', L.map(x => x.ped), ['PD004421', 'PD004428', 'PD004430', 'PD004439']);
 checa('so as 5 tags de DTF, na ordem dele', L[0].tags,
-  ['DTF ENTREGUE PARA IMPRESSÃO', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
+  ['DTF ENTREGUE', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
 checa('URGENTE (fora da lista) nao aparece', L[0].tags.includes('URGENTE'), false);
-checa('sem acento casa: DTF ENTREGUE ... IMPRESSAO primeiro', L[2].tags, ['DTF ENTREGUE PARA IMPRESSAO', 'REVISAR']);
+checa('sem acento casa: DTF ENTREGUE ... IMPRESSAO primeiro', L[2].tags, ['DTF ENTREGUE', 'REVISAR']);
+checa('nome curto, e o inteiro no mouse', await p.evaluate(() => { const t = document.querySelector('#atvPage .conf-tag');
+  return [t.textContent, t.title]; }), ['DTF ENTREGUE', 'DTF ENTREGUE PARA IMPRESSÃO']);
 checa('cartao sem nenhuma das 5', await p.evaluate(() => document.querySelectorAll('#atvPage .atv-linha.conf')[1].querySelector('.tags').textContent), 'nenhuma das tags de DTF');
 checa('avisos', L.map(x => x.aviso), ['', 'SÓ PELO NOME', '2 CARTÕES COM O Nº', 'SEM CARTÃO']);
 checa('coluna do Trello', L.map(x => x.col), ['PRENSA DTF', 'ARTE', 'IMPRESSÃO DTF', '']);
@@ -124,12 +126,12 @@ let T = await p.evaluate(() => { const cel = document.querySelector('#atvPage .a
 checa('a celula das tags nao passa de uma linha', T.altura <= 30, true);
 checa('nada transborda', T.cabe, true);
 checa('aparece o ... quando nao cabe', T.botao, '…');
-checa('as visiveis sao o comeco da lista, na ordem', T.vis, ['DTF ENTREGUE PARA IMPRESSÃO', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE'].slice(0, T.vis.length));
+checa('as visiveis sao o comeco da lista, na ordem', T.vis, ['DTF ENTREGUE', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE'].slice(0, T.vis.length));
 checa('o titulo diz quantas faltam', T.titulo, 'mais ' + (5 - T.vis.length) + (5 - T.vis.length === 1 ? ' tag' : ' tags').replace('mais 1 tags', 'mais 1 tag'));
 await p.click('#atvPage .atv-linha.conf .conf-mais');
 let pop = await p.evaluate(() => { const q = document.querySelector('.conf-pop');
   return q ? [...q.querySelectorAll('.conf-tag')].map(t => t.textContent) : null; });
-checa('o pop-up mostra as outras tags', T.vis.concat(pop || []), ['DTF ENTREGUE PARA IMPRESSÃO', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
+checa('o pop-up mostra as outras tags', T.vis.concat(pop || []), ['DTF ENTREGUE', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
 checa('o pop-up fica dentro da tela', await p.evaluate(() => { const r = document.querySelector('.conf-pop').getBoundingClientRect();
   return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }), true);
 await p.keyboard.press('Escape');
@@ -155,7 +157,7 @@ let papel = await p.evaluate(() => { CONF.ativo = true; const n = atvMontaImpres
 checa('folha com o titulo da conferencia', papel.h3, 'Conferência do Trello · DTF');
 checa('TAGS DO TRELLO logo depois do NOME', papel.ths.slice(0, 4), ['Pedido', 'Nome', 'Tags do Trello', 'Aviso']);
 checa('no papel, so os de DTF', papel.pedidos, ['PD004421', 'PD004428', 'PD004430', 'PD004439']);
-checa('no papel, as tags na ordem', papel.tags[0], ['DTF ENTREGUE PARA IMPRESSÃO', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
+checa('no papel, as tags na ordem', papel.tags[0], ['DTF ENTREGUE', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
 checa('no papel, os quatro quadros', papel.caixas, ['4', '3', '1', '1']);
 
 console.log('\n[4] voltar para a Atividade');

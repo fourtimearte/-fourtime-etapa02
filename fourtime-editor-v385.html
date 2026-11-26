@@ -30452,9 +30452,15 @@ function confTagsDtf(tags){
 }
 function confCor(c){ return CONF_COR[c]||'#626F86'; }
 function confTxt(c){ return /_light$/.test(String(c||''))?'#172B4D':'#FFFFFF'; }
+/* NOME CURTO (pedido do Henrique, 26/11/2026): a tag continua vindo do
+   Trello com o nome inteiro, mas na tela e no papel "DTF ENTREGUE PARA
+   IMPRESSÃO" aparece como "DTF ENTREGUE". O nome inteiro fica no title,
+   e aparece ao passar o mouse. */
+const CONF_CURTO={'DTF ENTREGUE PARA IMPRESSAO':'DTF ENTREGUE'};
+function confTagNome(n){ return CONF_CURTO[confNorm(n)]||n; }
 function confTagsHtml(tags,cls){
-  return tags.map(t=>'<span class="'+cls+'" style="background:'+confCor(t.c)
-    +';color:'+confTxt(t.c)+'">'+atvEsc(t.n)+'</span>').join('');
+  return tags.map(t=>'<span class="'+cls+'" title="'+atvEsc(t.n)+'" style="background:'+confCor(t.c)
+    +';color:'+confTxt(t.c)+'">'+atvEsc(confTagNome(t.n))+'</span>').join('');
 }
 function confLinhas(){
   return (ATV.todasDaSemana||[]).filter(confEhDtf);
