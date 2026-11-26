@@ -43,6 +43,7 @@ const PEDIDOS = {
   c: ped('c', 4428, 'ATLETICA MEDICINA UFG', '18', 'DTF + Silk', 90),
   d: ped('d', 4430, 'ARENA CROSS', '18', 'DTF', 77),
   e: ped('e', 4439, 'TIA KAROL SPORTS', '21', 'DTF', 60),
+  f: ped('f', 4441, 'NOMES DO QUADRO', '21', 'DTF', 30),
 };
 await p.route('**/api/ft/atv/mes*', r => { const k = new URL(r.request().url()).searchParams.get('mes');
   r.fulfill({ status: 200, headers: CORS, contentType: 'application/json',
@@ -64,6 +65,9 @@ await p.route('**/api/trello/conferencia', async r => {
       c: { como: 'nome', cartao: cart('ATLETICA MEDICINA', 'ARTE', [tg('ARTE APROVADA', 'green')]) },
       d: { como: 'numero', cartao: cart('4430 ARENA', 'IMPRESSÃO DTF', [tg('REVISAR', 'yellow'), tg('DTF ENTREGUE PARA IMPRESSAO', 'green')], 2) },
       e: { como: '', cartao: null },
+      f: { como: 'numero', cartao: cart('PD004441 NOMES DO QUADRO', 'PRENSA', [tg('DTF', 'orange'), tg('CONF. HENRIQUE OK', 'blue'),
+        tg('DTF MONTADO', 'lime_dark'), tg('REVISAR DTF', 'red'), tg('FICHA TÉCNICA OK!', 'red_light'), tg('REVISAO H', 'blue'),
+        tg('DTF ENVIADO PARA GRUPO', 'green_light')]) },
     } }) });
 });
 
@@ -78,7 +82,7 @@ await p.evaluate(() => {
   ATV.semana = '2026-08-17';
   atvAlternar(true);
 });
-await p.waitForFunction(() => !ATV.carregando && ATV.todasDaSemana.length === 5, null, { timeout: 30000 });
+await p.waitForFunction(() => !ATV.carregando && ATV.todasDaSemana.length === 6, null, { timeout: 30000 });
 
 console.log('\n[1] o botao abre a Conferencia e le o Trello sozinho');
 checa('o item Conferência do Trello existe no painel', await p.evaluate(() => !!document.getElementById('miAtvConf')), true);
@@ -88,7 +92,7 @@ checa('leu o Trello uma vez ao abrir', CHAMADAS, 1);
 checa('titulo da pagina', await p.evaluate(() => document.querySelector('#atvPage .atv-cab h2').textContent), 'Conferência do Trello · DTF');
 checa('mandou so os de DTF, so id, numero e cliente', PEDIDOS_ENVIADOS,
   [{ id: 'a', pedido: 'PD004421', cliente: 'SUPERE SPORTS LTDA' }, { id: 'c', pedido: 'PD004428', cliente: 'ATLETICA MEDICINA UFG' },
-   { id: 'd', pedido: 'PD004430', cliente: 'ARENA CROSS' }, { id: 'e', pedido: 'PD004439', cliente: 'TIA KAROL SPORTS' }]);
+   { id: 'd', pedido: 'PD004430', cliente: 'ARENA CROSS' }, { id: 'e', pedido: 'PD004439', cliente: 'TIA KAROL SPORTS' }, { id: 'f', pedido: 'PD004441', cliente: 'NOMES DO QUADRO' }]);
 
 const linhas = () => p.evaluate(() => [...document.querySelectorAll('#atvPage .atv-linha.conf')].map(l => ({
   ped: l.querySelector('.ped').textContent,
@@ -98,21 +102,23 @@ const linhas = () => p.evaluate(() => [...document.querySelectorAll('#atvPage .a
   link: (l.querySelector('.conf-link') || {}).href || '' })));
 let L = await linhas();
 console.log('\n[2] as linhas');
-checa('4 pedidos de DTF, Sublimação fora', L.map(x => x.ped), ['PD004421', 'PD004428', 'PD004430', 'PD004439']);
+checa('4 pedidos de DTF, Sublimação fora', L.map(x => x.ped), ['PD004421', 'PD004428', 'PD004430', 'PD004439', 'PD004441']);
 checa('so as 5 tags de DTF, na ordem dele', L[0].tags,
   ['DTF ENTREGUE', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
+checa('nomes do quadro: as 5 na ordem, DTF ENVIADO curto', L[4].tags, ['DTF ENVIADO', 'REVISAR DTF', 'DTF MONTADO', 'REVISAO H', 'CONF. HENRIQUE OK']);
+checa('DTF e FICHA TECNICA OK! ficam de fora', L[4].tags.some(t => /^DTF$|FICHA/.test(t)), false);
 checa('URGENTE (fora da lista) nao aparece', L[0].tags.includes('URGENTE'), false);
 checa('sem acento casa: DTF ENTREGUE ... IMPRESSAO primeiro', L[2].tags, ['DTF ENTREGUE', 'REVISAR']);
 checa('nome curto, e o inteiro no mouse', await p.evaluate(() => { const t = document.querySelector('#atvPage .conf-tag');
   return [t.textContent, t.title]; }), ['DTF ENTREGUE', 'DTF ENTREGUE PARA IMPRESSÃO']);
 checa('cartao sem nenhuma das 5', await p.evaluate(() => document.querySelectorAll('#atvPage .atv-linha.conf')[1].querySelector('.tags').textContent), 'nenhuma das tags de DTF');
-checa('avisos', L.map(x => x.aviso), ['', 'SÓ PELO NOME', '2 CARTÕES COM O Nº', 'SEM CARTÃO']);
-checa('coluna do Trello', L.map(x => x.col), ['PRENSA DTF', 'ARTE', 'IMPRESSÃO DTF', '']);
+checa('avisos', L.map(x => x.aviso), ['', 'SÓ PELO NOME', '2 CARTÕES COM O Nº', 'SEM CARTÃO', '']);
+checa('coluna do Trello', L.map(x => x.col), ['PRENSA DTF', 'ARTE', 'IMPRESSÃO DTF', '', 'PRENSA']);
 checa('link do cartão', [L[0].link, L[3].link], ['https://trello.com/c/15', '']);
 checa('cor da tag vem do Trello (green)', await p.evaluate(() => getComputedStyle(document.querySelector('.conf-tag')).backgroundColor), 'rgb(31, 132, 90)');
 checa('tag clara com texto escuro', await p.evaluate(() => getComputedStyle([...document.querySelectorAll('.conf-tag')][3]).color), 'rgb(23, 43, 77)');
 checa('quadros: pedidos, achados, so nome, sem cartao', await p.evaluate(() =>
-  [...document.querySelectorAll('#atvPage .atv-card .val')].map(v => v.textContent)), ['4', '3', '1', '1']);
+  [...document.querySelectorAll('#atvPage .atv-card .val')].map(v => v.textContent)), ['5', '4', '1', '1']);
 checa('linha da conferencia nao tem etapa clicavel', await p.evaluate(() => document.querySelectorAll('#atvPage .atv-linha.conf .atv-chip').length), 0);
 
 console.log('\n[2b] tags numa linha so, com o ... e o pop-up');
@@ -172,9 +178,9 @@ let papel = await p.evaluate(() => { CONF.ativo = true; const n = atvMontaImpres
   atvDesmontaImpressao(); return r; });
 checa('folha com o titulo da conferencia', papel.h3, 'Conferência do Trello · DTF');
 checa('TAGS DO TRELLO logo depois do NOME', papel.ths.slice(0, 4), ['Pedido', 'Nome', 'Tags do Trello', 'Aviso']);
-checa('no papel, so os de DTF', papel.pedidos, ['PD004421', 'PD004428', 'PD004430', 'PD004439']);
+checa('no papel, so os de DTF', papel.pedidos, ['PD004421', 'PD004428', 'PD004430', 'PD004439', 'PD004441']);
 checa('no papel, as tags na ordem', papel.tags[0], ['DTF ENTREGUE', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
-checa('no papel, os quatro quadros', papel.caixas, ['4', '3', '1', '1']);
+checa('no papel, os quatro quadros', papel.caixas, ['5', '4', '1', '1']);
 
 console.log('\n[4] voltar para a Atividade');
 await p.evaluate(() => document.getElementById('confVolta').click());
@@ -184,7 +190,7 @@ checa('a Atividade volta com as colunas dela', await p.evaluate(() =>
 papel = await p.evaluate(() => { atvMontaImpressao(); const f = document.querySelector('#atvPrint');
   const r = [f.querySelector('h3').textContent, [...f.querySelectorAll('thead th')].length, f.querySelectorAll('tbody td.ped').length];
   atvDesmontaImpressao(); return r; });
-checa('a impressao da Atividade continua igual', papel, ['Relatório de Atividade', 10, 5]);
+checa('a impressao da Atividade continua igual', papel, ['Relatório de Atividade', 10, 6]);
 
 console.log('\n[5] o Trello recusa');
 ERRO = 'O Trello recusou a leitura (401) em boards.';
@@ -196,7 +202,7 @@ checa('nao fica relendo sozinho depois do erro', await p.evaluate(async () => { 
 ERRO = '';
 await p.evaluate(() => document.getElementById('confLer').click());
 await p.waitForFunction(() => confLido() && !CONF.lendo, null, { timeout: 30000 });
-checa('Ler de novo funciona depois do erro', (await linhas()).length, 4);
+checa('Ler de novo funciona depois do erro', (await linhas()).length, 5);
 
 console.log('\n[6] sair da Atividade desliga a Conferencia');
 checa('fechar a secao volta CONF.ativo a falso', await p.evaluate(() => { atvAlternar(false); return CONF.ativo; }), false);
