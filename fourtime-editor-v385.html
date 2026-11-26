@@ -27930,9 +27930,22 @@ function formataPedido(bruto){
      planejamento e entram as tags, o aviso, a coluna do Trello e o link.
      ================================================================ */
   .atv-linha.conf,.atv-cab-lista.conf{
-    grid-template-columns:92px minmax(130px,1fr) minmax(270px,2.2fr) 112px 140px 88px 52px 122px 56px;
+    grid-template-columns:84px minmax(100px,1fr) minmax(225px,2.2fr) 100px minmax(80px,130px) 80px 48px 110px 50px;
+    gap:7px;
   }
-  .atv-linha.conf .tags{flex-wrap:wrap;gap:4px;padding:3px 0;}
+  /* UMA LINHA SÓ (pedido do Henrique, 26/11/2026): as tags que não cabem
+     somem e no lugar entra o "…", que abre um pop-up com as que faltam */
+  .atv-linha.conf .tags{flex-wrap:nowrap;gap:4px;overflow:hidden;}
+  .atv-linha.conf .tags .conf-tag{flex:none;}
+  .conf-mais{flex:none;height:20px;min-width:26px;padding:0 6px;border:1px solid var(--ft-borda);
+    border-radius:4px;background:var(--ft-superficie);color:var(--ft-cinza-70);cursor:pointer;
+    font:700 12px/1 var(--ft-fonte-ui,inherit);letter-spacing:.05em;}
+  .conf-mais:hover,.conf-mais.aberto{border-color:var(--ft-vermelho);color:var(--ft-vermelho);}
+  .conf-pop{position:fixed;z-index:9000;display:flex;flex-direction:column;align-items:flex-start;gap:5px;
+    padding:9px 10px;background:var(--ft-superficie);border:1px solid var(--ft-borda);border-radius:8px;
+    box-shadow:0 8px 24px -6px rgba(16,20,26,.28),0 1px 3px rgba(16,20,26,.08);}
+  .conf-pop .t{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--ft-cinza-40);margin-bottom:1px;}
   .conf-tag{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:4px;
     font-size:10px;font-weight:700;letter-spacing:.02em;white-space:nowrap;}
   .conf-sem{font-size:11px;color:#9CA3AF;font-style:italic;}
@@ -29237,6 +29250,8 @@ let ATV_ZOOM=(()=>{try{const z=parseFloat(localStorage.getItem('ft_atv_zoom')||'
 function atvZoomAplica(){
   const pg=document.getElementById('atvPage');
   if(pg)pg.style.setProperty('--atv-zoom',String(ATV_ZOOM));
+  /* o zoom muda a largura da coluna: as tags da Conferência se refazem */
+  if(pg&&CONF.ativo&&typeof confAjustaTags==='function')confAjustaTags(pg);
 }
 function atvZoomDefine(z){
   ATV_ZOOM=Math.round(Math.min(ATV_ZOOM_MAX,Math.max(ATV_ZOOM_MIN,z))*100)/100;
@@ -30584,9 +30599,60 @@ function confDesenha(){
   lig('confLer',()=>{ CONF.erro=''; confLer(); });
   lig('confPrint',()=>atvImprime());
   lig('confVolta',()=>confFecha());
+  confAjustaTags(pg);
   atvLigaTopo(pg);
   atvLateral();
 }
+/* AS TAGS NUMA LINHA SÓ. Depois de desenhar, cada célula de tags que
+   transborda esconde as últimas, uma a uma, até o "…" caber junto. A
+   ordem de prioridade continua valendo: o que fica à vista é sempre o
+   começo da lista. O "…" guarda quantas sumiram e abre o pop-up. */
+function confAjustaTags(pg){
+  confPopFecha();
+  (pg||document).querySelectorAll('.atv-linha.conf .tags').forEach(cel=>{
+    const ts=[...cel.querySelectorAll('.conf-tag')];
+    ts.forEach(t=>{ t.style.display=''; });
+    const velho=cel.querySelector('.conf-mais'); if(velho)velho.remove();
+    if(cel.scrollWidth<=cel.clientWidth+0.5)return;
+    const b=document.createElement('button');
+    b.type='button'; b.className='conf-mais'; b.textContent='…';
+    cel.appendChild(b);
+    let vis=ts.length;
+    while(vis>0&&cel.scrollWidth>cel.clientWidth+0.5){ vis--; ts[vis].style.display='none'; }
+    const n=ts.length-vis;
+    b.title=n===1?'mais 1 tag':'mais '+n+' tags';
+    b.setAttribute('aria-label',b.title);
+    b.onclick=e=>{ e.stopPropagation(); confPopAbre(b,ts.slice(vis)); };
+  });
+}
+let confPop=null;
+function confPopFecha(){
+  if(!confPop)return;
+  if(confPop._bt)confPop._bt.classList.remove('aberto');
+  confPop.remove(); confPop=null;
+}
+function confPopAbre(bt,tags){
+  const era=confPop&&confPop._bt===bt;
+  confPopFecha();
+  if(era)return;                       /* clicar de novo no mesmo fecha */
+  const p=document.createElement('div');
+  p.className='conf-pop';
+  p.innerHTML='<div class="t">'+(tags.length===1?'Mais 1 tag':'Mais '+tags.length+' tags')+'</div>';
+  tags.forEach(t=>{ const c=t.cloneNode(true); c.style.display=''; p.appendChild(c); });
+  document.body.appendChild(p);
+  p._bt=bt; bt.classList.add('aberto'); confPop=p;
+  /* embaixo do botão; se não couber, em cima; nunca fora da tela */
+  const r=bt.getBoundingClientRect(), w=p.offsetWidth, h=p.offsetHeight;
+  let x=Math.min(r.left,window.innerWidth-w-8), y=r.bottom+6;
+  if(y+h>window.innerHeight-8)y=Math.max(8,r.top-h-6);
+  p.style.left=Math.max(8,x)+'px'; p.style.top=y+'px';
+}
+document.addEventListener('click',e=>{
+  if(confPop&&!confPop.contains(e.target)&&e.target!==confPop._bt)confPopFecha();
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')confPopFecha(); });
+window.addEventListener('resize',()=>{ if(CONF.ativo&&atvAberto)confAjustaTags(document.getElementById('atvPage')); });
+document.addEventListener('scroll',()=>confPopFecha(),true);
 async function confLer(){
   if(CONF.lendo)return;
   const ls=confLinhas();
@@ -30614,7 +30680,7 @@ function confAbre(){
   if(!atvAberto)atvAlternar(true); else atvDesenha();
 }
 function confFecha(){
-  CONF.ativo=false;
+  CONF.ativo=false; confPopFecha();
   const pg=document.getElementById('atvPage');
   if(pg)pg.classList.remove('atv-conf');
   if(atvAberto)atvDesenha();

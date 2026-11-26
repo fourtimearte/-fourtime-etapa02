@@ -113,6 +113,37 @@ checa('quadros: pedidos, achados, so nome, sem cartao', await p.evaluate(() =>
   [...document.querySelectorAll('#atvPage .atv-card .val')].map(v => v.textContent)), ['4', '3', '1', '1']);
 checa('linha da conferencia nao tem etapa clicavel', await p.evaluate(() => document.querySelectorAll('#atvPage .atv-linha.conf .atv-chip').length), 0);
 
+console.log('\n[2b] tags numa linha so, com o ... e o pop-up');
+await p.setViewportSize({ width: 1440, height: 1000 });
+await p.evaluate(() => confAjustaTags(document.getElementById('atvPage')));
+let T = await p.evaluate(() => { const cel = document.querySelector('#atvPage .atv-linha.conf .tags');
+  const vis = [...cel.querySelectorAll('.conf-tag')].filter(t => t.style.display !== 'none').map(t => t.textContent);
+  const b = cel.querySelector('.conf-mais');
+  return { altura: Math.round(cel.getBoundingClientRect().height), cabe: cel.scrollWidth <= cel.clientWidth + 0.5,
+    vis, botao: b ? b.textContent : '', titulo: b ? b.title : '' }; });
+checa('a celula das tags nao passa de uma linha', T.altura <= 30, true);
+checa('nada transborda', T.cabe, true);
+checa('aparece o ... quando nao cabe', T.botao, '…');
+checa('as visiveis sao o comeco da lista, na ordem', T.vis, ['DTF ENTREGUE PARA IMPRESSÃO', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE'].slice(0, T.vis.length));
+checa('o titulo diz quantas faltam', T.titulo, 'mais ' + (5 - T.vis.length) + (5 - T.vis.length === 1 ? ' tag' : ' tags').replace('mais 1 tags', 'mais 1 tag'));
+await p.click('#atvPage .atv-linha.conf .conf-mais');
+let pop = await p.evaluate(() => { const q = document.querySelector('.conf-pop');
+  return q ? [...q.querySelectorAll('.conf-tag')].map(t => t.textContent) : null; });
+checa('o pop-up mostra as outras tags', T.vis.concat(pop || []), ['DTF ENTREGUE PARA IMPRESSÃO', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
+checa('o pop-up fica dentro da tela', await p.evaluate(() => { const r = document.querySelector('.conf-pop').getBoundingClientRect();
+  return r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; }), true);
+await p.keyboard.press('Escape');
+checa('Esc fecha o pop-up', await p.evaluate(() => !!document.querySelector('.conf-pop')), false);
+await p.click('#atvPage .atv-linha.conf .conf-mais');
+await p.mouse.click(700, 900);
+checa('clicar fora fecha o pop-up', await p.evaluate(() => !!document.querySelector('.conf-pop')), false);
+checa('em 1440 o link do cartão continua dentro da linha', await p.evaluate(() => {
+  const l = document.querySelector('#atvPage .atv-linha.conf'); const a = l.querySelector('.conf-link');
+  return a.getBoundingClientRect().right <= l.getBoundingClientRect().right; }), true);
+checa('linha com 2 tags que cabem nao ganha o ...', await p.evaluate(() =>
+  !document.querySelectorAll('#atvPage .atv-linha.conf')[2].querySelector('.conf-mais')), true);
+await p.setViewportSize({ width: 1600, height: 1000 });
+await p.evaluate(() => confAjustaTags(document.getElementById('atvPage')));
 console.log('\n[3] a impressao');
 let papel = await p.evaluate(() => { CONF.ativo = true; const n = atvMontaImpressao();
   const f = document.querySelector('#atvPrint');
