@@ -1743,6 +1743,36 @@ def _conf_quadros():
     return [q for q in _trello_get("members/me/boards", filter="open", fields="name,closed")
             if not q.get("closed")][:8]
 
+@app.get("/api/trello/etiquetas")
+def trello_etiquetas(request: Request, pedido: str = ""):
+    """Diagnostico da Conferencia (26/11/2026): lista, de cada quadro que o
+       token enxerga, as etiquetas (nome, cor e quantos cartoes abertos usam)
+       e, com ?pedido=PD004565, todos os cartoes que casam com o numero, com
+       quadro, coluna e etiquetas. So leitura."""
+    exige_atividade(request)
+    exige_trello()
+    saida, n = [], _conf_numero(pedido)
+    rx = re.compile(r"(?<![0-9])0*%d(?![0-9])" % n) if n else None
+    for q in _conf_quadros():
+        qid = urllib.parse.quote(q["id"])
+        listas = {l["id"]: l.get("name", "") for l in _trello_get("boards/%s/lists" % qid, fields="name")}
+        cartoes = _trello_get("boards/%s/cards/open" % qid, fields="name,idList,shortUrl,labels")
+        uso = {}
+        for c in cartoes:
+            for l in c.get("labels") or []:
+                uso[l.get("id")] = uso.get(l.get("id"), 0) + 1
+        etiquetas = [{"nome": l.get("name", ""), "cor": l.get("color") or "", "cartoes": uso.get(l["id"], 0)}
+                     for l in _trello_get("boards/%s/labels" % qid, fields="name,color", limit="1000")]
+        etiquetas.sort(key=lambda e: (-e["cartoes"], e["nome"]))
+        achados = []
+        if rx:
+            achados = [{"titulo": c.get("name", ""), "coluna": listas.get(c.get("idList"), ""),
+                        "url": c.get("shortUrl", ""), "etiquetas": [l.get("name", "") for l in c.get("labels") or []]}
+                       for c in cartoes if rx.search(" " + _conf_norm(c.get("name")) + " ")]
+        saida.append({"quadro": q.get("name", ""), "cartoes_abertos": len(cartoes),
+                      "etiquetas": etiquetas, "cartoes_do_pedido": achados})
+    return {"ok": True, "quadro_fixo": bool(FT_TRELLO_QUADRO), "quadros": saida}
+
 @app.post("/api/trello/conferencia")
 async def trello_conferencia(request: Request):
     exige_atividade(request)
