@@ -146,6 +146,22 @@ checa('linha com 2 tags que cabem nao ganha o ...', await p.evaluate(() =>
   !document.querySelectorAll('#atvPage .atv-linha.conf')[2].querySelector('.conf-mais')), true);
 await p.setViewportSize({ width: 1600, height: 1000 });
 await p.evaluate(() => confAjustaTags(document.getElementById('atvPage')));
+console.log('\n[2c] mostrar todas as tags');
+await p.evaluate(() => document.getElementById('confTodas').click());
+let TT = await p.evaluate(() => { const l = document.querySelector('#atvPage .atv-linha.conf');
+  const pop = [...l.querySelectorAll('.conf-tag')].map(t => t.textContent);
+  return { tags: pop, bt: document.getElementById('confTodas').textContent,
+    vazio: document.querySelectorAll('#atvPage .atv-linha.conf')[1].querySelector('.tags').textContent }; });
+checa('todas as tags do cartao, na ordem do Trello', TT.tags, ['URGENTE', 'CONFERIDO HENRIQUE', 'MONTAGEM', 'DTF ENTREGUE', 'revisao h', 'REVISAR']);
+checa('a tag fora da lista tambem aparece', TT.tags.includes('URGENTE'), true);
+checa('o botao vira Só as tags de DTF', TT.bt, 'Só as tags de DTF');
+checa('cartao com tag fora da lista mostra a tag', await p.evaluate(() =>
+  [...document.querySelectorAll('#atvPage .atv-linha.conf')[1].querySelectorAll('.conf-tag')].map(t => t.textContent)), ['ARTE APROVADA']);
+checa('nao relê o Trello ao trocar', CHAMADAS, 1);
+await p.evaluate(() => document.getElementById('confTodas').click());
+checa('desligar volta para as 5 de DTF', await p.evaluate(() =>
+  [...document.querySelector('#atvPage .atv-linha.conf').querySelectorAll('.conf-tag')].map(t => t.textContent)),
+  ['DTF ENTREGUE', 'REVISAR', 'MONTAGEM', 'revisao h', 'CONFERIDO HENRIQUE']);
 console.log('\n[3] a impressao');
 let papel = await p.evaluate(() => { CONF.ativo = true; const n = atvMontaImpressao();
   const f = document.querySelector('#atvPrint');
