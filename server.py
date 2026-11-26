@@ -1637,6 +1637,131 @@ def trello_diagnostico(request: Request, jwt: str = "", card: str = ""):
 
     return {"passos": passos, "conclusao": "Tudo certo."}
 
+# =====================================================================
+#  CONFERENCIA DO TRELLO (v3.385)
+#
+#  Pedido do Henrique em 24 e 26/11/2026: na Atividade, uma pagina que le
+#  o Trello e mostra, para cada pedido de DTF da semana, em que coluna o
+#  cartao esta, as tags dele e o link. O editor manda a lista dos pedidos
+#  da semana (id, numero e cliente); o servidor le o quadro com o token de
+#  servico que ja existe (o mesmo do Power-Up) e devolve, por pedido, o
+#  cartao que achou.
+#
+#  COMO O CARTAO E ACHADO, nesta ordem:
+#    1. pelo NUMERO do pedido no titulo do cartao: PD004430, 004430 ou
+#       4430, sem digito colado antes nem depois (4430 nao casa com 44301);
+#    2. se nenhum titulo tiver o numero, pelo NOME do cliente contido no
+#       titulo (sem acento, sem LTDA/EPP/ME). Esse vem marcado "nome", e a
+#       tela avisa para conferir.
+#  Mais de um cartao com o mesmo numero: fica o de atividade mais recente,
+#  e a resposta diz quantos eram.
+#
+#  As TAGS vao todas, com nome e cor. Quem escolhe quais mostrar e em que
+#  ordem e o editor (DTF tem a lista dele; Sublimacao vem depois).
+#  O dinheiro nao passa por aqui: nem o editor manda, nem o Trello devolve.
+# =====================================================================
+import unicodedata as _ud
+
+_CONF_SUFIXOS = {"LTDA", "EPP", "ME", "EIRELI", "SA", "S", "A", "MEI"}
+
+def _conf_norm(txt):
+    t = _ud.normalize("NFKD", str(txt or "")).encode("ascii", "ignore").decode()
+    t = re.sub(r"[^A-Z0-9]+", " ", t.upper())
+    return " ".join(t.split())
+
+def _conf_nome_cliente(cliente):
+    ps = [p for p in _conf_norm(cliente).split() if p not in _CONF_SUFIXOS]
+    return " ".join(ps)
+
+def _conf_numero(pedido):
+    m = re.findall(r"\d+", str(pedido or ""))
+    if not m:
+        return None
+    n = int(m[-1])
+    return n if n > 0 else None
+
+def _conf_casa(pedidos, cartoes, listas):
+    """Funcao pura: a regra inteira de achar o cartao, sem rede.
+       pedidos: [{id, pedido, cliente}]
+       cartoes: [{name, idList, shortUrl, dateLastActivity, labels:[{name,color}]}]
+       listas : {idList: nome}"""
+    prep = []
+    for c in cartoes or []:
+        prep.append((c, " " + _conf_norm(c.get("name")) + " ",
+                     str(c.get("dateLastActivity") or "")))
+    def pega(achados):
+        achados.sort(key=lambda x: x[2], reverse=True)
+        c = achados[0][0]
+        return {
+            "titulo": c.get("name") or "",
+            "url": c.get("shortUrl") or c.get("url") or "",
+            "coluna": listas.get(c.get("idList"), "") if listas else "",
+            "tags": [{"n": (l.get("name") or "").strip(), "c": l.get("color") or ""}
+                     for l in (c.get("labels") or []) if (l.get("name") or "").strip()],
+            "varios": len(achados),
+        }
+    saida = {}
+    for p in pedidos or []:
+        pid = str(p.get("id") or p.get("pedido") or "")
+        if not pid:
+            continue
+        r = {"como": "", "cartao": None}
+        n = _conf_numero(p.get("pedido"))
+        if n:
+            rx = re.compile(r"(?<![0-9])0*%d(?![0-9])" % n)
+            ach = [x for x in prep if rx.search(x[1])]
+            if ach:
+                r = {"como": "numero", "cartao": pega(ach)}
+        if not r["cartao"]:
+            nome = _conf_nome_cliente(p.get("cliente"))
+            if len(nome) >= 4:
+                alvo = " " + nome + " "
+                ach = [x for x in prep if alvo in x[1]]
+                if ach:
+                    r = {"como": "nome", "cartao": pega(ach)}
+        saida[pid] = r
+    return saida
+
+def _trello_get(caminho, **params):
+    params.update({"key": FT_TRELLO_KEY, "token": FT_TRELLO_TOKEN})
+    url = "https://api.trello.com/1/%s?%s" % (caminho, urllib.parse.urlencode(params))
+    try:
+        with urllib.request.urlopen(url, timeout=30) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        raise HTTPException(status_code=502,
+            detail="O Trello recusou a leitura (%s) em %s." % (e.code, caminho.split("/")[0]))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail="Falha ao ler o Trello: %r" % (e,))
+
+def _conf_quadros():
+    """O quadro configurado no Render, ou todos os quadros abertos que o
+       token de servico enxerga (FT_TRELLO_QUADRO e opcional)."""
+    if FT_TRELLO_QUADRO:
+        q = _trello_get("boards/%s" % urllib.parse.quote(FT_TRELLO_QUADRO), fields="name")
+        return [{"id": FT_TRELLO_QUADRO, "name": q.get("name", "")}]
+    return [q for q in _trello_get("members/me/boards", filter="open", fields="name,closed")
+            if not q.get("closed")][:8]
+
+@app.post("/api/trello/conferencia")
+async def trello_conferencia(request: Request):
+    exige_atividade(request)
+    exige_trello()
+    corpo = await request.json()
+    pedidos = (corpo or {}).get("pedidos") or []
+    if not isinstance(pedidos, list) or len(pedidos) > 400:
+        raise HTTPException(status_code=400, detail="Lista de pedidos inválida.")
+    cartoes, listas, nomes = [], {}, []
+    for q in _conf_quadros():
+        qid = urllib.parse.quote(q["id"])
+        nomes.append(q.get("name", ""))
+        for l in _trello_get("boards/%s/lists" % qid, fields="name"):
+            listas[l["id"]] = l.get("name", "")
+        cartoes += _trello_get("boards/%s/cards/open" % qid,
+                               fields="name,idList,shortUrl,dateLastActivity,labels")
+    return {"ok": True, "lidoEm": agora(), "quadros": nomes, "cartoes": len(cartoes),
+            "resultado": _conf_casa(pedidos, cartoes, listas)}
+
 def _powerup(arquivo):
     p = os.path.join(os.path.dirname(__file__), "powerup", arquivo)
     if not os.path.exists(p):

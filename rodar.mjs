@@ -88,6 +88,8 @@ const SUITES = [
   'teste_tecidos_novos',     /* v3.383: SPEED e FURADINHA C/ ELASTANO LIGHT e PLUS */
   'teste_fornecedor',        /* v3.383: fornecedor do tecido, Banco Fornecedores e telefone */
   'teste_16a',               /* v3.384: o 16A no fim da grade infantil */
+  'teste_conferencia_trello', /* v3.385: Conferência do Trello, DTF, tags na ordem */
+  'teste_conferencia_servidor', /* v3.385: achar o cartão pelo número ou pelo nome */
   /* v3.361 - varios meses no relatorio. O seletor virou grade de doze
      botoes; cada mes continua guardado sozinho no seu .ftr e o combinado
      nunca vira arquivo. */
@@ -161,6 +163,7 @@ const SUBIDA = [
   'teste_papel_editor',      /* quem monta assina depois de quem vendeu         */
   'teste_atividade',         /* gerar de novo não derruba o planejamento da semana */
   'teste_atividade_servidor',/* a marca por pessoa, e dinheiro nenhum na atividade */
+  'teste_conferencia_trello', /* a conferência mora dentro da Atividade e da impressão dela */
   'teste_compat_v303',       /* aqui a versão anterior entra como origem     */
   'teste_painel_v303',       /* nenhum token do painel pode ter morrido      */
   'teste_impressao_escura',  /* o documento do cliente e o papel             */
