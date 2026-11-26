@@ -30420,20 +30420,28 @@ window.atvImprime=atvImprime;
    cliente) e devolve TODAS as tags; a escolha e a ordem moram aqui. Nada
    de valor sai do editor: só id, número e cliente.
    ================================================================== */
-/* OS NOMES DE VERDADE (v3.387). O print do quadro, com "Mostrar todas as
-   tags", mostrou que no Trello as cinco se chamam de outro jeito. Cada
-   posição aceita os dois nomes; a ordem é a do Henrique:
-     1. DTF ENVIADO PARA GRUPO   (o "DTF entregue para impressão")
-     2. REVISAR DTF              (o "revisar")
-     3. DTF MONTADO              (a "montagem")
-     4. REVISAO H
-     5. CONF. HENRIQUE OK        (o "conferido Henrique") */
-const CONF_DTF_TAGS=[
-  ['DTF ENVIADO PARA GRUPO','DTF ENTREGUE PARA IMPRESSÃO'],
-  ['REVISAR DTF','REVISAR'],
+/* AS TAGS DE DTF (v3.387, regra do Henrique em 26/11/2026, com os nomes
+   de verdade do quadro, vistos com "Mostrar todas as tags").
+
+   FIXAS: aparecem sempre que o cartão tiver, nesta ordem:
+     URGENTE, EVENTO, DTF ENVIADO PARA GRUPO (o antigo "DTF entregue para
+     impressão", mostrado curto como "DTF ENVIADO").
+   CICLO: FICHA TÉCNICA OK! -> DTF MONTADO -> REVISAR DTF -> REVISAO H.
+     São etapas em sequência: aparece SÓ a mais adiantada que o cartão
+     tiver. Com as quatro, só REVISAO H; com as três primeiras, só REVISAR
+     DTF. Ela vem depois das fixas.
+   Qualquer outra tag fica de fora. Cada posição aceita também o nome que
+   foi combinado antes de ver o quadro (REVISAR, MONTAGEM...). */
+const CONF_FIXAS=[
+  ['URGENTE'],
+  ['EVENTO'],
+  ['DTF ENVIADO PARA GRUPO','DTF ENTREGUE PARA IMPRESSÃO']
+];
+const CONF_CICLO=[
+  ['FICHA TÉCNICA OK!','FICHA TÉCNICA OK'],
   ['DTF MONTADO','MONTAGEM'],
-  ['REVISÃO H'],
-  ['CONF. HENRIQUE OK','CONFERIDO HENRIQUE']
+  ['REVISAR DTF','REVISAR'],
+  ['REVISÃO H']
 ];
 /* as cores do Trello, pelo nome que a API devolve */
 const CONF_COR={
@@ -30452,22 +30460,22 @@ function confNorm(s){
   return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'')
     .toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
 }
-const CONF_DTF_NORM=CONF_DTF_TAGS.map(v=>v.map(confNorm));
+const CONF_FIXAS_N=CONF_FIXAS.map(v=>v.map(confNorm)), CONF_CICLO_N=CONF_CICLO.map(v=>v.map(confNorm));
 function confEhDtf(l){
   return !!l&&!l.rolado&&/(^|[^A-Z])DTF([^A-Z]|$)/i.test(String(l.departamento||''));
 }
-/* as tags do cartão, peneiradas e na ordem da lista */
+/* as tags do cartão, peneiradas: as fixas na ordem, depois a etapa mais
+   adiantada do ciclo */
 function confTagsDtf(tags){
+  const acha=nomes=>(tags||[]).find(x=>nomes.indexOf(confNorm(x&&x.n))>=0);
   const out=[];
-  CONF_DTF_NORM.forEach(nomes=>{
-    const t=(tags||[]).find(x=>nomes.indexOf(confNorm(x&&x.n))>=0);
-    if(t)out.push(t);
-  });
+  CONF_FIXAS_N.forEach(nomes=>{ const t=acha(nomes); if(t)out.push(t); });
+  for(let i=CONF_CICLO_N.length-1;i>=0;i--){ const t=acha(CONF_CICLO_N[i]); if(t){ out.push(t); break; } }
   return out;
 }
 /* MOSTRAR TODAS AS TAGS (v3.386). Botão no topo da Conferência: com ele
    ligado, cada linha mostra TODAS as tags do cartão, na ordem do Trello,
-   sem a peneira das 5 de DTF. Nasceu para descobrir como as tags estão
+   sem a peneira das tags de DTF. Nasceu para descobrir como as tags estão
    escritas de verdade no quadro; fica para conferências futuras. */
 function confTagsVer(tags){ return CONF.todas?(tags||[]).filter(t=>t&&t.n):confTagsDtf(tags); }
 function confSemTags(){ return CONF.todas?'cartão sem tags':'nenhuma das tags de DTF'; }
@@ -30582,7 +30590,7 @@ function confDesenha(){
     +'<div class="sub">Semana de '+atvSemanaTitulo()+' · '+atvEsc(confSituacao())+'</div></div>'
     +'<div class="atv-cresce"></div>'
     +'<button type="button" class="conf-bt'+(CONF.todas?' ligado':'')+'" id="confTodas"'
-      +' title="Mostrar todas as tags do cartão, ou só as 5 de DTF">'
+      +' title="Mostrar todas as tags do cartão, ou só as de DTF">'
       +(CONF.todas?'Só as tags de DTF':'Mostrar todas as tags')+'</button>'
     +'<button type="button" class="conf-bt" id="confLer"'+(CONF.lendo?' disabled':'')+'>'
       +(CONF.lendo?'Lendo…':'Ler o Trello de novo')+'</button>'
